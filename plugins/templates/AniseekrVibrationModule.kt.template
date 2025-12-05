@@ -1,0 +1,78 @@
+package {{PACKAGE_NAME}}.vibration
+
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
+
+class {{MODULE_NAME}}Module(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
+  override fun getName() = "{{MODULE_NAME}}"
+
+  private fun vibrator(): Vibrator? {
+    return try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val manager = ctx.getSystemService(VibratorManager::class.java)
+        manager?.defaultVibrator
+      } else {
+        @Suppress("DEPRECATION")
+        ctx.getSystemService(Vibrator::class.java)
+      }
+    } catch (e: Exception) {
+      null
+    }
+  }
+
+  private fun play(effect: VibrationEffect) {
+    vibrator()?.vibrate(effect)
+  }
+
+  @ReactMethod
+  fun selection() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+    } else {
+      play(VibrationEffect.createOneShot(18, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+  }
+
+  @ReactMethod
+  fun selectionSoft() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+    } else {
+      play(VibrationEffect.createOneShot(12, 60))
+    }
+  }
+
+  @ReactMethod
+  fun impact(type: String) {
+    val amplitude = when (type) {
+      "heavy" -> 220
+      "medium" -> 160
+      else -> 110
+    }
+    play(VibrationEffect.createOneShot(28, amplitude))
+  }
+
+  @ReactMethod
+  fun custom(pattern: ReadableArray, amplitudes: ReadableArray) {
+    val timings = LongArray(pattern.size()) { idx -> pattern.getDouble(idx).toLong() }
+    val ampArray = if (amplitudes.size() > 0) {
+      IntArray(amplitudes.size()) { idx -> amplitudes.getInt(idx) }
+    } else {
+      null
+    }
+    val effect = if (ampArray != null) {
+      VibrationEffect.createWaveform(timings, ampArray, -1)
+    } else {
+      VibrationEffect.createWaveform(timings, -1)
+    }
+    play(effect)
+  }
+}
+
+
