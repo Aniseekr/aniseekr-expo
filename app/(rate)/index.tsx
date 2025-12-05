@@ -148,8 +148,31 @@ export default function HomeRateScreen() {
     await actions.loadAIRecommendation();
   }, [actions]);
 
+  const darkBg = "#050505";
+
+  const headerBlock = (
+    <View className="gap-4">
+      <View className="flex-row justify-end gap-3">
+        <Pressable
+          onPress={() => setListMode((v) => !v)}
+          className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
+        >
+          <Text className="text-white text-lg">{listMode ? "🌀" : "☰"}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setShowDisplaySettings(true)}
+          className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
+        >
+          <Text className="text-white text-lg">⚙️</Text>
+        </Pressable>
+      </View>
+
+      <View className="flex-row gap-3">{["discovery", "tracking", "trend"].map((m) => headerToggle(m as ViewMode))}</View>
+    </View>
+  );
+
   return (
-    <SafeAreaView style={{ paddingTop: top }} className="flex-1 bg-bg-dark">
+    <SafeAreaView style={{ paddingTop: top, backgroundColor: darkBg }} className="flex-1">
       <Modal visible={showDisplaySettings} transparent animationType="fade" onRequestClose={() => setShowDisplaySettings(false)}>
         <Pressable className="flex-1 bg-black/60" onPress={() => setShowDisplaySettings(false)}>
           <View className="mt-auto bg-card-surface border-t border-card-border rounded-t-3xl p-5">
@@ -168,39 +191,54 @@ export default function HomeRateScreen() {
         onSelect={() => setShowAI(false)}
       />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 120 }}
-        refreshControl={<RefreshControl tintColor="#fff" refreshing={false} onRefresh={handlePullAI} />}
-      >
-        <View className="gap-4">
-          <View className="flex-row justify-end gap-3">
-            <Pressable
-              onPress={() => setListMode((v) => !v)}
-              className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
-            >
-              <Text className="text-white text-lg">{listMode ? "🌀" : "☰"}</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setShowDisplaySettings(true)}
-              className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
-            >
-              <Text className="text-white text-lg">⚙️</Text>
-            </Pressable>
-          </View>
+      {state.viewMode === "trend" ? (
+        <FlatList
+          className="flex-1"
+          data={state.trendAnime}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => <TrendCard anime={item} rank={index + 1} />}
+          ItemSeparatorComponent={() => <View className="h-3" />}
+          contentContainerStyle={{
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            paddingBottom: 120,
+            backgroundColor: darkBg,
+            gap: 0,
+          }}
+          ListHeaderComponent={
+            <View style={{ paddingHorizontal: 0, gap: 18, paddingBottom: 12 }}>
+              {headerBlock}
+              {apiStatus}
+            </View>
+          }
+          refreshControl={
+            <RefreshControl
+              tintColor="#fff"
+              refreshing={false}
+              onRefresh={() => {
+                actions.loadTrend();
+              }}
+            />
+          }
+          ListEmptyComponent={
+            <View className="py-12 items-center">
+              <Text className="text-white/80">Loading trending...</Text>
+            </View>
+          }
+        />
+      ) : (
+        <ScrollView
+          className="flex-1"
+          style={{ backgroundColor: darkBg }}
+          contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 120, backgroundColor: darkBg }}
+          refreshControl={<RefreshControl tintColor="#fff" refreshing={false} onRefresh={handlePullAI} />}
+        >
+          {headerBlock}
+          {apiStatus}
 
-          <View className="flex-row gap-3">{["discovery", "tracking", "trend"].map((m) => headerToggle(m as ViewMode))}</View>
-        </View>
-        {apiStatus}
-
-        {state.viewMode === "trend" ? (
-          <View className="flex-1">{trendContent}</View>
-        ) : state.viewMode === "tracking" ? (
-          trackingContent
-        ) : (
-          discoveryContent
-        )}
-      </ScrollView>
+          {state.viewMode === "tracking" ? trackingContent : discoveryContent}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

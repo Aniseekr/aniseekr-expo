@@ -29,13 +29,17 @@ export function PhotoCard({ photo, index, isTop, onSwipe, onLongPress }: Props) 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
+  const pressScale = useSharedValue(1);
   const rotate = useSharedValue(0);
+  const hasThresholdHaptic = useSharedValue(false);
 
   const resetPosition = () => {
     translateX.value = withSpring(0);
     translateY.value = withSpring(0);
     rotate.value = withSpring(0);
     scale.value = withSpring(1);
+    pressScale.value = withSpring(1, { damping: 14 });
+    hasThresholdHaptic.value = false;
   };
 
   const flingOut = (direction: "left" | "right") => {
@@ -50,25 +54,39 @@ export function PhotoCard({ photo, index, isTop, onSwipe, onLongPress }: Props) 
     () =>
       Gesture.Pan()
         .enabled(isTop)
+        .onBegin(() => {
+          pressScale.value = withSpring(0.97, { damping: 12 });
+          runOnJS(hapticsBridge.pressIn)();
+          hasThresholdHaptic.value = false;
+        })
         .onChange((event) => {
           translateX.value = event.translationX;
           translateY.value = event.translationY;
           rotate.value = event.translationX / 18;
           const distance = Math.abs(event.translationX);
           if (distance > 60) {
-            hapticsBridge.selection();
+            if (!hasThresholdHaptic.value) {
+              hasThresholdHaptic.value = true;
+              runOnJS(hapticsBridge.swipeThreshold)();
+            }
+          } else {
+            hasThresholdHaptic.value = false;
           }
         })
         .onEnd((event) => {
           const distance = event.translationX;
           if (Math.abs(distance) > 140) {
             const dir = distance > 0 ? "right" : "left";
-            hapticsBridge.impact(distance > 0 ? "heavy" : "light");
+            runOnJS(hapticsBridge.impact)(distance > 0 ? "heavy" : "light");
             runOnJS(flingOut)(dir);
           } else {
-            hapticsBridge.selectionSoft();
+            runOnJS(hapticsBridge.swipeCancel)();
             runOnJS(resetPosition)();
           }
+          hasThresholdHaptic.value = false;
+        })
+        .onFinalize(() => {
+          pressScale.value = withSpring(1, { damping: 12 });
         }),
     [flingOut, isTop]
   );
@@ -92,8 +110,13 @@ export function PhotoCard({ photo, index, isTop, onSwipe, onLongPress }: Props) 
         .enabled(isTop)
         .minDuration(450)
         .onStart(() => {
-          hapticsBridge.selection();
-          onLongPress?.();
+          pressScale.value = withSpring(0.95, { damping: 12 });
+          runOnJS(hapticsBridge.pressIn)();
+          runOnJS(onLongPress ?? (() => {}))();
+        })
+        .onEnd(() => {
+          pressScale.value = withSpring(1, { damping: 12 });
+          runOnJS(hapticsBridge.pressOut)();
         }),
     [isTop, onLongPress]
   );
@@ -105,7 +128,7 @@ export function PhotoCard({ photo, index, isTop, onSwipe, onLongPress }: Props) 
       { translateX: translateX.value },
       { translateY: translateY.value },
       { rotateZ: `${rotate.value}deg` },
-      { scale: scale.value },
+      { scale: scale.value * pressScale.value },
     ],
   }));
 

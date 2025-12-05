@@ -148,8 +148,10 @@ export default function HomeRateScreen() {
     await actions.loadAIRecommendation();
   }, [actions]);
 
+  const darkBg = "#050505";
+
   return (
-    <SafeAreaView style={{ paddingTop: top }} className="flex-1 bg-bg-dark">
+    <SafeAreaView style={{ paddingTop: top, backgroundColor: darkBg }} className="flex-1">
       <Modal visible={showDisplaySettings} transparent animationType="fade" onRequestClose={() => setShowDisplaySettings(false)}>
         <Pressable className="flex-1 bg-black/60" onPress={() => setShowDisplaySettings(false)}>
           <View className="mt-auto bg-card-surface border-t border-card-border rounded-t-3xl p-5">
@@ -170,7 +172,8 @@ export default function HomeRateScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 120 }}
+        style={{ backgroundColor: darkBg }}
+        contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 120, backgroundColor: darkBg }}
         refreshControl={<RefreshControl tintColor="#fff" refreshing={false} onRefresh={handlePullAI} />}
       >
         <View className="gap-4">
