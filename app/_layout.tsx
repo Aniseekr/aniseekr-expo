@@ -92,10 +92,6 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
-        <Tabs.Screen
-            name="index"
-            options={{ href: null }}
-        />
       </Tabs>
     </SafeAreaProvider>
   );
