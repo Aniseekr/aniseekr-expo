@@ -11,7 +11,15 @@
       "tsconfigPaths": true
     },
     "plugins": [
-      "./plugins/with-vibration-bridge.js"
+      "./plugins/with-vibration-bridge.js",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6200EE",
+          "sounds": []
+        }
+      ]
     ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",

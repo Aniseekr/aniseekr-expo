@@ -1,6 +1,7 @@
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { GlassCard } from '../common/GlassCard';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 type Season = 'winter' | 'spring' | 'summer' | 'fall';
 type FilterMode = 'all' | 'tracking';
@@ -25,56 +26,185 @@ export function SeasonHeader({
   onViewModeToggle 
 }: SeasonHeaderProps) {
   return (
-    <GlassCard className="p-6 mb-6" variant="dark" intensity={50}>
-      <View className="mb-4">
-        <View className="flex-row items-center justify-between mb-4">
-          <Text className="text-white text-2xl font-bold tracking-tight">Weekly Schedule</Text>
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              onPress={onPrevSeason}
-              className="w-10 h-10 rounded-full bg-white/5 border border-white/10 items-center justify-center active:bg-white/20"
-            >
-              <Text className="text-white text-base font-semibold">←</Text>
-            </Pressable>
-            <View className="px-5 py-2.5 bg-white/5 border border-white/10 rounded-full">
-              <Text className="text-white text-base font-semibold">{seasonDisplayName}</Text>
-            </View>
-            <Pressable
-              onPress={onNextSeason}
-              className="w-10 h-10 rounded-full bg-white/5 border border-white/10 items-center justify-center active:bg-white/20"
-            >
-              <Text className="text-white text-base font-semibold">→</Text>
-            </Pressable>
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Weekly Schedule</Text>
+        <View className="flex-row items-center gap-3">
+          <Pressable
+            onPress={onPrevSeason}
+            style={styles.navButton}
+          >
+            <MaterialIcons name="chevron-left" size={24} color="rgba(255, 255, 255, 0.87)" />
+          </Pressable>
+          <View style={styles.seasonBadge}>
+            <Text style={styles.seasonText}>{seasonDisplayName}</Text>
           </View>
-        </View>
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row bg-black/20 rounded-full p-1 border border-white/5" style={{ width: 180 }}>
-            <Pressable
-              onPress={() => onFilterChange('tracking')}
-              className={`flex-1 py-3 rounded-full ${filterMode === 'tracking' ? 'bg-white/20' : ''}`}
-            >
-              <Text
-                className={`text-center text-sm font-semibold ${filterMode === 'tracking' ? 'text-white' : 'text-white/40'}`}
-              >
-                Tracking
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => onFilterChange('all')}
-              className={`flex-1 py-3 rounded-full ${filterMode === 'all' ? 'bg-white/20' : ''}`}
-            >
-              <Text
-                className={`text-center text-sm font-semibold ${filterMode === 'all' ? 'text-white' : 'text-white/40'}`}
-              >
-                All
-              </Text>
-            </Pressable>
-          </View>
-          <Pressable onPress={onViewModeToggle} className="w-12 h-12 rounded-full bg-white/5 border border-white/10 items-center justify-center active:bg-white/20">
-            <Ionicons name={viewMode === 'calendar' ? 'list' : 'calendar'} size={20} color="#fff" />
+          <Pressable
+            onPress={onNextSeason}
+            style={styles.navButton}
+          >
+            <MaterialIcons name="chevron-right" size={24} color="rgba(255, 255, 255, 0.87)" />
           </Pressable>
         </View>
       </View>
-    </GlassCard>
+      <View className="flex-row items-center justify-between mt-4">
+        <View style={styles.filterContainer}>
+          <Pressable
+            onPress={() => onFilterChange('tracking')}
+            style={[
+              styles.filterButton,
+              filterMode === 'tracking' && styles.filterButtonActive
+            ]}
+          >
+            <Text style={[
+              styles.filterText,
+              filterMode === 'tracking' && styles.filterTextActive
+            ]}>
+              Tracking
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => onFilterChange('all')}
+            style={[
+              styles.filterButton,
+              filterMode === 'all' && styles.filterButtonActive
+            ]}
+          >
+            <Text style={[
+              styles.filterText,
+              filterMode === 'all' && styles.filterTextActive
+            ]}>
+              All
+            </Text>
+          </Pressable>
+        </View>
+        <Pressable 
+          onPress={onViewModeToggle} 
+          style={styles.viewModeButton}
+        >
+          <MaterialIcons 
+            name={viewMode === 'calendar' ? 'view-list' : 'calendar-today'} 
+            size={20} 
+            color="rgba(255, 255, 255, 0.87)" 
+          />
+        </Pressable>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        backgroundColor: '#1E1E1E',
+        elevation: 2,
+      },
+    }),
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  title: {
+    color: 'rgba(255, 255, 255, 0.87)',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  navButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  seasonBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(98, 0, 238, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(98, 0, 238, 0.3)',
+    borderRadius: 20,
+  },
+  seasonText: {
+    color: 'rgba(255, 255, 255, 0.87)',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 24,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: 180,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: 'rgba(98, 0, 238, 0.2)',
+  },
+  filterText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  filterTextActive: {
+    color: 'rgba(255, 255, 255, 0.87)',
+  },
+  viewModeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+});

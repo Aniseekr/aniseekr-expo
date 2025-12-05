@@ -103,7 +103,7 @@ export default function HomeRateScreen() {
       {state.recommendations.length > 0 ? (
         <PersonalizedRecommendation data={state.recommendations} onRefresh={actions.loadRecommendations} />
       ) : null}
-      <TrackingSelector value={state.discoveryMode} onChange={actions.setDiscoveryMode} />
+      <TrackingSelector value={state.discoveryMode} onChange={(key) => actions.setDiscoveryMode(key as "genres" | "mood" | "duration")} />
       {state.discoveryMode === "genres" ? (
         discoveryContent
       ) : (

@@ -82,25 +82,24 @@ export class AnimeRepository {
   }
 
   private static mapAniListDetailToAnime(item: AniListAnime): Anime {
-    // Defines a richer object if needed, for now reusing Anime type but ideally we extend it
-    // I should probably extend the Anime type in types.ts too, but for now passing extra data via 'mood' or just mapping basics.
-    // To do it right, I will stick to Anime type but ensure it has what we need or update types.ts.
-    // The current Anime type is minimal. I'll stick to it conformant to the interface.
-    // We should rely on a separate specific type for details if checking types.ts showed limitations.
-    // However, I will rely on the mapped object potentially having more fields if I used 'any' or intersection, 
-    // but Typescript will complain.
-    // Let's return Anime for now, but I will assume we might cast it in the View or update Type later.
     return {
       id: String(item.id),
       title: item.title.english || item.title.romaji || item.title.native || "Unknown Title",
       image: item.coverImage.extraLarge || item.coverImage.large,
+      bannerImage: item.bannerImage || undefined,
       rank: item.averageScore || 0,
       tags: item.genres,
-      mood: item.description ? item.description : "", // Full description
+      mood: item.description ? item.description.replace(/<[^>]*>?/gm, '') : "",
+      description: item.description ? item.description.replace(/<[^>]*>?/gm, '') : undefined,
       durationMinutes: item.duration || 24,
-      // We are missing fields like 'streaming', 'relations' in the base Anime type.
-      // I'll add them to the implementation even if type doesn't say so, 
-      // or better: I will update types.ts in the next step.
+      studios: item.studios?.nodes?.map(node => node.name) || undefined,
+      startDate: item.startDate || undefined,
+      status: item.status || undefined,
+      format: item.format || undefined,
+      nextAiringEpisode: item.nextAiringEpisode ? {
+        airingAt: item.nextAiringEpisode.airingAt,
+        episode: item.nextAiringEpisode.episode,
+      } : undefined,
     };
   }
 

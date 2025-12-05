@@ -1,13 +1,13 @@
-import { View, ScrollView, RefreshControl, Dimensions, Text } from 'react-native';
+import { View, ScrollView, RefreshControl, Dimensions, Text, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { SeasonHeader } from '../components/bangumi/SeasonHeader';
 import { WeeklyCalendar } from '../components/bangumi/WeeklyCalendar';
 import { Anime } from '../components/rate/types';
 import { AnimeList, AnimeRowCard } from '../components/bangumi/AnimeList';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AnimeRepository } from '../libs/anime-repository';
-import { useEffect } from 'react';
+import { animeNotificationService } from '../modules/notifications/animeNotificationService';
 
 type ViewMode = 'calendar' | 'list';
 type FilterMode = 'all' | 'tracking';
@@ -82,13 +82,15 @@ export default function BangumiScreen() {
     try {
         const rawAnime = await AnimeRepository.getSeasonalAnime(selectedSeason.toUpperCase(), selectedYear);
         
+        console.log(`Fetched ${rawAnime.length} anime for ${selectedSeason} ${selectedYear}`);
+        
         // Group by Day
         const days = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
         const grouped: { [key: string]: Anime[] } = {};
         days.forEach(d => grouped[d] = []);
         grouped['Unknown'] = [];
 
-        rawAnime.forEach((anime: any) => { // Cast to any to access nextAiringEpisode if type is loose, or rely on Anime interface update
+        rawAnime.forEach((anime: Anime) => {
             // Check nextAiringEpisode
             if (anime.nextAiringEpisode && anime.nextAiringEpisode.airingAt) {
                 const date = new Date(anime.nextAiringEpisode.airingAt * 1000);
@@ -96,8 +98,8 @@ export default function BangumiScreen() {
                 const dayName = days[dayIndex];
                 grouped[dayName].push(anime);
             } else {
-                 // Try fallback or put in Unknown
-                 grouped['Unknown'].push(anime);
+                // Put in Unknown if no airing schedule
+                grouped['Unknown'].push(anime);
             }
         });
 
@@ -106,6 +108,7 @@ export default function BangumiScreen() {
              { day: 'Unknown', anime: grouped['Unknown'] }
         ];
 
+        console.log('Grouped anime:', dailyAnimeList.map(d => ({ day: d.day, count: d.anime.length })));
         setGroupedAnime(dailyAnimeList);
 
     } catch (e) {
@@ -150,50 +153,90 @@ export default function BangumiScreen() {
 
   const listViewData = groupedAnime.filter((g) => g.anime.length > 0 || (g.day === 'Unknown' && showUnknownDays));
 
+  // Request notification permissions on mount
+  useEffect(() => {
+    animeNotificationService.requestPermissions();
+  }, []);
+
   if (isLoading && !refreshing) {
     return (
-      <SafeAreaView style={{ paddingTop: top }} className="flex-1 bg-bg-dark items-center justify-center">
-        <Text className="text-white/80 text-base">Loading...</Text>
-      </SafeAreaView>
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#121212', '#1E1E1E', '#121212']}
+          style={StyleSheet.absoluteFill}
+        />
+        <SafeAreaView style={{ paddingTop: top }} className="flex-1 items-center justify-center">
+          <Text style={styles.loadingText}>Loading...</Text>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-bg-dark">
-        <LinearGradient
-            colors={['#1a1b2e', '#13131f', '#0f0f16']}
-            className="absolute inset-0"
-        />
-        <SafeAreaView style={{ paddingTop: top }} className="flex-1">
-            <View className="px-5 pt-5">
-                <SeasonHeader 
-                    seasonDisplayName={seasonDisplayName}
-                    onPrevSeason={switchToPreviousSeason}
-                    onNextSeason={switchToNextSeason}
-                    filterMode={filterMode}
-                    onFilterChange={setFilterMode}
-                    viewMode={viewMode}
-                    onViewModeToggle={toggleViewMode}
-                />
-            </View>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#121212', '#1E1E1E', '#121212']}
+        style={StyleSheet.absoluteFill}
+      />
+      <SafeAreaView style={{ paddingTop: top }} className="flex-1">
+        <View className="px-5 pt-5">
+          <SeasonHeader 
+            seasonDisplayName={seasonDisplayName}
+            onPrevSeason={switchToPreviousSeason}
+            onNextSeason={switchToNextSeason}
+            filterMode={filterMode}
+            onFilterChange={setFilterMode}
+            viewMode={viewMode}
+            onViewModeToggle={toggleViewMode}
+          />
+        </View>
 
-            {viewMode === 'calendar' ? (
-                 <WeeklyCalendar 
-                    weekDays={weekDays}
-                    groupedAnime={groupedAnime}
-                    isCurrentDay={(day) => day === getTodayDayString()}
-                    dayShortName={dayShortName}
-                 />
-            ) : (
-                <ScrollView
-                    className="flex-1"
-                    contentContainerStyle={{ paddingBottom: 100 }}
-                    refreshControl={<RefreshControl tintColor="#fff" refreshing={refreshing} onRefresh={onRefresh} />}
-                >
-                    <AnimeList listViewData={listViewData} renderAnimeCard={(anime) => <AnimeRowCard key={anime.id} anime={anime} />} />
-                </ScrollView>
-            )}
-        </SafeAreaView>
+        {viewMode === 'calendar' ? (
+          <View style={styles.calendarContainer}>
+            <WeeklyCalendar 
+              weekDays={weekDays}
+              groupedAnime={groupedAnime}
+              isCurrentDay={(day) => day === getTodayDayString()}
+              dayShortName={dayShortName}
+            />
+          </View>
+        ) : (
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ paddingBottom: 100 }}
+            refreshControl={
+              <RefreshControl 
+                tintColor="#fff" 
+                refreshing={refreshing} 
+                onRefresh={onRefresh}
+                colors={['#6200EE']}
+                progressBackgroundColor="#1E1E1E"
+              />
+            }
+          >
+            <AnimeList listViewData={listViewData} renderAnimeCard={(anime) => <AnimeRowCard key={anime.id} anime={anime} />} />
+          </ScrollView>
+        )}
+      </SafeAreaView>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#121212',
+  },
+  loadingText: {
+    color: 'rgba(255, 255, 255, 0.87)',
+    fontSize: 16,
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  calendarContainer: {
+    flex: 1,
+    minHeight: 400,
+  },
+});

@@ -16,7 +16,8 @@ import Animated, {
     useAnimatedStyle, 
     useDerivedValue, 
     useSharedValue, 
-    withSpring 
+    withSpring,
+    SharedValue
 } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -256,9 +257,9 @@ function CardWrapper({
     index: number;
     stackIndex: number;
     isTop: boolean;
-    activeTranslationX: Animated.SharedValue<number>;
+    activeTranslationX: SharedValue<number>;
     onSwipe: (direction: 'left' | 'right') => void;
-    refProp: React.RefObject<PhotoCardRef> | null;
+    refProp: React.RefObject<PhotoCardRef | null> | null;
 }) {
     // Derive progress from active card translation
     const progress = useDerivedValue(() => {
