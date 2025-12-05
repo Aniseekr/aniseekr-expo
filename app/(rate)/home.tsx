@@ -11,6 +11,7 @@ import { AIRecommendationSheet } from "../../components/rate/AIRecommendationShe
 import { useRateData } from "../../components/rate/useRateData";
 import { Photo, ViewMode } from "../../components/rate/types";
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 const samplePhotos: Photo[] = [
   { id: "p1", url: "https://picsum.photos/seed/p1/720/1280", userId: "u1" },
@@ -89,7 +90,7 @@ export default function HomeRateScreen() {
         <View>
           {state.availableGenres.map((item) => (
             <View key={item.id} className="mb-4">
-              <GenreCard title={item.displayName} image={item.image} genreId={item.id} />
+              <GenreCard title={item.displayName} image={item.image} genreId={item.id} showButton={false} />
             </View>
           ))}
         </View>
@@ -107,18 +108,41 @@ export default function HomeRateScreen() {
 
   const trackingContent = (
     <View className="gap-6">
-      {state.recommendations.length > 0 ? (
+      {state.recommendations.length > 0 && (
         <PersonalizedRecommendation data={state.recommendations} onRefresh={actions.loadRecommendations} />
-      ) : null}
+      )}
       <TrackingSelector value={state.discoveryMode} onChange={handleDiscoveryModeChange} />
       {state.discoveryMode === "genres" ? (
-        discoveryContent
+        <View className="gap-4">
+          {state.availableGenres.length === 0 ? (
+            <View className="py-12 items-center">
+              <Text style={styles.loadingText} className="text-white/80">Loading genres...</Text>
+            </View>
+          ) : listMode ? (
+            <View>
+              {state.availableGenres.map((item) => (
+                <View key={item.id} className="mb-4">
+                  <GenreCard title={item.displayName} image={item.image} genreId={item.id} showButton={false} />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={{ minHeight: 450 }}>
+              <GenreCarousel data={state.availableGenres} />
+            </View>
+          )}
+        </View>
       ) : (
-        <View className="rounded-2xl border border-card-border bg-card-surface p-4">
-          <Text className="text-white text-lg font-semibold">
+        <View style={styles.filterPlaceholder}>
+          <MaterialIcons 
+            name={state.discoveryMode === "mood" ? "favorite" : "schedule"} 
+            size={48} 
+            color="rgba(255,255,255,0.3)" 
+          />
+          <Text style={styles.filterTitle}>
             {state.discoveryMode === "mood" ? "Pick mood" : "Pick duration"}
           </Text>
-          <Text className="text-white/70 mt-2">
+          <Text style={styles.filterDescription}>
             Quick filters will appear here. Hook up to your data source to fetch results.
           </Text>
         </View>
@@ -186,6 +210,7 @@ export default function HomeRateScreen() {
         className="flex-1"
         style={{ backgroundColor: darkBg }}
         contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 120, backgroundColor: darkBg }}
+        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl tintColor={Platform.OS === 'ios' ? "#fff" : "#6200EE"} refreshing={false} onRefresh={handlePullAI} />}
       >
         <View className="gap-4">
@@ -193,20 +218,20 @@ export default function HomeRateScreen() {
             <Pressable
               onPress={() => setListMode((v) => !v)}
               style={styles.iconButton}
-              className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
+              className="w-12 h-12 rounded-full items-center justify-center bg-white/10 border border-white/10"
             >
-              <Ionicons 
-                name={listMode ? "grid" : "list"} 
-                size={20} 
-                color="#fff" 
+              <MaterialIcons 
+                name={listMode ? "view-module" : "view-list"} 
+                size={22} 
+                color="rgba(255,255,255,0.87)" 
               />
             </Pressable>
             <Pressable
               onPress={() => setShowDisplaySettings(true)}
               style={styles.iconButton}
-              className="w-10 h-10 rounded-full items-center justify-center bg-white/10 border border-card-border"
+              className="w-12 h-12 rounded-full items-center justify-center bg-white/10 border border-white/10"
             >
-              <Ionicons name="settings-outline" size={20} color="#fff" />
+              <MaterialIcons name="tune" size={22} color="rgba(255,255,255,0.87)" />
             </Pressable>
           </View>
 
@@ -325,6 +350,42 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalText: {
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  filterPlaceholder: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 200,
+    ...Platform.select({
+      android: {
+        backgroundColor: '#1E1E1E',
+        elevation: 2,
+      },
+    }),
+  },
+  filterTitle: {
+    color: 'rgba(255, 255, 255, 0.87)',
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 16,
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  filterDescription: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
     fontFamily: Platform.select({
       ios: 'System',
       android: 'Roboto',

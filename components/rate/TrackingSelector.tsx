@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, Platform, StyleSheet } from "react-native";
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 type Option = {
   key: string;
@@ -14,33 +15,39 @@ type Props = {
 };
 
 const options: Option[] = [
-  { key: "genres", icon: "🏷️", label: "Genres", color: "#60a5fa" },
-  { key: "mood", icon: "💜", label: "Mood", color: "#c084fc" },
-  { key: "duration", icon: "⏱️", label: "Duration", color: "#4ade80" },
+  { key: "genres", icon: "local-offer", label: "Genres", color: "#60a5fa" },
+  { key: "mood", icon: "favorite", label: "Mood", color: "#c084fc" },
+  { key: "duration", icon: "schedule", label: "Duration", color: "#4ade80" },
 ];
 
 function TrackingSelectorComponent({ value, onChange }: Props) {
   return (
-    <View className="gap-3">
-      <Text className="text-white/80 text-base font-semibold px-1">Find by</Text>
-      <View className="flex-row gap-3">
+    <View style={styles.container}>
+      <Text style={styles.label}>Find by</Text>
+      <View style={styles.optionsRow}>
         {options.map((option) => {
           const selected = option.key === value;
           return (
             <Pressable
               key={option.key}
               onPress={() => onChange(option.key)}
-              className={`px-4 py-3 rounded-full border ${
-                selected ? "border-white/80 bg-white/15" : "border-card-border bg-card-surface"
-              }`}
-              style={{ shadowColor: selected ? option.color : "transparent", shadowOpacity: 0.5, shadowRadius: 8 }}
+              style={[
+                styles.optionButton,
+                selected && styles.optionButtonActive,
+                selected && { borderColor: option.color },
+              ]}
             >
-              <View className="flex-row items-center gap-2">
-                <Text className="text-lg">{option.icon}</Text>
-                <Text className={`text-sm font-medium ${selected ? "text-white" : "text-white/70"}`}>
-                  {option.label}
-                </Text>
-              </View>
+              <MaterialIcons 
+                name={option.icon as any} 
+                size={18} 
+                color={selected ? option.color : 'rgba(255, 255, 255, 0.6)'} 
+              />
+              <Text style={[
+                styles.optionText,
+                selected && { color: option.color }
+              ]}>
+                {option.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -48,6 +55,60 @@ function TrackingSelectorComponent({ value, onChange }: Props) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    gap: 12,
+  },
+  label: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 16,
+    fontWeight: '600',
+    paddingHorizontal: 4,
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    ...Platform.select({
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  optionButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    ...Platform.select({
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  optionText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    fontWeight: '500',
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+    }),
+  },
+});
 
 export const TrackingSelector = memo(TrackingSelectorComponent);
 

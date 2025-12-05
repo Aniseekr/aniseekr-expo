@@ -18,6 +18,7 @@ export function GenreCarousel({ data, onSelect }: Props) {
             image={item.image}
             genreId={item.id}
             onPress={() => onSelect?.(item)}
+            showButton={false}
           />
         </View>
       );
@@ -44,11 +45,13 @@ export function GenreCarousel({ data, onSelect }: Props) {
       keyExtractor={keyExtractor}
       getItemLayout={itemLayout}
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 8      }}
-      ItemSeparatorComponent={() => <View className="w-4" />}
+      contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 8 }}
+      ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
       snapToInterval={304}
-      decelerationRate={0.998}
+      snapToAlignment="center"
+      decelerationRate="fast"
       scrollEventThrottle={16}
+      pagingEnabled={false}
       style={{ minHeight: 450 }}
     />
   );

@@ -92,6 +92,15 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        {/* Splash screen - hidden from tab bar */}
+        <Tabs.Screen
+          name="index"
+          options={{
+            href: null,
+            tabBarStyle: { display: 'none' },
+            headerShown: false,
+          }}
+        />
       </Tabs>
     </SafeAreaProvider>
   );
