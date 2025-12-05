@@ -28,12 +28,15 @@ function GenreCardComponent({ title, image, genreId, onPress }: Props) {
   return (
     <Pressable onPress={handlePress} className="w-72 h-[420px] mx-2">
       <GlassCard className="flex-1" style={{ overflow: 'hidden' }}>
-        <Image
-          source={{ uri: image }}
-          style={{ width: '100%', height: '100%' }}
-          contentFit="cover"
-          transition={150}
-        />
+        {image && image.trim() !== "" ? (
+          <Image
+            source={{ uri: image }}
+            style={{ width: '100%', height: '100%' }}
+            contentFit="cover"
+            transition={150}
+            cachePolicy="memory-disk"
+          />
+        ) : null}
         <View className="absolute bottom-4 left-4 right-4">
           <View className="bg-black/50 px-4 py-3 rounded-xl">
             <Text className="text-white text-xl font-semibold">{title}</Text>

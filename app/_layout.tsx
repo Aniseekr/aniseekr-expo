@@ -15,28 +15,40 @@ export default function RootLayout() {
           headerShown: false,
           tabBarStyle: {
             position: 'absolute',
-            bottom: Platform.OS === 'ios' ? 20 : 10,
-            left: 16,
-            right: 16,
-            height: 70,
-            backgroundColor: Platform.OS === 'ios' ? 'rgba(13, 13, 16, 0.8)' : 'rgba(13, 13, 16, 0.95)',
-            borderRadius: 32,
-            borderTopWidth: 0,
-            borderTopColor: 'transparent',
-            elevation: 20,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.4,
-            shadowRadius: 24,
-            paddingBottom: Platform.OS === 'ios' ? 8 : 8,
+            bottom: Platform.OS === 'ios' ? 0 : 0,
+            left: 0,
+            right: 0,
+            height: Platform.OS === 'ios' ? 88 : 70,
+            backgroundColor: Platform.OS === 'ios' 
+              ? 'rgba(18, 18, 18, 0.95)' // iOS uses system blur, but we provide fallback
+              : '#121212', // Material Design dark surface
+            borderTopWidth: Platform.OS === 'ios' ? 0.5 : 0,
+            borderTopColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            ...Platform.select({
+              ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+              },
+              android: {
+                elevation: 8,
+                borderTopWidth: 0,
+              },
+            }),
+            paddingBottom: Platform.OS === 'ios' ? 20 : 8,
             paddingTop: 8,
           },
-          tabBarActiveTintColor: '#fff',
-          tabBarInactiveTintColor: '#9ca3af',
+          tabBarActiveTintColor: Platform.OS === 'ios' ? '#007AFF' : '#6200EE', // iOS blue / Material primary
+          tabBarInactiveTintColor: Platform.OS === 'ios' ? '#8E8E93' : '#9E9E9E', // iOS gray / Material gray
           tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: '600',
+            fontSize: 10,
+            fontWeight: Platform.OS === 'ios' ? '500' : '500',
             marginTop: 4,
+            fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+          },
+          tabBarIconStyle: {
+            marginTop: Platform.OS === 'ios' ? 4 : 0,
           },
         }}
       >
@@ -73,6 +85,14 @@ export default function RootLayout() {
           options={{
             title: 'Profile',
             tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size || 24} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="(setting)/settings"
+          options={{
+            href: null,
+            tabBarStyle: { display: 'none' },
+            headerShown: false,
           }}
         />
       </Tabs>

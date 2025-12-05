@@ -54,11 +54,49 @@ export class AnimeRepository {
 
   static async getGenres(): Promise<Genre[]> {
     const response = await JikanClient.get<JikanResponse<JikanGenre[]>>("/genres/anime");
-    return response.data.map((g) => ({
-      id: String(g.mal_id),
-      displayName: g.name,
-      image: "", // Jikan genres don't have images default
-    }));
+    const genres = await Promise.all(
+      response.data.map(async (g) => {
+        // Fetch a sample anime from this genre to get an image
+        try {
+          const animeResponse = await JikanClient.get<JikanResponse<JikanAnime[]>>(
+            "/anime",
+            { genres: g.mal_id, page: 1, sfw: true }
+          );
+          const sampleAnime = animeResponse.data?.[0];
+          if (sampleAnime) {
+            const image = sampleAnime.images?.webp?.large_image_url || 
+                         sampleAnime.images?.jpg?.large_image_url || 
+                         sampleAnime.images?.webp?.image_url ||
+                         sampleAnime.images?.jpg?.image_url ||
+                         "";
+            console.log(`✅ Genre ${g.name}: Found image ${image ? image.substring(0, 50) + '...' : 'NONE'}`);
+            return {
+              id: String(g.mal_id),
+              displayName: g.name,
+              image,
+            };
+          } else {
+            console.warn(`⚠️ Genre ${g.name}: No anime found in response`);
+            return {
+              id: String(g.mal_id),
+              displayName: g.name,
+              image: "",
+            };
+          }
+        } catch (error) {
+          console.warn(`❌ Failed to fetch image for genre ${g.name}:`, error);
+          return {
+            id: String(g.mal_id),
+            displayName: g.name,
+            image: "",
+          };
+        }
+      })
+    );
+    // Log summary
+    const withImages = genres.filter(g => g.image && g.image.trim() !== "").length;
+    console.log(`📊 Loaded ${genres.length} genres, ${withImages} with images`);
+    return genres;
   }
 
   // --- Mappers ---
