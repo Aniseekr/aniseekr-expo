@@ -67,6 +67,11 @@ export class AnimeRepository {
     return this.mapAniListDetailToAnime(data);
   }
 
+  static async rateAnime(id: string, action: 'like' | 'pass'): Promise<void> {
+    console.log(`[Repository] Rated anime ${id}: ${action}`);
+    // TODO: Connect to backend or local storage
+  }
+
   // --- Mappers ---
 
   private static mapAniListToAnime(item: AniListAnime): Anime {

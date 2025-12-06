@@ -57,11 +57,16 @@ type Props = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwipe, onLongPress, activeTranslation }, ref) => {
+  // 🟢 Performance: Start true, only set false once. No complex state resets.
+  // This component is keyed by ID in parent, so it remounts for new photos anyway.
   const [isLoading, setIsLoading] = useState(true);
   
-  // Internal values if no external shared value is provided
-  const internalTranslateX = useSharedValue(0);
-  const translateX = activeTranslation ?? internalTranslateX;
+  // 🔥 FIX 1: Always use local SharedValue to control card position
+  // This ensures new cards always start from 0 on mount, avoiding inheritance of the previous card's offset (e.g. 500)
+  const translateX = useSharedValue(0);
+  // Remove the old combined logic
+  // const internalTranslateX = useSharedValue(0);
+  // const translateX = activeTranslation ?? internalTranslateX;
   
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -80,12 +85,19 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwip
   }));
 
   const resetPosition = () => {
+    // Reset local position
     translateX.value = withSpring(0, RESET_SPRING_CONFIG, (finished) => {
         if (finished) {
            // Subtle thud when card settles back
            scheduleOnRN(hapticsBridge.impact, 'light');
         }
     });
+    
+    // 🔥 FIX 2: Sycronously reset parent value (to reset background card position)
+    if (activeTranslation) {
+        activeTranslation.value = withSpring(0, RESET_SPRING_CONFIG);
+    }
+
     translateY.value = withSpring(0, RESET_SPRING_CONFIG);
     rotate.value = withSpring(0, RESET_SPRING_CONFIG);
     scale.value = withSpring(1, RESET_SPRING_CONFIG);
@@ -96,18 +108,28 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwip
   const flingOut = (direction: "left" | "right", velocityX: number) => {
     const targetX = direction === "right" ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
     
-    // Velocity Preservation: Use Spring to simulate real throwing physics
-    // Increased stiffness slightly for "snappier" exit
+    // Move only "self" (translateX) to fling the card out
     translateX.value = withSpring(
         targetX, 
         { 
             velocity: velocityX,
             damping: 20,
-            stiffness: 120, // Increased from 90 to 120 for better exit snap
+            stiffness: 120,
             overshootClamping: true,
         }, 
         () => scheduleOnRN(onSwipe, direction)
     );
+
+    // 🔥 FIX 3: Reset parent value at the same time (smoothly restore background card as top card flies out)
+    // This is smoother than waiting for the next card to mount and prevents flickering
+    if (activeTranslation) {
+        // 🟢 Faster reset for "snappier" background effect
+        activeTranslation.value = withSpring(0, { 
+            damping: 12, 
+            stiffness: 280, 
+            overshootClamping: true 
+        });
+    }
 
     // Rotation should also follow physics
     rotate.value = withSpring(direction === "right" ? 25 : -25, { 
@@ -135,6 +157,11 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwip
         .onChange((event) => {
           translateX.value = event.translationX; // Direct 1:1 movement
           translateY.value = event.translationY * 0.5; // Dampen vertical movement
+
+          // 🔥 FIX 4: Manually sync to parent (only to drive background effects)
+          if (activeTranslation) {
+              activeTranslation.value = event.translationX;
+          }
           
           // 🟢 Smart Rotation Logic
           const CARD_HEIGHT = SCREEN_HEIGHT * 0.6; // Approx height
@@ -193,7 +220,7 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwip
         .onFinalize(() => {
           pressScale.value = withSpring(1, { damping: 14 });
         }),
-    [isTop]
+    [isTop, activeTranslation] // Add activeTranslation dependency
   );
   
   // Combine gestures
@@ -279,11 +306,14 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(({ photo, isTop, onSwip
 
           {/* Main Image */}
           <Image
+            key={photo.url} // 🟢 Key forces fresh mount if url changes, but we rely on parent keys usually
             source={{ uri: photo.url }}
             style={styles.image}
             contentFit="cover"
+            // 🔥 Prevent white flash during recycling
+            placeholderContentFit="cover"
             // 🟢 Disable transition or set very short to avoid ghosting on fast swipes
-            transition={0} 
+            transition={200} 
             // 🟢 Ensure memory-disk cache usage
             cachePolicy="memory-disk"
             // 🟢 Don't hide Image based on isLoading, keep it mounted

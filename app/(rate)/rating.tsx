@@ -9,6 +9,7 @@ import { AnimeRepository } from '../../libs/anime-repository';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassCard } from '../../components/common/GlassCard';
 import { RatingInfoOverlay } from '../../components/rate/RatingInfoOverlay';
+import { ImagePreloader } from '../../libs/image-preloader';
 import Animated, { 
     Extrapolation, 
     interpolate, 
@@ -83,43 +84,36 @@ export default function RatingScreen() {
     return Array.from({ length: maxIndex - currentIndex }, (_, i) => currentIndex + i);
   }, [currentIndex, photos.length]);
 
+
+
   // 🟢 Prefetch images for smoother experience
   useEffect(() => {
     if (photos.length > 0) {
       // Prefetch next 5 photos
-      const nextPhotos = photos.slice(currentIndex + 1, currentIndex + 6);
-      nextPhotos.forEach(photo => {
-         if (photo.url) Image.prefetch(photo.url);
-      });
+      const nextPhotos = photos.slice(currentIndex + 1, currentIndex + 6).map(p => p.url).filter(Boolean) as string[];
+      ImagePreloader.preload(nextPhotos);
     }
   }, [currentIndex, photos]);
-
-  // Reset translation after the outgoing card is removed to avoid jumpy stack
-  const resetActiveTranslation = useCallback(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        activeTranslationX.value = 0;
-      });
-    });
-  }, [activeTranslationX]);
 
   const handleSwipe = useCallback(
     (direction: 'left' | 'right') => {
       // Save rating logic
-      if (direction === 'right') {
-        console.log('Liked:', photos[currentIndex]?.id);
-      } else {
-        console.log('Skipped:', photos[currentIndex]?.id);
+      const photo = photos[currentIndex];
+      if (photo) {
+        AnimeRepository.rateAnime(photo.id, direction === 'right' ? 'like' : 'pass');
       }
 
+      // 2. Simply update Index
+      // flingOut in PhotoCard already resets activeTranslationX
+      // New PhotoCard (Next) will initialize its own translateX to 0
       if (currentIndex < photos.length - 1) {
         setCurrentIndex((prev) => prev + 1);
-        resetActiveTranslation();
+        // ❌ Remove: resetActiveTranslation(); 
       } else {
         router.back();
       }
     },
-    [currentIndex, photos, resetActiveTranslation, router]
+    [currentIndex, photos, router]
   );
   
   const triggerSwipe = (direction: 'left' | 'right') => {
