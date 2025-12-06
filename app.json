@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "my-expo-app",
-    "slug": "my-expo-app",
-    "version": "1.0.0",
+    "name": "AniSeekr",
+    "slug": "aniseekr",
+    "version": "0.0.1",
     "scheme": "aniseekr",
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,14 +34,19 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kidney.myexpoapp"
+      "bundleIdentifier": "com.kidneyweakx.aniseekr"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.kidney.myexpoapp"
+      "package": "com.kidneyweakx.aniseekr"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f1a05e03-8db4-4188-94bf-11d0cc39bf9a"
+      }
     }
   }
 }

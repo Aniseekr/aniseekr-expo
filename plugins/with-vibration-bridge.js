@@ -61,9 +61,20 @@ const withVibrationBridge = (config) => {
     if (language !== "java" && language !== "kt") {
       return config;
     }
-    const importLine = `import ${pkg}.vibration.${MODULE_NAME}Package;`;
+    const importLine = `import ${pkg}.vibration.${MODULE_NAME}Package`;
     if (!config.modResults.contents.includes(importLine)) {
-      config.modResults.contents = importLine + "\n" + config.modResults.contents;
+      const packageRegex = /package\s+[\w.]+;?/;
+      const match = config.modResults.contents.match(packageRegex);
+      if (match) {
+        const packageEndIndex = match.index + match[0].length;
+        config.modResults.contents = 
+          config.modResults.contents.slice(0, packageEndIndex) + 
+          "\n\n" + importLine + 
+          config.modResults.contents.slice(packageEndIndex);
+      } else {
+        // Fallback: prepend if no package (unlikely)
+        config.modResults.contents = importLine + "\n" + config.modResults.contents;
+      }
     }
     const addPackageSnippet = "packages.add(new " + MODULE_NAME + "Package());";
     if (!config.modResults.contents.includes(addPackageSnippet)) {
