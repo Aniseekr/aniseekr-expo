@@ -71,7 +71,7 @@ export function QuickActions({ actions }: QuickActionsProps) {
           />
           <QuickActionButton 
             icon="dna" 
-            iconSet="Ionicons" 
+            iconSet="FontAwesome5" 
             title="Otaku DNA" 
             color="#a855f7" 
             onPress={actions.onDNA} 

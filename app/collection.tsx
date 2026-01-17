@@ -1,20 +1,21 @@
-import { View, FlatList, RefreshControl, Platform, StyleSheet } from 'react-native';
+import {
+  View,
+  FlatList,
+  RefreshControl,
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CollectionHeader } from '../components/collection/CollectionHeader';
-import { FolderList, CollectionFolder, AnimePreview } from '../components/collection/FolderList';
-import { AnimeRepository } from '../libs/repositories/anime-repository';
-
-interface CollectionFolder {
-  id: string;
-  name: string;
-  icon: string;
-  isR18: boolean;
-  isShared: boolean;
-  isSystemFolder: boolean;
-  folderType: 'all' | null;
-}
+import { FolderList } from '../components/collection/FolderList';
+import { CollectionFolder } from '../types';
+import { collectionService } from '../libs/services/collection/collection-service';
+import { CreateFolderModal } from '../components/collection/CreateFolderModal';
+import { useRouter } from 'expo-router';
 
 type SortMode = 'newest' | 'oldest' | 'rarity' | 'popularity' | 'count' | 'id';
 
@@ -23,6 +24,9 @@ export default function CollectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [collections, setCollections] = useState<CollectionFolder[]>([]);
+  const [isCreateModalVisible, setCreateModalVisible] = useState(false);
+  const router = useRouter();
 
   const categories = ['All', 'Wishlist', 'Favorites', 'Watching', 'Completed', 'Dropped'];
   const categoryIcons: Record<string, string> = {
@@ -30,114 +34,87 @@ export default function CollectionScreen() {
     Wishlist: 'heart',
     Favorites: 'heart',
     Watching: 'play-circle',
-    Completed: 'check-circle',
+    Completed: 'checkmark-circle',
     Dropped: 'x-circle',
   };
 
-  const categoryCounts: Record<string, number> = {
-    All: 156,
-    Wishlist: 42,
-    Favorites: 12,
-    Watching: 8,
-    Completed: 85,
-    Dropped: 14,
-  };
-
-  const folders: CollectionFolder[] = [
-    {
-      id: '1',
-      name: 'Wishlist',
-      icon: 'bookmark',
-      isR18: false,
-      isShared: true,
-      isSystemFolder: true,
-      folderType: null,
-    },
-    {
-      id: '2',
-      name: 'Watching',
-      icon: 'play-circle',
-      isR18: false,
-      isShared: true,
-      isSystemFolder: true,
-      folderType: 'all',
-    },
-    {
-      id: '3',
-      name: 'Favorites',
-      icon: 'heart',
-      isR18: false,
-      isShared: true,
-      isSystemFolder: true,
-      folderType: 'all',
-    },
-    {
-      id: '4',
-      name: 'Summer 2024',
-      icon: 'folder',
-      isR18: false,
-      isShared: true,
-      isSystemFolder: false,
-      folderType: 'all',
-    },
-  ];
-
-  const [collections, setCollections] = useState<CollectionFolder[]>(folders);
-
   const loadCollection = async () => {
-    const data = await AnimeRepository.getCollection();
-    setCollections(data);
+    try {
+      const data = await collectionService.getFolders();
+      setCollections(data);
+    } catch (error) {
+      console.error('Failed to load collection:', error);
+    }
   };
 
-  const handleDelete = useCallback((id: string) => {
-    setCollections((prev) => prev.filter((item) => item.id !== id));
+  useEffect(() => {
+    loadCollection();
+  }, []);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    collections.forEach((folder) => {
+      if (folder.name === 'All') counts['All'] = folder.animeCount;
+      if (folder.name === 'Favorites') counts['Favorites'] = folder.animeCount;
+      if (folder.name === 'Watching') counts['Watching'] = folder.animeCount;
+      if (folder.name === 'Completed') counts['Completed'] = folder.animeCount;
+      if (folder.name === 'Dropped') counts['Dropped'] = folder.animeCount;
+      if (folder.name === 'Plan to Watch') counts['Wishlist'] = folder.animeCount;
+    });
+    return counts;
+  }, [collections]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      await collectionService.deleteFolder(id);
+      loadCollection();
+    } catch (error) {
+      console.error('Failed to delete folder:', error);
+    }
   }, []);
 
   const handleSort = useCallback((mode: SortMode) => {
     setSortMode(mode);
   }, []);
 
-  const sortedCollections = useMemo(() => {
-    if (sortMode === 'newest') {
-      return [...collections].reverse();
-    } else if (sortMode === 'oldest') {
-      return [...collections];
-    } else if (sortMode === 'rarity') {
-      return [...collections].sort((a, b) => {
-        if (a.isR18 !== b.isR18) return a.isR18 ? -1 : 1;
-        return 0;
-      });
-    } else if (sortMode === 'popularity') {
-      return [...collections].sort((a, b) => b.id.localeCompare(a.id));
-    } else if (sortMode === 'count') {
-      return [...collections].sort((a, b) => b.id.localeCompare(a.id));
-    }
-    return collections;
-  }, [collections, sortMode]);
+  const filteredCollections = useMemo(() => {
+    let filtered = collections;
 
-  const renderFolder = useCallback(
-    ({ item }: { item: CollectionFolder }) => {
-      return (
-        <FolderList
-          folder={item}
-          onDelete={handleDelete}
-          onSwipe={(direction, id) => {
-            if (direction === 'right') {
-              handleDelete(id);
-            }
-          }}
-          folderPreviews={[]}
-          isLast={false}
-          isExpanded={false}
-          isFirst={false}
-          onToggle={() => {}}
-          onPress={() => {}}
-          onLongPress={() => {}}
-        />
-      );
-    },
-    [handleDelete]
-  );
+    if (selectedCategory !== 'All') {
+      const targetTypeMap: Record<string, string> = {
+        Wishlist: 'wishlist',
+        Favorites: 'favorites',
+        Watching: 'watching',
+        Completed: 'completed',
+        Dropped: 'dropped',
+      };
+      const targetType = targetTypeMap[selectedCategory];
+
+      if (targetType) {
+        filtered = collections.filter((f) => f.folderType === targetType);
+      }
+    }
+
+    return [...filtered].sort((a, b) => {
+      if (sortMode === 'newest') return b.createdAt.getTime() - a.createdAt.getTime();
+      if (sortMode === 'oldest') return a.createdAt.getTime() - b.createdAt.getTime();
+      if (sortMode === 'rarity') return (b.isR18 ? 1 : 0) - (a.isR18 ? 1 : 0);
+      if (sortMode === 'popularity') return b.sharedBy - a.sharedBy;
+      if (sortMode === 'count') return b.animeCount - a.animeCount;
+      if (sortMode === 'id') return a.id.localeCompare(b.id);
+      return 0;
+    });
+  }, [collections, selectedCategory, sortMode]);
+
+  const renderFolder = useCallback(({ item }: { item: CollectionFolder }) => {
+    return (
+      <FolderList
+        folders={[item]}
+        folderPreviews={{}}
+        onFolderPress={(folder) => router.push(`/collection/${folder.id}?name=${folder.name}`)}
+      />
+    );
+  }, []);
 
   const keyExtractor = useCallback((item: CollectionFolder) => item.id, []);
 
@@ -172,30 +149,19 @@ export default function CollectionScreen() {
           const isActive = sortMode === option.value;
 
           return (
-            <View
+            <TouchableOpacity
               key={option.value}
+              onPress={() => handleSort(option.value)}
               style={[styles.sortButton, isActive && styles.sortButtonActive]}>
               <Text style={[styles.sortButtonText, isActive && styles.sortButtonTextActive]}>
                 {option.label}
               </Text>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
     );
   };
-
-  const filteredCollections = useMemo(() => {
-    if (selectedCategory === 'All') {
-      return sortedCollections;
-    }
-
-    const categoryFolders = collections.filter(
-      (folder) => folder.icon === categoryIcons[selectedCategory]
-    );
-
-    return categoryFolders;
-  }, [sortedCollections, collections, selectedCategory]);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -209,6 +175,7 @@ export default function CollectionScreen() {
           categoryCounts={categoryCounts}
           categoryIcons={categoryIcons}
           onSelectCategory={setSelectedCategory}
+          onAddFolder={() => setCreateModalVisible(true)}
         />
 
         {selectedCategory !== 'All' && renderSortButtons()}
@@ -230,13 +197,18 @@ export default function CollectionScreen() {
               progressBackgroundColor="#6200EE"
             />
           }
-          onEndReached={() => {}}
           removeClippedSubviews={Platform.OS === 'android'}
           maxToRenderPerBatch={10}
           windowSize={5}
           updateCellsBatchingPeriod={50}
           initialNumToRender={10}
           scrollEventThrottle={16}
+        />
+
+        <CreateFolderModal
+          visible={isCreateModalVisible}
+          onClose={() => setCreateModalVisible(false)}
+          onCreated={loadCollection}
         />
       </View>
     </SafeAreaView>
@@ -257,24 +229,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  headerContainer: {
-    marginBottom: 8,
-  },
-
   sortContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginHorizontal: 20,
     marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 8,
   },
 
   sortButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 8,
   },
 
   sortButtonActive: {
@@ -283,7 +254,7 @@ const styles = StyleSheet.create({
   },
 
   sortButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',

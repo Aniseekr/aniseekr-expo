@@ -57,7 +57,7 @@ export function StatsGrid({ stats }: StatsGridProps) {
     <View style={styles.container}>
       <StatCard label="Total" value={stats.total} icon="bookmark" color="#3b82f6" />
       <StatCard label="Watching" value={stats.watching} icon="play-circle" color="#10b981" />
-      <StatCard label="Completed" value={stats.completed} icon="check-circle" color="#22c55e" />
+      <StatCard label="Completed" value={stats.completed} icon="checkmark-circle" color="#22c55e" />
       <StatCard label="Dropped" value={stats.dropped} icon="x-circle" color="#ef4444" />
     </View>
   );
