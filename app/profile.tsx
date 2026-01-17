@@ -21,7 +21,7 @@ export default function ProfileScreen() {
     try {
       const data = await UserRepository.getProfile();
       setUser(data);
-      
+
       // Load gacha data
       try {
         const cards = await gachaService.getUserCards();
@@ -49,56 +49,52 @@ export default function ProfileScreen() {
   }, [loadData]);
 
   // Default stats for loading state
-  const defaultStats = { 
-    totalRated: 0, 
-    likedCount: 0, 
-    cardsCount: cardsCount, 
-    foldersCount: 0 
+  const defaultStats = {
+    totalRated: 0,
+    likedCount: 0,
+    cardsCount: cardsCount,
+    foldersCount: 0,
   };
 
-  const stats = user ? {
-    ...user.stats,
-    cardsCount: cardsCount || user.stats.cardsCount,
-  } : defaultStats;
+  const stats = user
+    ? {
+        ...user.stats,
+        cardsCount: cardsCount || user.stats.cardsCount,
+      }
+    : defaultStats;
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#121212', '#1E1E1E', '#121212']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={['#121212', '#1E1E1E', '#121212']} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={[styles.safeArea, { paddingTop: top }]}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
-            <RefreshControl 
-              tintColor="#fff" 
-              refreshing={refreshing} 
+            <RefreshControl
+              tintColor="#fff"
+              refreshing={refreshing}
               onRefresh={onRefresh}
               colors={['#6200EE']}
               progressBackgroundColor="#1E1E1E"
             />
-          }
-        >
-          <ProfileHeader 
-            username={user ? user.username : "Loading..."}
-            profileImageURL={user ? user.avatarUrl : ""}
+          }>
+          <ProfileHeader
+            username={user ? user.username : 'Loading...'}
+            profileImageURL={user ? user.avatarUrl : ''}
             isDonator={user ? user.isDonator : false}
             coins={coins}
             shards={shards}
           />
-          
-          <CollectionStats 
-            stats={stats}
-          />
 
-          <QuickActions 
+          <CollectionStats stats={stats} />
+
+          <QuickActions
             actions={{
               onPremium: () => {},
-              onSync: () => {},
-              onSettings: () => router.push("/(setting)/settings"),
-              onBackup: () => {},
+              onSync: () => router.push('/(setting)/sync'),
+              onSettings: () => router.push('/(setting)/settings'),
+              onBackup: () => alert('Backup feature coming soon!'),
               onDNA: () => {},
             }}
           />

@@ -1,12 +1,12 @@
 import React, { ReactNode } from 'react';
-import { Pressable, ViewStyle } from 'react-native';
+import { Pressable, ViewStyle, StyleProp } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 interface AnimatedPressableProps {
   children: ReactNode;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   disabled?: boolean;
   hapticFeedback?: boolean;
 }

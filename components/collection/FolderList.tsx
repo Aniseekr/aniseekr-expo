@@ -23,149 +23,145 @@ export interface AnimePreview {
   image?: string;
 }
 
-interface FolderListProps {
-    folders: CollectionFolder[];
-    folderPreviews: { [key: string]: AnimePreview[] };
+export interface FolderListProps {
+  folders: CollectionFolder[];
+  folderPreviews: { [key: string]: AnimePreview[] };
+  onFolderPress?: (folder: CollectionFolder) => void;
 }
 
-export function FolderList({ folders, folderPreviews }: FolderListProps) {
-    const renderFolderSection = (folder: CollectionFolder) => {
-        const previews = folderPreviews[folder.id] || [];
-    
-        return (
-          <View key={folder.id} style={styles.folderSection}>
-            <Pressable style={styles.folderHeader}>
-              <View style={styles.folderHeaderLeft}>
-                <View style={styles.folderIconContainer}>
-                  <Ionicons name={folder.icon as any} size={24} color="rgba(255, 255, 255, 0.87)" />
-                </View>
-                <Text style={styles.folderName}>{folder.name}</Text>
-                {folder.isR18 && (
-                  <View style={styles.r18Badge}>
-                    <Text style={styles.r18Text}>18+</Text>
-                  </View>
-                )}
-                {folder.isShared && (
-                  <View style={styles.sharedBadge}>
-                    <MaterialIcons name="people" size={14} color="#3b82f6" />
-                  </View>
-                )}
+export function FolderList({ folders, folderPreviews, onFolderPress }: FolderListProps) {
+  const renderFolderSection = (folder: CollectionFolder) => {
+    const previews = folderPreviews[folder.id] || [];
+
+    return (
+      <View key={folder.id} style={styles.folderSection}>
+        <Pressable style={styles.folderHeader} onPress={() => onFolderPress?.(folder)}>
+          <View style={styles.folderHeaderLeft}>
+            <View style={styles.folderIconContainer}>
+              <Ionicons name={folder.icon as any} size={24} color="rgba(255, 255, 255, 0.87)" />
+            </View>
+            <Text style={styles.folderName}>{folder.name}</Text>
+            {folder.isR18 && (
+              <View style={styles.r18Badge}>
+                <Text style={styles.r18Text}>18+</Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.4)" />
-            </Pressable>
-    
-            {folder.name === 'Wishlist' && previews.length > 0 ? (
-              <View style={styles.wishlistContainer}>
-                <View style={styles.heroCard}>
-                  {previews[0].image ? (
-                    <Image 
-                      source={{ uri: previews[0].image }} 
-                      style={styles.heroImage}
+            )}
+            {folder.isShared && (
+              <View style={styles.sharedBadge}>
+                <MaterialIcons name="people" size={14} color="#3b82f6" />
+              </View>
+            )}
+          </View>
+          <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.4)" />
+        </Pressable>
+
+        {folder.name === 'Wishlist' && previews.length > 0 ? (
+          <View style={styles.wishlistContainer}>
+            <View style={styles.heroCard}>
+              {previews[0].image ? (
+                <Image
+                  source={{ uri: previews[0].image }}
+                  style={styles.heroImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.heroImagePlaceholder} />
+              )}
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.9)']}
+                style={styles.heroGradient}
+              />
+              <View style={styles.heroContent}>
+                <Text style={styles.heroTitle}>{previews[0].title}</Text>
+                <View style={styles.heroMeta}>
+                  {previews[0].score && (
+                    <View style={styles.scoreRow}>
+                      <MaterialIcons name="star" size={16} color="#fbbf24" />
+                      <Text style={styles.scoreText}>{previews[0].score.toFixed(1)}</Text>
+                    </View>
+                  )}
+                  {previews[0].year && <Text style={styles.yearText}>{previews[0].year}</Text>}
+                </View>
+              </View>
+            </View>
+          </View>
+        ) : folder.folderType === 'all' && previews.length > 0 ? (
+          <View style={styles.gridContainer}>
+            {previews.slice(0, 6).map((anime) => (
+              <View key={anime.id} style={styles.gridItem}>
+                <View style={styles.animeCard}>
+                  {anime.image ? (
+                    <Image
+                      source={{ uri: anime.image }}
+                      style={styles.animeImage}
                       resizeMode="cover"
                     />
                   ) : (
-                    <View style={styles.heroImagePlaceholder} />
+                    <View style={styles.animeImagePlaceholder} />
                   )}
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.9)']}
-                    style={styles.heroGradient}
-                  />
-                  <View style={styles.heroContent}>
-                    <Text style={styles.heroTitle}>{previews[0].title}</Text>
-                    <View style={styles.heroMeta}>
-                      {previews[0].score && (
-                        <View style={styles.scoreRow}>
-                          <MaterialIcons name="star" size={16} color="#fbbf24" />
-                          <Text style={styles.scoreText}>{previews[0].score.toFixed(1)}</Text>
-                        </View>
-                      )}
-                      {previews[0].year && (
-                        <Text style={styles.yearText}>{previews[0].year}</Text>
-                      )}
-                    </View>
-                  </View>
                 </View>
+                <Text style={styles.animeTitle} numberOfLines={1}>
+                  {anime.title}
+                </Text>
+                {anime.score && (
+                  <View style={styles.scoreRowSmall}>
+                    <Text style={styles.starIcon}>⭐</Text>
+                    <Text style={styles.scoreTextSmall}>{anime.score.toFixed(1)}</Text>
+                  </View>
+                )}
               </View>
-            ) : folder.folderType === 'all' && previews.length > 0 ? (
-              <View style={styles.gridContainer}>
-                {previews.slice(0, 6).map((anime) => (
-                  <View key={anime.id} style={styles.gridItem}>
-                    <View style={styles.animeCard}>
-                      {anime.image ? (
-                        <Image 
-                          source={{ uri: anime.image }} 
-                          style={styles.animeImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.animeImagePlaceholder} />
-                      )}
-                    </View>
-                    <Text style={styles.animeTitle} numberOfLines={1}>
-                      {anime.title}
-                    </Text>
-                    {anime.score && (
-                      <View style={styles.scoreRowSmall}>
-                        <Text style={styles.starIcon}>⭐</Text>
-                        <Text style={styles.scoreTextSmall}>{anime.score.toFixed(1)}</Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            ) : previews.length > 0 ? (
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                contentContainerStyle={styles.horizontalScrollContent}
-              >
-                {previews.map((anime) => (
-                  <View key={anime.id} style={styles.horizontalItem}>
-                    <View style={styles.animeCard}>
-                      {anime.image ? (
-                        <Image 
-                          source={{ uri: anime.image }} 
-                          style={styles.animeImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.animeImagePlaceholder} />
-                      )}
-                    </View>
-                    <Text style={styles.animeTitleHorizontal} numberOfLines={1}>
-                      {anime.title}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <Pressable style={styles.emptyContainer}>
-                <View style={styles.emptyCard}>
-                  <View style={styles.emptyIconContainer}>
-                    <MaterialIcons name="add" size={24} color="rgba(255,255,255,0.2)" />
-                  </View>
-                  <Text style={styles.emptyText}>Add to collection</Text>
-                </View>
-              </Pressable>
-            )}
+            ))}
           </View>
-        );
-      };
+        ) : previews.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalScrollContent}>
+            {previews.map((anime) => (
+              <View key={anime.id} style={styles.horizontalItem}>
+                <View style={styles.animeCard}>
+                  {anime.image ? (
+                    <Image
+                      source={{ uri: anime.image }}
+                      style={styles.animeImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.animeImagePlaceholder} />
+                  )}
+                </View>
+                <Text style={styles.animeTitleHorizontal} numberOfLines={1}>
+                  {anime.title}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <Pressable style={styles.emptyContainer}>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconContainer}>
+                <MaterialIcons name="add" size={24} color="rgba(255,255,255,0.2)" />
+              </View>
+              <Text style={styles.emptyText}>Add to collection</Text>
+            </View>
+          </Pressable>
+        )}
+      </View>
+    );
+  };
 
-    if (!folders || folders.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <MaterialIcons name="folder-open" size={48} color="rgba(255, 255, 255, 0.3)" />
-          <Text style={styles.emptyStateText}>No folders</Text>
-        </View>
-      );
-    }
-
+  if (!folders || folders.length === 0) {
     return (
-        <View style={styles.container}>
-            {folders.map(folder => renderFolderSection(folder))}
-        </View>
-    )
+      <View style={styles.emptyState}>
+        <MaterialIcons name="folder-open" size={48} color="rgba(255, 255, 255, 0.3)" />
+        <Text style={styles.emptyStateText}>No folders</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>{folders.map((folder) => renderFolderSection(folder))}</View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -341,7 +337,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   animeCard: {
-    aspectRatio: 2/3,
+    aspectRatio: 2 / 3,
     borderRadius: 12,
     marginBottom: 8,
     overflow: 'hidden',

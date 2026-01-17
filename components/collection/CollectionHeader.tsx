@@ -6,9 +6,18 @@ interface CollectionHeaderProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   categoryCounts: { [key: string]: number };
+  categoryIcons?: Record<string, string>;
+  onAddFolder?: () => void;
 }
 
-export function CollectionHeader({ categories, selectedCategory, onSelectCategory, categoryCounts }: CollectionHeaderProps) {
+export function CollectionHeader({
+  categories,
+  selectedCategory,
+  onSelectCategory,
+  categoryCounts,
+  categoryIcons,
+  onAddFolder,
+}: CollectionHeaderProps) {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -22,16 +31,15 @@ export function CollectionHeader({ categories, selectedCategory, onSelectCategor
           <Pressable style={styles.actionButton}>
             <MaterialIcons name="search" size={22} color="rgba(255, 255, 255, 0.87)" />
           </Pressable>
-          <Pressable style={styles.actionButton}>
+          <Pressable style={styles.actionButton} onPress={onAddFolder}>
             <MaterialIcons name="add" size={24} color="rgba(255, 255, 255, 0.87)" />
           </Pressable>
         </View>
       </View>
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesContainer}
-      >
+        contentContainerStyle={styles.categoriesContainer}>
         {categories.map((category) => {
           const count = categoryCounts[category] || 0;
           const isSelected = selectedCategory === category;
@@ -39,27 +47,14 @@ export function CollectionHeader({ categories, selectedCategory, onSelectCategor
             <Pressable
               key={category}
               onPress={() => onSelectCategory(category)}
-              style={[
-                styles.categoryButton,
-                isSelected && styles.categoryButtonActive
-              ]}
-            >
+              style={[styles.categoryButton, isSelected && styles.categoryButtonActive]}>
               <View style={styles.categoryContent}>
-                <Text style={[
-                  styles.categoryText,
-                  isSelected && styles.categoryTextActive
-                ]}>
+                <Text style={[styles.categoryText, isSelected && styles.categoryTextActive]}>
                   {category}
                 </Text>
                 {count > 0 && (
-                  <View style={[
-                    styles.countBadge,
-                    isSelected && styles.countBadgeActive
-                  ]}>
-                    <Text style={[
-                      styles.countText,
-                      isSelected && styles.countTextActive
-                    ]}>
+                  <View style={[styles.countBadge, isSelected && styles.countBadgeActive]}>
+                    <Text style={[styles.countText, isSelected && styles.countTextActive]}>
                       {count}
                     </Text>
                   </View>
