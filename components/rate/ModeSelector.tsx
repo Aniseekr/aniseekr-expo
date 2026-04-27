@@ -1,7 +1,7 @@
 // Three-segment pill mode selector matching the iOS PillTabBar style.
 // Outer pill is glass; the active item gets a capsule indicator using `Colors.primary`.
 
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -44,10 +44,12 @@ function ModeSelectorComponent<T extends string = string>({
   const translateX = useSharedValue(activeIndex * segmentWidth);
 
   // Drive indicator with spring whenever the active index changes.
-  translateX.value = withSpring(activeIndex * segmentWidth, {
-    damping: 18,
-    stiffness: 220,
-  });
+  useEffect(() => {
+    translateX.value = withSpring(activeIndex * segmentWidth, {
+      damping: 18,
+      stiffness: 220,
+    });
+  }, [activeIndex, segmentWidth, translateX]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
