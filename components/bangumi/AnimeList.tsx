@@ -1,12 +1,11 @@
 import { View, Text, Pressable, Image, Platform, StyleSheet } from 'react-native';
-import { GlassCard } from '../common/GlassCard';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Anime } from '../rate/types';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
 import { NearbyPilgrimageBadge } from '../pilgrimage/NearbyPilgrimageBadge';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 
 interface AnimeListProps {
   listViewData: { day: string; anime: Anime[] }[];
@@ -107,10 +106,10 @@ export function AnimeRowCard({
                             ]}
                             disabled={isLoading}
                         >
-                            <MaterialIcons 
-                                name={isScheduled ? "notifications-active" : "notifications-none"} 
-                                size={16} 
-                                color={isScheduled ? "#6200EE" : "#fff"} 
+                            <MaterialIcons
+                                name={isScheduled ? "notifications-active" : "notifications-none"}
+                                size={16}
+                                color={isScheduled ? Colors.primary : Colors.text.primary}
                                 style={{ marginRight: 6 }}
                             />
                             <Text style={[
@@ -129,109 +128,81 @@ export function AnimeRowCard({
 
 const styles = StyleSheet.create({
     sectionTitle: {
-        color: 'rgba(255, 255, 255, 0.87)',
-        fontSize: 24,
-        fontWeight: '700',
-        marginBottom: 16,
-        paddingLeft: 8,
-        letterSpacing: -0.5,
-        fontFamily: Platform.select({
-            ios: 'System',
-            android: 'Roboto',
-        }),
+        ...Typography.headlineSmall,
+        color: Colors.text.primary,
+        fontFamily: FontFamily.rounded,
+        marginBottom: Spacing.md,
+        paddingLeft: Spacing.xs,
     },
     cardPressable: {
-        marginBottom: 16,
+        marginBottom: Spacing.md,
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.18,
+                shadowRadius: 8,
             },
-            android: {
-                elevation: 2,
-            },
+            android: { elevation: 2 },
         }),
     },
     cardContainer: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 16,
-        padding: 16,
+        backgroundColor: Colors.glass.dark,
+        borderRadius: Radius.card,
+        padding: Spacing.md,
         flexDirection: 'row',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        ...Platform.select({
-            android: {
-                backgroundColor: '#1E1E1E',
-                elevation: 2,
-            },
-        }),
+        borderColor: Colors.glass.border,
     },
     cardImage: {
         width: 96,
         height: 144,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.glass.border,
     },
     cardTitle: {
-        color: 'rgba(255, 255, 255, 0.87)',
-        fontSize: 18,
-        fontWeight: '600',
-        marginBottom: 8,
-        lineHeight: 24,
-        fontFamily: Platform.select({
-            ios: 'System',
-            android: 'Roboto',
-        }),
+        ...Typography.headlineSmall,
+        color: Colors.text.primary,
+        fontFamily: FontFamily.rounded,
+        marginBottom: Spacing.xs,
     },
     tagContainer: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 12,
+        paddingHorizontal: Spacing.sm,
+        paddingVertical: 5,
+        backgroundColor: Colors.glass.medium,
+        borderRadius: Radius.chip,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.glass.border,
     },
     tagText: {
-        color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 10,
-        fontWeight: '600',
+        ...Typography.captionSmall,
+        color: Colors.text.secondary,
         textTransform: 'uppercase',
         letterSpacing: 1,
-        fontFamily: Platform.select({
-            ios: 'System',
-            android: 'Roboto',
-        }),
     },
     remindButton: {
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'flex-start',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        backgroundColor: 'rgba(98, 0, 238, 0.12)',
-        borderRadius: 20,
+        paddingHorizontal: Spacing.md,
+        paddingVertical: Spacing.xs + 2,
+        backgroundColor: Colors.glass.medium,
+        borderRadius: Radius.full,
         borderWidth: 1,
-        borderColor: 'rgba(98, 0, 238, 0.3)',
+        borderColor: Colors.glass.border,
     },
     remindButtonActive: {
-        backgroundColor: 'rgba(98, 0, 238, 0.2)',
-        borderColor: 'rgba(98, 0, 238, 0.5)',
+        backgroundColor: 'rgba(255, 159, 10, 0.18)',
+        borderColor: Colors.primary,
     },
     remindButtonText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: '600',
+        ...Typography.captionSmall,
+        color: Colors.text.primary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
-        fontFamily: Platform.select({
-            ios: 'System',
-            android: 'Roboto',
-        }),
     },
     remindButtonTextActive: {
-        color: '#BB86FC',
+        color: Colors.primary,
     },
 });
