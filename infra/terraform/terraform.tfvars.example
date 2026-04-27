@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# Get your billing account: gcloud billing accounts list
+
+billing_account_id = "000000-000000-000000"
+
+# project_id = "aniseekr-android-release"
+# project_name = "AniSeekr Android Release"
+# sa_account_id = "play-publisher"
+# org_id = ""  # leave empty if no GCP org

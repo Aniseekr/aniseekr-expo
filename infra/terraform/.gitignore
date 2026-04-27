@@ -1,0 +1,14 @@
+# State and locks (may contain sensitive data even in clean mode)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+crash.log
+crash.*.log
+
+# Per-environment vars (keep .example committed)
+terraform.tfvars
+*.auto.tfvars
+
+# Plan files
+*.tfplan
