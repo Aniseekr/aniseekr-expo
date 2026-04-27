@@ -29,3 +29,17 @@ android
 .opencode
 .agent
 .cursor
+
+# Secrets - service account keys, never commit
+/secrets/
+
+# Terraform state and per-env vars (clean mode: tfstate stays local, key stays out of state)
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfstate.backup
+infra/terraform/terraform.tfvars
+infra/terraform/*.auto.tfvars
+infra/terraform/*.tfplan
+
+.claude/
