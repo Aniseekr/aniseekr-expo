@@ -5,7 +5,14 @@
 
 import { IDMappingService } from '../sync/id-mapping-service';
 import { AnitabiService, anitabiService } from './anitabi-service';
+import { LocationService, locationService, type LatLng } from './location-service';
 import type { AnitabiBangumi, AnitabiPointDetail } from './types';
+
+/** Returned by {@link PilgrimageRepository.getNearbyAnime}. */
+export interface NearbyAnimeResult {
+  anime: AnitabiBangumi;
+  distanceKm: number;
+}
 
 /**
  * Anime context passed by callers. Either pass a raw {@link bangumiId}, or
@@ -29,15 +36,18 @@ export interface AnimeContext {
 interface RepositoryOptions {
   service?: AnitabiService;
   mappingService?: IDMappingService;
+  locationService?: LocationService;
 }
 
 export class PilgrimageRepository {
   private service: AnitabiService;
   private mappingService: IDMappingService;
+  private locationService: LocationService;
 
   constructor(opts: RepositoryOptions = {}) {
     this.service = opts.service ?? anitabiService;
     this.mappingService = opts.mappingService ?? IDMappingService.getInstance();
+    this.locationService = opts.locationService ?? locationService;
   }
 
   /**
@@ -71,6 +81,58 @@ export class PilgrimageRepository {
     bangumiId: number
   ): Promise<AnitabiPointDetail[]> {
     return this.service.getDetailedPoints(bangumiId);
+  }
+
+  /**
+   * Discover nearby anime relative to the supplied user location.
+   *
+   * Fetches each candidate Bangumi id in parallel, drops nulls
+   * (no pilgrimage data) and entries with a missing/empty `geo` center,
+   * then sorts by ascending haversine distance.
+   *
+   * @param userLocation user lat/lng (typically from {@link LocationService.getCurrentLocation})
+   * @param candidates Bangumi subject ids to consider
+   * @param options.limit cap on the number of results returned (default: all)
+   */
+  async getNearbyAnime(
+    userLocation: LatLng,
+    candidates: number[],
+    options: { limit?: number } = {}
+  ): Promise<NearbyAnimeResult[]> {
+    if (!candidates.length) return [];
+
+    const fetched = await Promise.all(
+      candidates.map((id) =>
+        this.service.getAnimePilgrimage(id).catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('[PilgrimageRepository] getNearbyAnime fetch failed:', id, err);
+          return null;
+        })
+      )
+    );
+
+    const enriched: NearbyAnimeResult[] = [];
+    for (const anime of fetched) {
+      if (!anime) continue;
+      const geo = anime.geo;
+      if (!geo || geo.length < 2) continue;
+      const [lat, lng] = geo;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (lat === 0 && lng === 0) continue;
+      const distanceKm = this.locationService.getDistanceKm(userLocation, {
+        latitude: lat,
+        longitude: lng,
+      });
+      if (!Number.isFinite(distanceKm)) continue;
+      enriched.push({ anime, distanceKm });
+    }
+
+    enriched.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    if (typeof options.limit === 'number' && options.limit > 0) {
+      return enriched.slice(0, options.limit);
+    }
+    return enriched;
   }
 
   /**

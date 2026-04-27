@@ -179,6 +179,16 @@ mock.module('expo-haptics', () => ({
   selectionAsync: async () => undefined,
 }));
 
+// expo-location default shim. Tests that need richer behaviour install their
+// own mocks through LocationService's `module` constructor option.
+mock.module('expo-location', () => ({
+  Accuracy: { Lowest: 1, Low: 2, Balanced: 3, High: 4, Highest: 5, BestForNavigation: 6 },
+  requestForegroundPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }),
+  getForegroundPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }),
+  getCurrentPositionAsync: async () => ({ coords: { latitude: 0, longitude: 0 } }),
+  watchPositionAsync: async () => ({ remove: () => undefined }),
+}));
+
 // expo-image: render as RN Image
 mock.module('expo-image', () => {
   const React = require('react');

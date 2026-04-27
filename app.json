@@ -20,7 +20,16 @@
           "sounds": []
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "AniSeekr uses your location to surface nearby anime pilgrimage spots.",
+          "locationWhenInUsePermission": "AniSeekr uses your location to surface nearby anime pilgrimage spots.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -35,14 +44,21 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kidneyweakx.aniseekr"
+      "bundleIdentifier": "com.kidneyweakx.aniseekr",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AniSeekr uses your location to surface nearby anime pilgrimage spots."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.kidneyweakx.aniseekr"
+      "package": "com.kidneyweakx.aniseekr",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "extra": {
       "eas": {

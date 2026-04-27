@@ -1,0 +1,206 @@
+// Geolocation service for the pilgrimage feature.
+// Wraps `expo-location` with a 5-minute in-memory cache and graceful
+// permission handling so callers can ask for "where am I?" without
+// re-prompting on every render.
+//
+// See spec/pilgrimage_spec.md §9 (Nearby discovery).
+
+import * as Location from 'expo-location';
+
+/** A simple lat/lng pair (degrees). */
+export interface LatLng {
+  latitude: number;
+  longitude: number;
+}
+
+/** Disposer returned by {@link LocationService.subscribeToUpdates}. */
+export type Unsubscribe = () => void;
+
+interface ServiceOptions {
+  /** Override now() (used by tests for cache TTL boundaries). */
+  now?: () => number;
+  /** Override the underlying expo-location module (used by tests). */
+  module?: typeof Location;
+  /** Override the cache TTL. Defaults to 5 minutes. */
+  cacheTtlMs?: number;
+}
+
+/** Default cached-location TTL (5 minutes). */
+export const LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Earth's radius (km) used in the haversine distance formula. */
+const EARTH_RADIUS_KM = 6371;
+
+const toRadians = (deg: number): number => (deg * Math.PI) / 180;
+
+/**
+ * Singleton wrapper around `expo-location`.
+ * - Caches the last-known location for {@link LOCATION_CACHE_TTL_MS}
+ * - Returns `null` (instead of throwing) when permission is denied
+ *   or the device cannot deliver a fix
+ */
+export class LocationService {
+  private static _instance: LocationService | null = null;
+
+  private now: () => number;
+  private module: typeof Location;
+  private cacheTtlMs: number;
+
+  private cached: { value: LatLng; at: number } | null = null;
+
+  constructor(opts: ServiceOptions = {}) {
+    this.now = opts.now ?? (() => Date.now());
+    this.module = opts.module ?? Location;
+    this.cacheTtlMs = opts.cacheTtlMs ?? LOCATION_CACHE_TTL_MS;
+  }
+
+  /** Process-wide singleton accessor. */
+  static getInstance(): LocationService {
+    if (!LocationService._instance) {
+      LocationService._instance = new LocationService();
+    }
+    return LocationService._instance;
+  }
+
+  /** Reset the singleton + clear the cache. Test-only seam. */
+  static resetForTests(opts: ServiceOptions = {}): LocationService {
+    LocationService._instance = new LocationService(opts);
+    return LocationService._instance;
+  }
+
+  /**
+   * Ask the OS for foreground location permission.
+   * Returns true when the user grants access.
+   */
+  async requestPermission(): Promise<boolean> {
+    try {
+      const result = await this.module.requestForegroundPermissionsAsync();
+      return result.status === 'granted';
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[LocationService] requestPermission failed:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Resolve the user's current coordinates.
+   * Returns the cached value when fresh, otherwise queries the OS.
+   * Returns `null` when permission is denied or GPS is unavailable.
+   */
+  async getCurrentLocation(): Promise<LatLng | null> {
+    // Fresh cache hit — short-circuit.
+    if (this.cached && this.now() - this.cached.at < this.cacheTtlMs) {
+      return this.cached.value;
+    }
+
+    let granted = false;
+    try {
+      const status = await this.module.getForegroundPermissionsAsync();
+      granted = status.status === 'granted';
+      if (!granted && status.canAskAgain) {
+        granted = await this.requestPermission();
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[LocationService] permission lookup failed:', err);
+      return null;
+    }
+
+    if (!granted) return null;
+
+    try {
+      const fix = await this.module.getCurrentPositionAsync({
+        accuracy: this.module.Accuracy?.Balanced ?? 3,
+      });
+      const value: LatLng = {
+        latitude: fix.coords.latitude,
+        longitude: fix.coords.longitude,
+      };
+      this.cached = { value, at: this.now() };
+      return value;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[LocationService] getCurrentLocation failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Great-circle distance between two coordinates, in kilometres.
+   * Uses the haversine formula — accurate enough for "nearby" sorting.
+   */
+  getDistanceKm(a: LatLng, b: LatLng): number {
+    if (
+      !Number.isFinite(a.latitude) ||
+      !Number.isFinite(a.longitude) ||
+      !Number.isFinite(b.latitude) ||
+      !Number.isFinite(b.longitude)
+    ) {
+      return Number.NaN;
+    }
+
+    const dLat = toRadians(b.latitude - a.latitude);
+    const dLng = toRadians(b.longitude - a.longitude);
+    const lat1 = toRadians(a.latitude);
+    const lat2 = toRadians(b.latitude);
+
+    const sinDLat = Math.sin(dLat / 2);
+    const sinDLng = Math.sin(dLng / 2);
+    const h =
+      sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+
+    return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  /**
+   * Subscribe to location updates. Returns a disposer.
+   * Falls back to a no-op when permission is missing or the platform
+   * cannot start a watcher.
+   */
+  subscribeToUpdates(
+    callback: (loc: LatLng) => void,
+    options: { distanceIntervalMeters?: number; timeIntervalMs?: number } = {}
+  ): Unsubscribe {
+    let cancelled = false;
+    let watcher: { remove: () => void } | null = null;
+
+    (async () => {
+      const granted = await this.requestPermission();
+      if (!granted || cancelled) return;
+      try {
+        watcher = await this.module.watchPositionAsync(
+          {
+            accuracy: this.module.Accuracy?.Balanced ?? 3,
+            distanceInterval: options.distanceIntervalMeters ?? 50,
+            timeInterval: options.timeIntervalMs ?? 10_000,
+          },
+          (fix) => {
+            const value: LatLng = {
+              latitude: fix.coords.latitude,
+              longitude: fix.coords.longitude,
+            };
+            this.cached = { value, at: this.now() };
+            callback(value);
+          }
+        );
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[LocationService] watchPositionAsync failed:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      watcher?.remove();
+      watcher = null;
+    };
+  }
+
+  /** Drop the in-memory cache (useful when permissions change). */
+  clearCache(): void {
+    this.cached = null;
+  }
+}
+
+export const locationService = LocationService.getInstance();

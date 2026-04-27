@@ -1,7 +1,6 @@
 import 'react-native-gesture-handler';
 import '../global.css';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FloatingTabBar from '../components/FloatingTabBar';
@@ -44,11 +43,11 @@ export default function RootLayout() {
           }}
         />
         <Tabs.Screen
-          name="gacha"
+          name="pilgrimage/index"
           options={{
-            title: 'Gacha',
+            title: 'Pilgrimage',
             tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="card-giftcard" size={24} color={color} />
+              <MaterialIcons name="explore" size={24} color={color} />
             ),
           }}
         />
