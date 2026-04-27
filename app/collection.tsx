@@ -10,13 +10,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { CollectionHeader } from '../components/collection/CollectionHeader';
 import { FolderList } from '../components/collection/FolderList';
+import { CollectionOverviewCard } from '../components/collection/CollectionOverviewCard';
 import { CollectionFolder } from '../types';
 import { collectionService } from '../libs/services/collection/collection-service';
 import { CreateFolderModal } from '../components/collection/CreateFolderModal';
-import { useRouter } from 'expo-router';
-import { Colors, Radius, Spacing, Typography } from '../constants/DesignSystem';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
 
 type SortMode = 'newest' | 'oldest' | 'rarity' | 'popularity' | 'count' | 'id';
 
@@ -65,14 +66,45 @@ export default function CollectionScreen() {
     return counts;
   }, [collections]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      await collectionService.deleteFolder(id);
-      loadCollection();
-    } catch (error) {
-      console.error('Failed to delete folder:', error);
-    }
-  }, []);
+  const overviewStats = useMemo(
+    () =>
+      [
+        {
+          label: 'Total',
+          value: collections.reduce((acc, f) => acc + (f.animeCount || 0), 0),
+          icon: 'collections-bookmark' as const,
+          color: Colors.primary,
+        },
+        {
+          label: 'Watching',
+          value: categoryCounts.Watching ?? 0,
+          icon: 'play-circle-filled' as const,
+          color: Colors.success,
+        },
+        {
+          label: 'Done',
+          value: categoryCounts.Completed ?? 0,
+          icon: 'check-circle' as const,
+          color: Colors.info,
+        },
+        {
+          label: 'Wishlist',
+          value: categoryCounts.Wishlist ?? 0,
+          icon: 'favorite' as const,
+          color: Colors.error,
+        },
+      ],
+    [categoryCounts, collections]
+  );
+
+  const recentItems = useMemo(
+    () =>
+      [...collections]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 3)
+        .map((f) => ({ id: f.id, imageUrl: undefined as string | undefined })),
+    [collections]
+  );
 
   const handleSort = useCallback((mode: SortMode) => {
     setSortMode(mode);
@@ -107,15 +139,18 @@ export default function CollectionScreen() {
     });
   }, [collections, selectedCategory, sortMode]);
 
-  const renderFolder = useCallback(({ item }: { item: CollectionFolder }) => {
-    return (
+  const renderFolder = useCallback(
+    ({ item }: { item: CollectionFolder }) => (
       <FolderList
         folders={[item]}
         folderPreviews={{}}
-        onFolderPress={(folder) => router.push(`/collection/${folder.id}?name=${folder.name}`)}
+        onFolderPress={(folder) =>
+          router.push(`/collection/${folder.id}?name=${folder.name}`)
+        }
       />
-    );
-  }, []);
+    ),
+    [router]
+  );
 
   const keyExtractor = useCallback((item: CollectionFolder) => item.id, []);
 
@@ -148,7 +183,6 @@ export default function CollectionScreen() {
       <View style={styles.sortContainer}>
         {sortOptions.map((option) => {
           const isActive = sortMode === option.value;
-
           return (
             <TouchableOpacity
               key={option.value}
@@ -172,6 +206,7 @@ export default function CollectionScreen() {
         colors={Colors.gradients.background as [string, string, ...string[]]}
         style={StyleSheet.absoluteFill}
       />
+      <View style={styles.glowOrange} pointerEvents="none" />
       <View style={styles.container}>
         <CollectionHeader
           categories={categories}
@@ -180,6 +215,12 @@ export default function CollectionScreen() {
           categoryIcons={categoryIcons}
           onSelectCategory={setSelectedCategory}
           onAddFolder={() => setCreateModalVisible(true)}
+        />
+
+        <CollectionOverviewCard
+          stats={overviewStats}
+          recents={recentItems}
+          onViewAll={() => setSelectedCategory('All')}
         />
 
         {selectedCategory !== 'All' && renderSortButtons()}
@@ -223,16 +264,23 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-
   container: {
     flex: 1,
   },
-
+  glowOrange: {
+    position: 'absolute',
+    top: -100,
+    right: -80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: `${Colors.primary}26`,
+    opacity: 0.5,
+  },
   listContent: {
     paddingHorizontal: Spacing.screenPadding,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
-
   sortContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -241,58 +289,52 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.xs,
   },
-
   sortButton: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.chipLg,
     backgroundColor: Colors.glass.light,
     borderWidth: 1,
     borderColor: Colors.glass.border,
     marginBottom: Spacing.xs,
   },
-
   sortButtonActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.text.primary,
+    borderColor: Colors.primary,
   },
-
   sortButtonText: {
     ...Typography.bodySmall,
+    fontFamily: FontFamily.text,
     fontWeight: '600',
     color: Colors.text.secondary,
     textAlign: 'center',
   },
-
   sortButtonTextActive: {
-    color: Colors.text.primary,
+    color: '#000',
     fontWeight: '700',
   },
-
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
   },
-
   emptyIcon: {
     fontSize: 64,
     marginBottom: Spacing.md,
   },
-
   emptyText: {
     ...Typography.headlineSmall,
     color: Colors.text.primary,
+    fontFamily: FontFamily.rounded,
     textAlign: 'center',
     marginBottom: Spacing.xs,
   },
-
   emptySubtext: {
     ...Typography.bodyLarge,
     color: Colors.text.secondary,
+    fontFamily: FontFamily.text,
     textAlign: 'center',
   },
-
   separator: {
     height: 1,
     backgroundColor: Colors.glass.border,
