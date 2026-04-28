@@ -46,6 +46,7 @@ import { queryClient, type QueryKeyObject } from '../services/query-client';
 import { idMappingService } from '../services/sync/id-mapping-service';
 import { AnnictClient } from '../clients/annict-client';
 import { Logger } from '../utils/logger';
+import { achievementService } from '../services/achievements/achievement-service';
 
 const SEASONAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const GENRES_STALE_TIME_MS = 60 * 60 * 1000; // 1 hour
@@ -691,6 +692,9 @@ export class AnimeRepository {
 
   static async rateAnime(id: string, action: 'like' | 'pass'): Promise<void> {
     await LocalDB.addRating(id, action);
+    const stats = await LocalDB.getStats();
+    await achievementService.track('rating.total', 1, stats.totalRated);
+
     if (action === 'like') {
       const anime = await AnimeRepository.getAnimeDetails(id);
       await LocalDB.addFavorite({
@@ -698,6 +702,12 @@ export class AnimeRepository {
         title: anime.title,
         image: anime.image,
       });
+      const collection = await LocalDB.getFavorites();
+      await achievementService.track('rating.like', 1, stats.likedCount);
+      await achievementService.track('collection.add', 1);
+      await achievementService.track('collection.size', 0, collection.length);
+    } else {
+      await achievementService.track('rating.pass', 1);
     }
   }
 

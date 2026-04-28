@@ -193,6 +193,32 @@ export const LocalDB = {
         started_at INTEGER NOT NULL,
         finished_at INTEGER
       );
+
+      CREATE TABLE IF NOT EXISTS user_achievements (
+        achievement_id TEXT PRIMARY KEY NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        unlocked INTEGER NOT NULL DEFAULT 0,
+        unlocked_at INTEGER,
+        notified INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS economy_balance (
+        currency TEXT PRIMARY KEY NOT NULL,
+        amount INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS economy_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        currency TEXT NOT NULL,
+        delta INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        metadata TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ledger_currency ON economy_ledger(currency, created_at);
     `);
     console.log('[LocalDB] Initialized');
   },

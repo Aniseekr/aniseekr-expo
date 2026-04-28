@@ -355,9 +355,28 @@ export class AuthService {
   }
 
   private async saveCredentials(platform: PlatformType, creds: PlatformCredentials): Promise<void> {
+    const isNew = !this.credentials.has(platform);
     this.credentials.set(platform, creds);
     await SecureStore.setItemAsync(`${TOKEN_PREFIX}${platform}`, JSON.stringify(creds.token));
     await this.persistCredentials();
+    if (isNew) {
+      void this.notifyPlatformConnected();
+    }
+  }
+
+  private async notifyPlatformConnected(): Promise<void> {
+    try {
+      const { achievementService } = await import(
+        '../achievements/achievement-service'
+      );
+      await achievementService.track(
+        'sync.platforms',
+        0,
+        this.credentials.size
+      );
+    } catch (error) {
+      console.error('[auth] failed to track sync.platforms achievement', error);
+    }
   }
 
   private async persistCredentials(): Promise<void> {
