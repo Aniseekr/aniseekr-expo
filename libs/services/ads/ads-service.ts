@@ -49,6 +49,7 @@ async function loadAdsModule(): Promise<AdsModule | null> {
   if (modulePromise) return modulePromise;
   modulePromise = (async () => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('react-native-google-mobile-ads') as AdsModule;
     } catch (error) {
       console.warn('[ads] react-native-google-mobile-ads unavailable', error);
@@ -103,7 +104,9 @@ export class AdsService {
     }
   }
 
-  async getBannerUnitId(slot: 'home_banner' | 'detail_banner' = 'home_banner'): Promise<string | null> {
+  async getBannerUnitId(
+    slot: 'home_banner' | 'detail_banner' = 'home_banner'
+  ): Promise<string | null> {
     if (this.suppressed) return null;
     const mod = await loadAdsModule();
     if (!mod) return null;
@@ -177,7 +180,9 @@ export class AdsService {
     controller.load();
   }
 
-  async showRewarded(onReward: (reward: { type: string; amount: number }) => void): Promise<boolean> {
+  async showRewarded(
+    onReward: (reward: { type: string; amount: number }) => void
+  ): Promise<boolean> {
     if (this.suppressed) return false;
     const mod = await loadAdsModule();
     if (!mod) return false;
@@ -212,12 +217,14 @@ export class AdsService {
   private resolveUnitId(testFallback: string, kind: 'interstitial' | 'rewarded'): string | null {
     if (__DEV__) return testFallback;
     if (Platform.OS === 'ios') {
-      return kind === 'interstitial' ? ENV_CONFIG.iosInterstitial ?? null : ENV_CONFIG.iosRewarded ?? null;
+      return kind === 'interstitial'
+        ? (ENV_CONFIG.iosInterstitial ?? null)
+        : (ENV_CONFIG.iosRewarded ?? null);
     }
     if (Platform.OS === 'android') {
       return kind === 'interstitial'
-        ? ENV_CONFIG.androidInterstitial ?? null
-        : ENV_CONFIG.androidRewarded ?? null;
+        ? (ENV_CONFIG.androidInterstitial ?? null)
+        : (ENV_CONFIG.androidRewarded ?? null);
     }
     return null;
   }

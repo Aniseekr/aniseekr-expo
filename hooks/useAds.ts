@@ -5,9 +5,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 export interface UseAdsResult {
   isSuppressed: boolean;
   showInterstitial: () => Promise<boolean>;
-  showRewarded: (
-    onReward: (reward: { type: string; amount: number }) => void
-  ) => Promise<boolean>;
+  showRewarded: (onReward: (reward: { type: string; amount: number }) => void) => Promise<boolean>;
   preloadInterstitial: () => Promise<void>;
   preloadRewarded: () => Promise<void>;
 }

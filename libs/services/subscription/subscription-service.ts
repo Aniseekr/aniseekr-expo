@@ -62,6 +62,7 @@ async function loadPurchases(): Promise<PurchasesModule | null> {
   if (modulePromise) return modulePromise;
   modulePromise = (async () => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('react-native-purchases') as PurchasesModule;
       return mod;
     } catch (error) {

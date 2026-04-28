@@ -3,16 +3,10 @@ import { View, Text, ScrollView, Switch, Alert, ActivityIndicator } from 'react-
 import { Stack } from 'expo-router';
 import { PLATFORM_CONFIGS, PlatformType } from '../../libs/services/auth/types';
 import { authService } from '../../libs/services/auth/auth-service';
-import {
-  isAuthRequiresFormError,
-  AuthFormKind,
-} from '../../libs/services/auth/auth-errors';
+import { isAuthRequiresFormError, AuthFormKind } from '../../libs/services/auth/auth-errors';
 import { multiPlatformSyncService } from '../../libs/services/sync/multi-platform-sync-service';
 import { AnimatedPressable } from '../../components/common/AnimatedPressable';
-import {
-  PlatformAuthSheet,
-  PlatformAuthInput,
-} from '../../components/auth/PlatformAuthSheet';
+import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
 
 interface SheetState {
   visible: boolean;
@@ -58,10 +52,7 @@ export default function SyncSettingsScreen() {
         });
         return;
       }
-      Alert.alert(
-        'Connection Failed',
-        error instanceof Error ? error.message : 'Unknown error'
-      );
+      Alert.alert('Connection Failed', error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsLoading(false);
     }
@@ -73,20 +64,12 @@ export default function SyncSettingsScreen() {
       if (!input.username || !input.password) {
         throw new Error('Username and password are required');
       }
-      await authService.connectWithPassword(
-        sheet.platform,
-        input.username,
-        input.password
-      );
+      await authService.connectWithPassword(sheet.platform, input.username, input.password);
     } else {
       if (!input.apiKey) {
         throw new Error('API key is required');
       }
-      await authService.connectWithApiKey(
-        sheet.platform,
-        input.apiKey,
-        input.serverUrl
-      );
+      await authService.connectWithApiKey(sheet.platform, input.apiKey, input.serverUrl);
     }
     setSheet(HIDDEN_SHEET);
     await loadPlatforms();

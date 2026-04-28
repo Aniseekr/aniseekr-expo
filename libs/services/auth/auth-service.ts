@@ -157,11 +157,7 @@ export class AuthService {
     if (!config) throw new Error(`Unknown platform: ${platform}`);
 
     if (config.authType === 'password') {
-      throw new AuthRequiresFormError(
-        platform,
-        'password',
-        platform === 'kavita'
-      );
+      throw new AuthRequiresFormError(platform, 'password', platform === 'kavita');
     }
     if (config.authType === 'apikey') {
       throw new AuthRequiresFormError(platform, 'apikey', platform === 'kavita');
@@ -366,14 +362,8 @@ export class AuthService {
 
   private async notifyPlatformConnected(): Promise<void> {
     try {
-      const { achievementService } = await import(
-        '../achievements/achievement-service'
-      );
-      await achievementService.track(
-        'sync.platforms',
-        0,
-        this.credentials.size
-      );
+      const { achievementService } = await import('../achievements/achievement-service');
+      await achievementService.track('sync.platforms', 0, this.credentials.size);
     } catch (error) {
       console.error('[auth] failed to track sync.platforms achievement', error);
     }

@@ -127,9 +127,7 @@ export function PlatformAuthSheet({
                   Sign in to {platformName}
                 </Text>
                 <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
-                  {kind === 'password'
-                    ? 'Use your platform credentials'
-                    : 'Enter your API key'}
+                  {kind === 'password' ? 'Use your platform credentials' : 'Enter your API key'}
                 </Text>
               </View>
               <Pressable
@@ -195,9 +193,7 @@ export function PlatformAuthSheet({
               </>
             ) : null}
 
-            {error ? (
-              <Text style={[styles.error, { color: '#FF453A' }]}>{error}</Text>
-            ) : null}
+            {error ? <Text style={[styles.error, { color: '#FF453A' }]}>{error}</Text> : null}
 
             <Pressable
               onPress={handleSubmit}
@@ -223,8 +219,7 @@ export function PlatformAuthSheet({
             </Pressable>
 
             <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-              Credentials are stored in your device's secure enclave and never
-              leave Aniseekr.
+              Credentials are stored in your device&apos;s secure enclave and never leave Aniseekr.
             </Text>
           </View>
         </KeyboardAvoidingView>
@@ -235,9 +230,7 @@ export function PlatformAuthSheet({
 
 function FieldLabel({ label }: { label: string }) {
   const { theme } = useTheme();
-  return (
-    <Text style={[styles.fieldLabel, { color: theme.text.secondary }]}>{label}</Text>
-  );
+  return <Text style={[styles.fieldLabel, { color: theme.text.secondary }]}>{label}</Text>;
 }
 
 function Input(props: React.ComponentProps<typeof TextInput>) {

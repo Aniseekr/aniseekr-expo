@@ -13,6 +13,7 @@ let BannerAdComponent: ((props: BannerProps) => ReactElement) | null = null;
 let BannerSize: { ANCHORED_ADAPTIVE_BANNER?: string; BANNER?: string } | null = null;
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('react-native-google-mobile-ads');
   BannerAdComponent = mod.BannerAd;
   BannerSize = mod.BannerAdSize;

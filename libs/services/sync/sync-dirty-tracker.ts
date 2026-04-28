@@ -20,11 +20,7 @@ export class SyncDirtyTracker {
     return SyncDirtyTracker.instance;
   }
 
-  async markDirty(
-    animeId: string,
-    platform: PlatformType,
-    field: DirtyField
-  ): Promise<void> {
+  async markDirty(animeId: string, platform: PlatformType, field: DirtyField): Promise<void> {
     const db = await LocalDB.getDatabase();
     await db.runAsync(
       `INSERT INTO sync_dirty_records (anime_id, platform, field, marked_at)
@@ -80,10 +76,7 @@ export class SyncDirtyTracker {
 
   async clearAllForPlatform(platform: PlatformType): Promise<number> {
     const db = await LocalDB.getDatabase();
-    const result = await db.runAsync(
-      `DELETE FROM sync_dirty_records WHERE platform = ?`,
-      platform
-    );
+    const result = await db.runAsync(`DELETE FROM sync_dirty_records WHERE platform = ?`, platform);
     return result.changes;
   }
 

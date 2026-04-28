@@ -12,10 +12,7 @@ import {
 import { authService } from '../../libs/services/auth/auth-service';
 import { isAuthRequiresFormError } from '../../libs/services/auth/auth-errors';
 import type { PlatformType } from '../../libs/services/auth/types';
-import {
-  PlatformAuthSheet,
-  PlatformAuthInput,
-} from '../../components/auth/PlatformAuthSheet';
+import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
 import type { AuthFormKind } from '../../libs/services/auth/auth-errors';
 
 interface PlatformDef {
@@ -146,8 +143,8 @@ export default function AccountScreen() {
   return (
     <SettingsScreenLayout title="Account" subtitle="Connected platforms">
       <Text style={[styles.intro, { color: theme.text.secondary }]}>
-        Connect platforms to sync your library, ratings and progress across
-        Aniseekr and other clients.
+        Connect platforms to sync your library, ratings and progress across Aniseekr and other
+        clients.
       </Text>
 
       <SettingsSection title="Platforms">
@@ -156,11 +153,7 @@ export default function AccountScreen() {
           return (
             <View key={platform.id}>
               <View style={styles.platformRow}>
-                <View
-                  style={[
-                    styles.platformIcon,
-                    { backgroundColor: platform.color + '24' },
-                  ]}>
+                <View style={[styles.platformIcon, { backgroundColor: platform.color + '24' }]}>
                   <MaterialIcons name={platform.icon} size={20} color={platform.color} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -186,9 +179,7 @@ export default function AccountScreen() {
                         opacity: pressed ? 0.7 : 1,
                       },
                     ]}>
-                    <Text style={[styles.actionLabel, { color: '#FF453A' }]}>
-                      Disconnect
-                    </Text>
+                    <Text style={[styles.actionLabel, { color: '#FF453A' }]}>Disconnect</Text>
                   </Pressable>
                 ) : (
                   <Pressable
@@ -201,9 +192,7 @@ export default function AccountScreen() {
                         opacity: pressed || loading ? 0.7 : 1,
                       },
                     ]}>
-                    <Text style={[styles.actionLabel, { color: '#0E0A06' }]}>
-                      Connect
-                    </Text>
+                    <Text style={[styles.actionLabel, { color: '#0E0A06' }]}>Connect</Text>
                   </Pressable>
                 )}
               </View>
@@ -228,8 +217,8 @@ export default function AccountScreen() {
       </SettingsSection>
 
       <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-        Tokens live in your device's secure enclave. Reset them by uninstalling
-        the app or revoking access in each platform's account settings.
+        Tokens live in your device's secure enclave. Reset them by uninstalling the app or revoking
+        access in each platform's account settings.
       </Text>
 
       <PlatformAuthSheet

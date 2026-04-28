@@ -11,7 +11,11 @@ export interface UseAchievementsResult {
   loading: boolean;
   unlocked: AchievementWithProgress[];
   refresh: () => Promise<void>;
-  track: (trigger: AchievementTrigger, delta?: number, snapshot?: number) => Promise<AchievementUnlock[]>;
+  track: (
+    trigger: AchievementTrigger,
+    delta?: number,
+    snapshot?: number
+  ) => Promise<AchievementUnlock[]>;
   markNotified: (id: string) => Promise<void>;
 }
 

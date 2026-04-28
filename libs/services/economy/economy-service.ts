@@ -39,12 +39,22 @@ export class EconomyService {
     return { ...this.cached };
   }
 
-  async earn(currency: Currency, amount: number, reason: string, metadata?: Record<string, unknown>): Promise<number> {
+  async earn(
+    currency: Currency,
+    amount: number,
+    reason: string,
+    metadata?: Record<string, unknown>
+  ): Promise<number> {
     if (amount <= 0) throw new Error('amount must be positive');
     return this.applyDelta(currency, amount, reason, metadata);
   }
 
-  async spend(currency: Currency, amount: number, reason: string, metadata?: Record<string, unknown>): Promise<number> {
+  async spend(
+    currency: Currency,
+    amount: number,
+    reason: string,
+    metadata?: Record<string, unknown>
+  ): Promise<number> {
     if (amount <= 0) throw new Error('amount must be positive');
     if (!this.hydrated) await this.hydrate();
     if (this.cached[currency] < amount) {

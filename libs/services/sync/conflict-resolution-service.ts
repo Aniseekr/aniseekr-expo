@@ -1,9 +1,5 @@
 import { LocalDB } from '../../db';
-import type {
-  PlatformType,
-  UniversalAnimeItem,
-  AnimeStatus,
-} from '../auth/types';
+import type { PlatformType, UniversalAnimeItem, AnimeStatus } from '../auth/types';
 
 export type ConflictField = 'progress' | 'status' | 'score';
 export type ConflictResolution = 'last_write_wins' | 'manual' | 'highest';
@@ -250,8 +246,7 @@ export class ConflictResolutionService {
 
 function pickStatusWinner(candidates: ConflictValueEntry[]): ConflictValueEntry {
   return candidates.reduce((best, c) => {
-    const candidatePriority =
-      STATUS_PRIORITY[c.value as AnimeStatus] ?? 0;
+    const candidatePriority = STATUS_PRIORITY[c.value as AnimeStatus] ?? 0;
     const bestPriority = STATUS_PRIORITY[best.value as AnimeStatus] ?? 0;
     if (candidatePriority > bestPriority) return c;
     if (candidatePriority === bestPriority && c.updatedAt > best.updatedAt) return c;

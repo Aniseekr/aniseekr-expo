@@ -102,9 +102,7 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
           ]}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: theme.text.primary }]}>
-                Aniseekr Pro
-              </Text>
+              <Text style={[styles.title, { color: theme.text.primary }]}>Aniseekr Pro</Text>
               <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
                 Unlock the full toolkit
               </Text>
@@ -127,8 +125,7 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
             <View style={styles.features}>
               {FEATURES.map((feature) => (
                 <View key={feature.label} style={styles.featureRow}>
-                  <View
-                    style={[styles.featureIcon, { backgroundColor: theme.accent + '24' }]}>
+                  <View style={[styles.featureIcon, { backgroundColor: theme.accent + '24' }]}>
                     <MaterialIcons name={feature.icon} size={18} color={theme.accent} />
                   </View>
                   <Text style={[styles.featureLabel, { color: theme.text.primary }]}>
@@ -141,9 +138,9 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
             {subscription.unsupported ? (
               <View style={[styles.warning, { borderColor: theme.glassBorder }]}>
                 <Text style={[styles.warningText, { color: theme.text.secondary }]}>
-                  In-app purchases are not configured for this build. Run with a development
-                  client that bundles react-native-purchases and provide
-                  EXPO_PUBLIC_REVENUECAT_*_KEY env vars to test purchases.
+                  In-app purchases are not configured for this build. Run with a development client
+                  that bundles react-native-purchases and provide EXPO_PUBLIC_REVENUECAT_*_KEY env
+                  vars to test purchases.
                 </Text>
               </View>
             ) : null}
@@ -175,8 +172,7 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
                     {labelForPackage(pkg)}
                   </Text>
                   {pkg.product?.description ? (
-                    <Text
-                      style={[styles.packageDescription, { color: theme.text.secondary }]}>
+                    <Text style={[styles.packageDescription, { color: theme.text.secondary }]}>
                       {pkg.product.description}
                     </Text>
                   ) : null}
@@ -187,17 +183,12 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
               </Pressable>
             ))}
 
-            {error ? (
-              <Text style={[styles.error, { color: '#FF453A' }]}>{error}</Text>
-            ) : null}
+            {error ? <Text style={[styles.error, { color: '#FF453A' }]}>{error}</Text> : null}
 
             <Pressable
               onPress={handleRestore}
               disabled={busy}
-              style={({ pressed }) => [
-                styles.restore,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}>
+              style={({ pressed }) => [styles.restore, { opacity: pressed ? 0.7 : 1 }]}>
               <Text style={[styles.restoreLabel, { color: theme.text.secondary }]}>
                 Restore purchases
               </Text>

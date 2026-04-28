@@ -198,8 +198,7 @@ export default function NotificationsScreen() {
                 style={[
                   styles.radio,
                   {
-                    borderColor:
-                      prefs.leadTimeMinutes === mins ? theme.accent : theme.glassBorder,
+                    borderColor: prefs.leadTimeMinutes === mins ? theme.accent : theme.glassBorder,
                   },
                 ]}>
                 {prefs.leadTimeMinutes === mins ? (
@@ -232,9 +231,8 @@ export default function NotificationsScreen() {
 
       {Platform.OS === 'android' ? (
         <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-          Android schedules reminders via the local AlarmManager. They run even
-          if the app is closed, but battery optimisations may delay them by a
-          few minutes on some devices.
+          Android schedules reminders via the local AlarmManager. They run even if the app is
+          closed, but battery optimisations may delay them by a few minutes on some devices.
         </Text>
       ) : null}
     </SettingsScreenLayout>
@@ -262,11 +260,7 @@ function ToggleSwitchRow({
   const { theme } = useTheme();
   return (
     <View style={styles.toggleRow}>
-      <View
-        style={[
-          styles.toggleIcon,
-          { backgroundColor: theme.background.tertiary },
-        ]}>
+      <View style={[styles.toggleIcon, { backgroundColor: theme.background.tertiary }]}>
         <MaterialIcons name={icon} size={18} color={theme.accent} />
       </View>
       <View style={{ flex: 1 }}>

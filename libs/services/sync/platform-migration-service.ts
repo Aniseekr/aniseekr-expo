@@ -71,11 +71,7 @@ export class PlatformMigrationService {
     }
 
     const items = await fromProvider.fetchUserList(fromCreds.token.accessToken);
-    const migrationId = await this.createMigrationRecord(
-      fromPlatform,
-      toPlatform,
-      items.length
-    );
+    const migrationId = await this.createMigrationRecord(fromPlatform, toPlatform, items.length);
 
     let succeeded = 0;
     const failedItems: MigrationResult['failedItems'] = [];
