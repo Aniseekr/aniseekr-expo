@@ -22,7 +22,7 @@
     "gcp:rotate-key": "./scripts/gcp-rotate-key.sh"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^3.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@tailwindcss/postcss": "^4.1.13",
     "expo": "^54.0.0",
     "expo-auth-session": "^7.0.10",
