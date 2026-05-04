@@ -1,26 +1,36 @@
-import { View, Text, Image, Platform, StyleSheet } from 'react-native';
+import { View, Text, Image, Platform, Pressable, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 interface ProfileHeaderProps {
   username: string;
   profileImageURL: string;
-  isDonator: boolean;
+  isPro: boolean;
   coins?: number;
   shards?: number;
+  editable?: boolean;
+  onEditName?: () => void;
 }
 
 export function ProfileHeader({
   username,
   profileImageURL,
-  isDonator,
+  isPro,
   coins = 0,
   shards = 0,
+  editable = false,
+  onEditName,
 }: ProfileHeaderProps) {
+  const handleEditPress = () => {
+    hapticsBridge.tap();
+    onEditName?.();
+  };
+
   return (
     <View style={styles.container}>
       {/* Decorative background blur */}
@@ -37,15 +47,19 @@ export function ProfileHeader({
           )}
         </View>
 
-        <View style={styles.nameRow}>
+        <Pressable
+          onPress={editable ? handleEditPress : undefined}
+          disabled={!editable}
+          style={({ pressed }) => [styles.nameRow, pressed && editable && { opacity: 0.7 }]}>
           <Text style={styles.username}>{username}</Text>
-          {isDonator && (
-            <View style={styles.vipBadge}>
+          {editable ? <MaterialIcons name="edit" size={16} color={Colors.text.tertiary} /> : null}
+          {isPro && (
+            <View style={styles.proBadge}>
               <FontAwesome5 name="crown" size={12} color="#000" />
-              <Text style={styles.vipText}>VIP</Text>
+              <Text style={styles.proText}>PRO</Text>
             </View>
           )}
-        </View>
+        </Pressable>
 
         {/* Currency display */}
         <View style={styles.currencyRow}>
@@ -145,7 +159,7 @@ const styles = StyleSheet.create({
       android: 'Roboto',
     }),
   },
-  vipBadge: {
+  proBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -159,7 +173,7 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  vipText: {
+  proText: {
     color: '#000',
     fontSize: 11,
     fontWeight: '800',

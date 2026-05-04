@@ -27,12 +27,14 @@ try {
 
 const PRIMARY_PLATFORM_KEY = 'aniseekr.user.primaryPlatform';
 const AVATAR_URI_KEY = 'aniseekr.user.avatarUri';
+const DISPLAY_NAME_KEY = 'aniseekr.user.displayName';
+const DEFAULT_DISPLAY_NAME = 'Anime fan';
 
 export interface UserProfile {
   id: string;
   username: string;
   avatarUrl: string;
-  isDonator: boolean;
+  source: 'platform' | 'local';
   stats: {
     totalRated: number;
     likedCount: number;
@@ -41,28 +43,28 @@ export interface UserProfile {
   };
 }
 
-// User repository that integrates with real API
+// Local-first profile: no Aniseekr account exists.
+// Display identity comes from the connected primary platform when available,
+// otherwise from a user-set local display name (purely cosmetic).
 export class UserRepository {
-  /**
-   * Get user profile from AniList API (replaces mock data)
-   */
   static async getProfile(): Promise<UserProfile> {
-    const localAvatar = await UserRepository.getAvatarUri();
+    const [localAvatar, displayName] = await Promise.all([
+      UserRepository.getAvatarUri(),
+      UserRepository.getDisplayName(),
+    ]);
 
     try {
-      // Try to get profile from AniList API
       const anilistProfile = await platformSyncService.getAniListProfile();
-
       if (anilistProfile) {
         return {
           id: anilistProfile.id,
           username: anilistProfile.username,
           avatarUrl: localAvatar ?? anilistProfile.avatarUrl,
-          isDonator: false, // Would need to check donator status separately
+          source: 'platform',
           stats: {
             totalRated: anilistProfile.stats.totalAnime,
-            likedCount: Math.floor(anilistProfile.stats.completed * 0.3), // Estimate based on completed
-            cardsCount: 0, // Would need to get from gacha service
+            likedCount: Math.floor(anilistProfile.stats.completed * 0.3),
+            cardsCount: 0,
             foldersCount: 1,
           },
         };
@@ -71,14 +73,13 @@ export class UserRepository {
       console.warn('Failed to get AniList profile, using local data:', error);
     }
 
-    // Fallback to local data if API fails
     const stats = await AnimeRepository.getUserStats();
 
     return {
-      id: 'local-user',
-      username: 'Not signed in',
+      id: 'local',
+      username: displayName ?? DEFAULT_DISPLAY_NAME,
       avatarUrl: localAvatar ?? '',
-      isDonator: false,
+      source: 'local',
       stats: {
         totalRated: stats.totalRated,
         likedCount: stats.likedCount,
@@ -88,17 +89,6 @@ export class UserRepository {
     };
   }
 
-  /**
-   * Update user profile
-   */
-  static async updateProfile(data: Partial<UserProfile>): Promise<void> {
-    // Save to local storage or API
-    // In the future, this would sync with AniList if authenticated
-  }
-
-  /**
-   * Sync data from all platforms
-   */
   static async syncAllPlatforms(): Promise<void> {
     await platformSyncService.syncAll();
   }
@@ -127,6 +117,33 @@ export class UserRepository {
   static async setPrimaryPlatform(platform: string): Promise<void> {
     try {
       await AsyncStorage.setItem(PRIMARY_PLATFORM_KEY, platform);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Local cosmetic display name. null when never set.
+   */
+  static async getDisplayName(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(DISPLAY_NAME_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  static async setDisplayName(name: string | null): Promise<void> {
+    if (!name || !name.trim()) {
+      try {
+        await AsyncStorage.removeItem?.(DISPLAY_NAME_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    try {
+      await AsyncStorage.setItem(DISPLAY_NAME_KEY, name.trim());
     } catch {
       // ignore
     }

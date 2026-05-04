@@ -111,7 +111,7 @@ export default function CollectionScreen() {
     let cancelled = false;
     UserRepository.getProfile()
       .then((profile) => {
-        if (!cancelled && profile?.username && profile.username !== 'Not signed in') {
+        if (!cancelled && profile?.username) {
           setUsername(profile.username);
         }
       })

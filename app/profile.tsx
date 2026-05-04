@@ -7,6 +7,7 @@ import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { CollectionStats } from '../components/profile/CollectionStats';
 import { QuickActions } from '../components/profile/QuickActions';
 import { PlatformSwitcher, PlatformInfo } from '../components/profile/PlatformSwitcher';
+import { EditDisplayNameSheet } from '../components/profile/EditDisplayNameSheet';
 import { PaywallSheet } from '../components/subscription/PaywallSheet';
 import { UserRepository, UserProfile } from '../libs/repositories/user-repository';
 import { router } from 'expo-router';
@@ -40,6 +41,7 @@ export default function ProfileScreen() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>(DEFAULT_PLATFORM_ID);
   const [connectedPlatforms, setConnectedPlatforms] = useState<PlatformInfo[]>([]);
   const [paywallVisible, setPaywallVisible] = useState(false);
+  const [nameSheetVisible, setNameSheetVisible] = useState(false);
 
   const loadConnectedPlatforms = useCallback(async () => {
     try {
@@ -165,9 +167,11 @@ export default function ProfileScreen() {
           <ProfileHeader
             username={headerUsername}
             profileImageURL={headerAvatar}
-            isDonator={user ? user.isDonator : false}
+            isPro={isPro}
             coins={coins}
             shards={shards}
+            editable={selectedPlatform === DEFAULT_PLATFORM_ID}
+            onEditName={() => setNameSheetVisible(true)}
           />
 
           <PlatformSwitcher
@@ -219,6 +223,15 @@ export default function ProfileScreen() {
       </SafeAreaView>
 
       <PaywallSheet visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
+      <EditDisplayNameSheet
+        visible={nameSheetVisible}
+        currentName={user?.username ?? ''}
+        onClose={() => setNameSheetVisible(false)}
+        onSave={async (name) => {
+          await UserRepository.setDisplayName(name);
+          await loadData();
+        }}
+      />
     </View>
   );
 }
