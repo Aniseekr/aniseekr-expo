@@ -1,8 +1,8 @@
-import { Image } from "expo-image";
-import { memo } from "react";
-import { Modal, Pressable, Text, View } from "react-native";
-import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
-import { AIRecommendation } from "./types";
+import { Image } from 'expo-image';
+import { memo } from 'react';
+import { Modal, Pressable, Text, View } from 'react-native';
+import Animated, { FadeInUp, FadeOutDown } from 'react-native-reanimated';
+import { AIRecommendation } from './types';
 
 type Props = {
   visible: boolean;
@@ -18,40 +18,38 @@ function AIRecommendationSheetComponent({ visible, data, onClose, onSelect }: Pr
         <Animated.View
           entering={FadeInUp.duration(220)}
           exiting={FadeOutDown.duration(200)}
-          className="mt-auto bg-card-surface border-t border-card-border rounded-t-3xl p-5"
-        >
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-white text-lg font-semibold">AI Recommendation</Text>
-            <Pressable onPress={onClose} className="px-3 py-1 rounded-full bg-white/10">
-              <Text className="text-white text-xs">Close</Text>
+          className="bg-card-surface border-card-border mt-auto rounded-t-3xl border-t p-5">
+          <View className="mb-3 flex-row items-center justify-between">
+            <Text className="text-lg font-semibold text-white">AI Recommendation</Text>
+            <Pressable onPress={onClose} className="rounded-full bg-white/10 px-3 py-1">
+              <Text className="text-xs text-white">Close</Text>
             </Pressable>
           </View>
           {data.loading ? (
-            <View className="py-6 items-center">
+            <View className="items-center py-6">
               <Text className="text-white/80">Thinking...</Text>
             </View>
           ) : data.anime ? (
             <Pressable
               onPress={onSelect}
-              className="flex-row gap-3 rounded-2xl overflow-hidden border border-card-border bg-card-surface"
-            >
+              className="border-card-border bg-card-surface flex-row gap-3 overflow-hidden rounded-2xl border">
               <Image
                 source={{ uri: data.anime.image }}
-                className="w-28 h-40 bg-black/20"
+                className="h-40 w-28 bg-black/20"
                 contentFit="cover"
                 transition={150}
               />
               <View className="flex-1 justify-center pr-3">
-                <Text className="text-white text-lg font-semibold" numberOfLines={2}>
+                <Text className="text-lg font-semibold text-white" numberOfLines={2}>
                   {data.anime.title}
                 </Text>
-                <Text className="text-white/70 text-xs mt-2" numberOfLines={3}>
+                <Text className="mt-2 text-xs text-white/70" numberOfLines={3}>
                   Tailored using your recent ratings and mood picks.
                 </Text>
               </View>
             </Pressable>
           ) : (
-            <View className="py-6 items-center">
+            <View className="items-center py-6">
               <Text className="text-white/80">Pull down to ask AI for a pick.</Text>
             </View>
           )}
@@ -62,4 +60,3 @@ function AIRecommendationSheetComponent({ visible, data, onClose, onSelect }: Pr
 }
 
 export const AIRecommendationSheet = memo(AIRecommendationSheetComponent);
-

@@ -24,10 +24,7 @@ export interface SimklRequestOptions {
   clientId?: string;
 }
 
-function buildUrl(
-  path: string,
-  params: Record<string, string | number | undefined>
-): string {
+function buildUrl(path: string, params: Record<string, string | number | undefined>): string {
   const url = new URL(`${SIMKL_BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) continue;
@@ -93,8 +90,7 @@ export class SimklClient {
       client_id: clientId,
     };
 
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timeoutMs = opts.timeoutMs ?? 30_000;
     const timer =
       controller !== undefined && timeoutMs > 0

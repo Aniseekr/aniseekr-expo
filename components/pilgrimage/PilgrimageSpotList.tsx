@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AnitabiPoint } from '../../libs/services/pilgrimage/types';
 
 export interface PilgrimageSpotListProps {
-  points: ReadonlyArray<AnitabiPoint>;
+  points: readonly AnitabiPoint[];
   /**
    * Optional override for the URL opener (used by tests). Defaults to
    * React Native's {@link Linking.openURL}.
@@ -76,8 +76,7 @@ export function PilgrimageSpotList({ points, openURL }: PilgrimageSpotListProps)
                 onPress={onMaps}
                 disabled={!valid}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${point.name} in maps`}
-              >
+                accessibilityLabel={`Open ${point.name} in maps`}>
                 <Ionicons name="map" size={14} color={valid ? '#FFFFFF' : '#666666'} />
                 <Text style={[styles.mapsText, !valid && styles.mapsTextDisabled]}>
                   {valid ? 'Open in Maps' : 'No coordinates'}

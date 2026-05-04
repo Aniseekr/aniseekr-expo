@@ -52,11 +52,8 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#0D0514', '#191932', '#0D0514']}
-        style={StyleSheet.absoluteFill}
-      />
-      
+      <LinearGradient colors={['#0D0514', '#191932', '#0D0514']} style={StyleSheet.absoluteFill} />
+
       {/* Background glow */}
       <Animated.View
         style={[
@@ -76,8 +73,7 @@ export default function Index() {
               opacity: eyeOpacity,
               transform: [{ scale: eyeScale }],
             },
-          ]}
-        >
+          ]}>
           <MaterialIcons name="remove-red-eye" size={120} color="#00FFE5" />
         </Animated.View>
 
@@ -89,8 +85,7 @@ export default function Index() {
               opacity: eyeOpacity,
               transform: [{ scale: eyeScale }],
             },
-          ]}
-        >
+          ]}>
           <MaterialIcons name="remove-red-eye" size={120} color="#fff" />
         </Animated.View>
       </View>
@@ -126,4 +121,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

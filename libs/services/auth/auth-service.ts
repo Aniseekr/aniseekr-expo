@@ -2,6 +2,9 @@ import * as SecureStore from 'expo-secure-store';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import { PLATFORM_CONFIGS, PlatformType, TokenData, User, PlatformCredentials } from './types';
+import { AuthRequiresFormError } from './auth-errors';
+
+const REFRESH_SKEW_MS = 60_000;
 
 const USER_KEY = 'aniseekr_user';
 const TOKEN_PREFIX = 'aniseekr_token_';
@@ -148,6 +151,107 @@ export class AuthService {
     await this.persistCredentials();
   }
 
+  async signIn(platform: PlatformType): Promise<PlatformCredentials | null> {
+    await this.initialize();
+    const config = PLATFORM_CONFIGS[platform];
+    if (!config) throw new Error(`Unknown platform: ${platform}`);
+
+    if (config.authType === 'password') {
+      throw new AuthRequiresFormError(platform, 'password', platform === 'kavita');
+    }
+    if (config.authType === 'apikey') {
+      throw new AuthRequiresFormError(platform, 'apikey', platform === 'kavita');
+    }
+    return this.connectPlatform(platform);
+  }
+
+  async signOut(platform?: PlatformType): Promise<void> {
+    if (!platform) {
+      await this.signOutAll();
+      return;
+    }
+    await this.disconnectPlatform(platform);
+  }
+
+  async getToken(platform: PlatformType): Promise<string | null> {
+    await this.initialize();
+    const refreshed = await this.refreshTokenIfNeeded(platform);
+    const creds = refreshed ?? this.credentials.get(platform);
+    return creds?.token.accessToken ?? null;
+  }
+
+  async getValidCredentials(platform: PlatformType): Promise<PlatformCredentials | null> {
+    await this.initialize();
+    const refreshed = await this.refreshTokenIfNeeded(platform);
+    return refreshed ?? this.credentials.get(platform) ?? null;
+  }
+
+  isPlatformAuthenticated(platform: PlatformType): boolean {
+    return this.credentials.has(platform);
+  }
+
+  async refreshTokenIfNeeded(platform: PlatformType): Promise<PlatformCredentials | null> {
+    const creds = this.credentials.get(platform);
+    if (!creds) return null;
+    const expiresAt = creds.token.expiresAt;
+    if (!expiresAt) return creds;
+
+    const expiry = new Date(expiresAt).getTime();
+    if (expiry - Date.now() > REFRESH_SKEW_MS) return creds;
+
+    const refreshToken = creds.token.refreshToken;
+    if (!refreshToken) return creds;
+
+    const config = PLATFORM_CONFIGS[platform];
+    if (!config?.oauth.tokenEndpoint) return creds;
+
+    try {
+      const params = new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      });
+      if (config.oauth.clientId) params.append('client_id', config.oauth.clientId);
+      if (config.oauth.clientSecret) params.append('client_secret', config.oauth.clientSecret);
+
+      const response = await fetch(config.oauth.tokenEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      if (!response.ok) return creds;
+
+      const data = await response.json();
+      const next: PlatformCredentials = {
+        ...creds,
+        token: {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token ?? refreshToken,
+          tokenType: data.token_type || creds.token.tokenType,
+          expiresAt: data.expires_in
+            ? new Date(Date.now() + data.expires_in * 1000)
+            : creds.token.expiresAt,
+          scope: data.scope ?? creds.token.scope,
+        },
+      };
+      await this.saveCredentials(platform, next);
+      return next;
+    } catch (error) {
+      console.error(`[auth] refresh failed for ${platform}`, error);
+      return creds;
+    }
+  }
+
+  private async signOutAll(): Promise<void> {
+    this.currentUser = null;
+    this.credentials.clear();
+    await SecureStore.deleteItemAsync(USER_KEY);
+    await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
+
+    for (const platform of Object.keys(PLATFORM_CONFIGS)) {
+      await SecureStore.deleteItemAsync(`${TOKEN_PREFIX}${platform}`);
+    }
+  }
+
   getCredentials(platform: PlatformType): PlatformCredentials | undefined {
     return this.credentials.get(platform);
   }
@@ -170,17 +274,6 @@ export class AuthService {
 
   isAuthenticated(): boolean {
     return this.currentUser !== null;
-  }
-
-  async signOut(): Promise<void> {
-    this.currentUser = null;
-    this.credentials.clear();
-    await SecureStore.deleteItemAsync(USER_KEY);
-    await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
-
-    for (const platform of Object.keys(PLATFORM_CONFIGS)) {
-      await SecureStore.deleteItemAsync(`${TOKEN_PREFIX}${platform}`);
-    }
   }
 
   private async performOAuth(platform: PlatformType, usePKCE: boolean): Promise<TokenData | null> {
@@ -258,9 +351,22 @@ export class AuthService {
   }
 
   private async saveCredentials(platform: PlatformType, creds: PlatformCredentials): Promise<void> {
+    const isNew = !this.credentials.has(platform);
     this.credentials.set(platform, creds);
     await SecureStore.setItemAsync(`${TOKEN_PREFIX}${platform}`, JSON.stringify(creds.token));
     await this.persistCredentials();
+    if (isNew) {
+      void this.notifyPlatformConnected();
+    }
+  }
+
+  private async notifyPlatformConnected(): Promise<void> {
+    try {
+      const { achievementService } = await import('../achievements/achievement-service');
+      await achievementService.track('sync.platforms', 0, this.credentials.size);
+    } catch (error) {
+      console.error('[auth] failed to track sync.platforms achievement', error);
+    }
   }
 
   private async persistCredentials(): Promise<void> {

@@ -57,11 +57,7 @@ export interface AnimeSearchable {
   fetchAnime(page: number, genreId?: number): Promise<UnifiedAnimeItem[]>;
   fetchGenres(): Promise<AnimeGenre[]>;
   fetchTopAnime(page?: number): Promise<UnifiedAnimeItem[]>;
-  fetchSeasonalAnime(
-    page?: number,
-    season?: string,
-    year?: number
-  ): Promise<UnifiedAnimeItem[]>;
+  fetchSeasonalAnime(page?: number, season?: string, year?: number): Promise<UnifiedAnimeItem[]>;
 }
 
 export interface AnimeDetailProvider {
@@ -84,10 +80,7 @@ export interface AnimeMediaProvider {
  * implementations live in sibling files (one per platform).
  */
 export interface AnimeDataSource
-  extends AnimeSearchable,
-    AnimeDetailProvider,
-    AnimeStatsProvider,
-    AnimeMediaProvider {
+  extends AnimeSearchable, AnimeDetailProvider, AnimeStatsProvider, AnimeMediaProvider {
   readonly type: PlatformType;
 }
 

@@ -3,6 +3,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
+import { LocationService } from '../../../libs/services/pilgrimage/location-service';
+
 interface FakePermission {
   status: 'granted' | 'denied' | 'undetermined';
   canAskAgain: boolean;
@@ -38,8 +40,6 @@ mock.module('expo-location', () => {
   if (!fakeModule) fakeModule = buildFakeModule();
   return fakeModule;
 });
-
-import { LocationService } from '../../../libs/services/pilgrimage/location-service';
 
 describe('LocationService', () => {
   beforeEach(() => {

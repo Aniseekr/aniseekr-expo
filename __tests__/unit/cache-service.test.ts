@@ -9,9 +9,7 @@ describe('CacheService', () => {
 
   it('CACHE-001 set then get returns the stored JSON value', async () => {
     await CacheService.set('detail_anilist_1', { id: 1, title: 'Cowboy Bebop' });
-    const got = await CacheService.get<{ id: number; title: string }>(
-      'detail_anilist_1'
-    );
+    const got = await CacheService.get<{ id: number; title: string }>('detail_anilist_1');
     expect(got).not.toBeNull();
     expect(got?.id).toBe(1);
     expect(got?.title).toBe('Cowboy Bebop');

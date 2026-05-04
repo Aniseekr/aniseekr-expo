@@ -49,9 +49,7 @@ interface AnnictDataSourceOptions {
    * Should accept a list of MAL ids and return a Map from MAL id → cover URL.
    * Failures are caught at the caller; throw for visibility.
    */
-  batchFetchImages?: (
-    malIds: number[]
-  ) => Promise<Map<number, string>>;
+  batchFetchImages?: (malIds: number[]) => Promise<Map<number, string>>;
 }
 
 const FIELDS =
@@ -62,15 +60,12 @@ export class AnnictDataSource implements AnimeDataSource {
 
   private readonly client: AnnictClient;
   private readonly aniListSource: AnimeDataSource | null;
-  private readonly batchFetchImages: (
-    malIds: number[]
-  ) => Promise<Map<number, string>>;
+  private readonly batchFetchImages: (malIds: number[]) => Promise<Map<number, string>>;
 
   constructor(opts: AnnictDataSourceOptions) {
     this.client = opts.client;
     this.aniListSource = opts.aniListSource ?? null;
-    this.batchFetchImages =
-      opts.batchFetchImages ?? this.defaultBatchFetchImages.bind(this);
+    this.batchFetchImages = opts.batchFetchImages ?? this.defaultBatchFetchImages.bind(this);
 
     Object.assign(this, defaultMediaStubs(), defaultStatsStub());
   }
@@ -166,9 +161,7 @@ export class AnnictDataSource implements AnimeDataSource {
     let imageMap: Map<number, string> = new Map();
     if (malIdsNeedingFallback.size > 0) {
       try {
-        imageMap = await this.batchFetchImages(
-          Array.from(malIdsNeedingFallback)
-        );
+        imageMap = await this.batchFetchImages(Array.from(malIdsNeedingFallback));
       } catch (err) {
         Logger.warn('[AnnictDataSource] image fallback failed', err);
         imageMap = new Map();
@@ -183,18 +176,13 @@ export class AnnictDataSource implements AnimeDataSource {
    * source's `fetchAnimeDetail` per MAL id when no batched API is available.
    * Tests typically inject `batchFetchImages` directly to avoid this path.
    */
-  private async defaultBatchFetchImages(
-    malIds: number[]
-  ): Promise<Map<number, string>> {
+  private async defaultBatchFetchImages(malIds: number[]): Promise<Map<number, string>> {
     const result = new Map<number, string>();
     if (!this.aniListSource) return result;
     // Sequential fetch — concurrency is bounded by the AniList rate limiter.
     for (const malId of malIds) {
       try {
-        const item = await this.aniListSource.fetchAnimeDetail(
-          String(malId),
-          'myanimelist'
-        );
+        const item = await this.aniListSource.fetchAnimeDetail(String(malId), 'myanimelist');
         const url =
           item.platformImages.anilist?.extraLarge ??
           item.platformImages.anilist?.large ??
@@ -202,10 +190,7 @@ export class AnnictDataSource implements AnimeDataSource {
           item.coverImageURL;
         if (url) result.set(malId, url);
       } catch (err) {
-        Logger.warn(
-          `[AnnictDataSource] AniList image lookup failed for MAL ${malId}`,
-          err
-        );
+        Logger.warn(`[AnnictDataSource] AniList image lookup failed for MAL ${malId}`, err);
       }
     }
     return result;

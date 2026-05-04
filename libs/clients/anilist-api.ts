@@ -57,9 +57,9 @@ export interface AniListViewerResponse {
 export interface AniListListResponse {
   data: {
     MediaListCollection: {
-      lists: Array<{
+      lists: {
         entries: AniListMediaListEntry[];
-      }>;
+      }[];
     };
   };
 }

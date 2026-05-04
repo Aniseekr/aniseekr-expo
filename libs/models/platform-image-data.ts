@@ -11,9 +11,7 @@ export interface PlatformImageData {
   banner?: string;
 }
 
-export function createPlatformImageData(
-  init: Partial<PlatformImageData> = {}
-): PlatformImageData {
+export function createPlatformImageData(init: Partial<PlatformImageData> = {}): PlatformImageData {
   return {
     large: init.large,
     extraLarge: init.extraLarge,

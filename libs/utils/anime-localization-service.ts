@@ -22,11 +22,7 @@ export function getDisplayTitle(item: UnifiedAnimeItem, lang: string): string {
   if (normalized.startsWith('zh-hans') || normalized === 'zh-cn' || normalized === 'zh') {
     candidates.push(item.titleChinese);
     candidates.push(item.titleChineseTraditional);
-  } else if (
-    normalized.startsWith('zh-hant') ||
-    normalized === 'zh-tw' ||
-    normalized === 'zh-hk'
-  ) {
+  } else if (normalized.startsWith('zh-hant') || normalized === 'zh-tw' || normalized === 'zh-hk') {
     candidates.push(item.titleChineseTraditional);
     candidates.push(item.titleChinese);
   } else if (normalized.startsWith('ja')) {

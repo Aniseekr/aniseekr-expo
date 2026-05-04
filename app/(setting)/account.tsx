@@ -1,0 +1,281 @@
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Spacing, Typography } from '../../constants/DesignSystem';
+import { useTheme } from '../../context/ThemeContext';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import {
+  SettingsScreenLayout,
+  SettingsRow,
+  SettingsSection,
+} from '../../components/setting/SettingsScreenLayout';
+import { authService } from '../../libs/services/auth/auth-service';
+import { isAuthRequiresFormError } from '../../libs/services/auth/auth-errors';
+import type { PlatformType } from '../../libs/services/auth/types';
+import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
+import type { AuthFormKind } from '../../libs/services/auth/auth-errors';
+
+interface PlatformDef {
+  id: PlatformType;
+  name: string;
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  color: string;
+}
+
+const PLATFORMS: PlatformDef[] = [
+  { id: 'anilist', name: 'AniList', icon: 'public', color: '#02A9FF' },
+  { id: 'myanimelist', name: 'MyAnimeList', icon: 'data-usage', color: '#2E51A2' },
+  { id: 'bangumi', name: 'Bangumi 番组计划', icon: 'translate', color: '#F09199' },
+  { id: 'kitsu', name: 'Kitsu', icon: 'collections', color: '#F75239' },
+  { id: 'annict', name: 'Annict', icon: 'language', color: '#F65B5B' },
+  { id: 'shikimori', name: 'Shikimori', icon: 'public', color: '#1E90FF' },
+  { id: 'simkl', name: 'SIMKL', icon: 'movie', color: '#1B1B1B' },
+  { id: 'kavita', name: 'Kavita', icon: 'menu-book', color: '#4A8B3C' },
+];
+
+type ConnectionState = Record<PlatformType, boolean>;
+
+interface SheetState {
+  visible: boolean;
+  platform: PlatformDef | null;
+  kind: AuthFormKind | null;
+  requiresServerUrl: boolean;
+}
+
+const HIDDEN_SHEET: SheetState = {
+  visible: false,
+  platform: null,
+  kind: null,
+  requiresServerUrl: false,
+};
+
+export default function AccountScreen() {
+  const { theme } = useTheme();
+  const [connections, setConnections] = useState<ConnectionState>({} as ConnectionState);
+  const [loading, setLoading] = useState(false);
+  const [sheet, setSheet] = useState<SheetState>(HIDDEN_SHEET);
+
+  useEffect(() => {
+    refreshAll();
+  }, []);
+
+  const refreshAll = async () => {
+    const next: Partial<ConnectionState> = {};
+    for (const p of PLATFORMS) {
+      try {
+        const token = await authService.getToken(p.id);
+        next[p.id] = !!token;
+      } catch {
+        next[p.id] = false;
+      }
+    }
+    setConnections(next as ConnectionState);
+  };
+
+  const handleConnect = async (platform: PlatformDef) => {
+    setLoading(true);
+    try {
+      await authService.signIn(platform.id);
+      hapticsBridge.success();
+    } catch (e) {
+      if (isAuthRequiresFormError(e)) {
+        setSheet({
+          visible: true,
+          platform,
+          kind: e.kind,
+          requiresServerUrl: e.requiresServerUrl,
+        });
+        return;
+      }
+      hapticsBridge.error();
+      Alert.alert(
+        `Couldn't connect to ${platform.name}`,
+        e instanceof Error ? e.message : 'Unknown error'
+      );
+    } finally {
+      await refreshAll();
+      setLoading(false);
+    }
+  };
+
+  const handleSheetSubmit = async (input: PlatformAuthInput) => {
+    if (!sheet.platform || !sheet.kind) return;
+    const platform = sheet.platform;
+    if (sheet.kind === 'password') {
+      if (!input.username || !input.password) {
+        throw new Error('Username and password are required');
+      }
+      await authService.connectWithPassword(platform.id, input.username, input.password);
+    } else {
+      if (!input.apiKey) {
+        throw new Error('API key is required');
+      }
+      await authService.connectWithApiKey(platform.id, input.apiKey, input.serverUrl);
+    }
+    setSheet(HIDDEN_SHEET);
+    await refreshAll();
+  };
+
+  const handleDisconnect = (platform: PlatformDef) => {
+    Alert.alert(
+      `Disconnect ${platform.name}?`,
+      'Your local data stays. You can reconnect any time.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authService.signOut(platform.id);
+              hapticsBridge.warning();
+            } catch (e) {
+              hapticsBridge.error();
+            } finally {
+              await refreshAll();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <SettingsScreenLayout title="Account" subtitle="Connected platforms">
+      <Text style={[styles.intro, { color: theme.text.secondary }]}>
+        Connect platforms to sync your library, ratings and progress across Aniseekr and other
+        clients.
+      </Text>
+
+      <SettingsSection title="Platforms">
+        {PLATFORMS.map((platform, idx) => {
+          const connected = !!connections[platform.id];
+          return (
+            <View key={platform.id}>
+              <View style={styles.platformRow}>
+                <View style={[styles.platformIcon, { backgroundColor: platform.color + '24' }]}>
+                  <MaterialIcons name={platform.icon} size={20} color={platform.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.platformName, { color: theme.text.primary }]}>
+                    {platform.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.platformStatus,
+                      { color: connected ? '#30D158' : theme.text.tertiary },
+                    ]}>
+                    {connected ? 'Connected' : 'Not connected'}
+                  </Text>
+                </View>
+                {connected ? (
+                  <Pressable
+                    onPress={() => handleDisconnect(platform)}
+                    style={({ pressed }) => [
+                      styles.actionButton,
+                      {
+                        borderColor: '#FF453A66',
+                        backgroundColor: '#FF453A14',
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ]}>
+                    <Text style={[styles.actionLabel, { color: '#FF453A' }]}>Disconnect</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => handleConnect(platform)}
+                    disabled={loading}
+                    style={({ pressed }) => [
+                      styles.actionButton,
+                      {
+                        backgroundColor: theme.accent,
+                        opacity: pressed || loading ? 0.7 : 1,
+                      },
+                    ]}>
+                    <Text style={[styles.actionLabel, { color: '#0E0A06' }]}>Connect</Text>
+                  </Pressable>
+                )}
+              </View>
+              {idx < PLATFORMS.length - 1 ? (
+                <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
+              ) : null}
+            </View>
+          );
+        })}
+      </SettingsSection>
+
+      <SettingsSection title="Account actions">
+        <SettingsRow
+          icon="cloud-download"
+          label="Refresh tokens"
+          description="Re-pull authentication state from secure storage"
+          onPress={() => {
+            hapticsBridge.tap();
+            refreshAll();
+          }}
+        />
+      </SettingsSection>
+
+      <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
+        Tokens live in your device&apos;s secure enclave. Reset them by uninstalling the app or
+        revoking access in each platform&apos;s account settings.
+      </Text>
+
+      <PlatformAuthSheet
+        visible={sheet.visible}
+        platform={sheet.platform?.id ?? null}
+        platformName={sheet.platform?.name ?? ''}
+        kind={sheet.kind}
+        requiresServerUrl={sheet.requiresServerUrl}
+        onClose={() => setSheet(HIDDEN_SHEET)}
+        onSubmit={handleSheetSubmit}
+      />
+    </SettingsScreenLayout>
+  );
+}
+
+const styles = StyleSheet.create({
+  intro: {
+    ...Typography.bodyMedium,
+    paddingHorizontal: 4,
+  },
+  platformRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm + 2,
+  },
+  platformIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  platformName: {
+    ...Typography.titleMedium,
+  },
+  platformStatus: {
+    ...Typography.bodySmall,
+    marginTop: 2,
+  },
+  actionButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  actionLabel: {
+    ...Typography.titleSmall,
+    fontWeight: '700',
+  },
+  divider: {
+    height: 1,
+    marginLeft: 56,
+  },
+  footnote: {
+    ...Typography.captionSmall,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+  },
+});

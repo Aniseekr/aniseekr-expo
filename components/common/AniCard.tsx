@@ -50,9 +50,20 @@ function AniCardComponent({
   if (variant === 'glass') {
     if (Platform.OS === 'ios') {
       return (
-        <BlurView intensity={intensity ?? 30} tint="dark" style={baseStyle} {...props}>
+        <BlurView
+          intensity={intensity ?? 30}
+          tint="systemThickMaterialDark"
+          style={baseStyle}
+          {...props}>
           <View style={styles.glassOverlay}>
-            <View style={[styles.glassBorder, { borderRadius: cornerRadius }]} pointerEvents="none" />
+            <View
+              style={[styles.glassBorder, { borderRadius: cornerRadius }]}
+              pointerEvents="none"
+            />
+            <View
+              style={[styles.glassInnerBorder, { borderRadius: cornerRadius }]}
+              pointerEvents="none"
+            />
             {children}
           </View>
         </BlurView>
@@ -126,6 +137,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderWidth: 1,
     borderColor: Colors.glass.border,
+  },
+  glassInnerBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
 });
 

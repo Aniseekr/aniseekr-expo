@@ -9,7 +9,11 @@ interface GachaHeaderProps {
   onShowReconstruction: () => void;
 }
 
-export function GachaHeader({ coinBalance, onShowDropRates, onShowReconstruction }: GachaHeaderProps) {
+export function GachaHeader({
+  coinBalance,
+  onShowDropRates,
+  onShowReconstruction,
+}: GachaHeaderProps) {
   return (
     <View style={styles.container}>
       <View style={styles.leftSection}>
@@ -28,7 +32,9 @@ export function GachaHeader({ coinBalance, onShowDropRates, onShowReconstruction
         <Pressable onPress={onShowDropRates} style={styles.actionButton}>
           <Ionicons name="information-circle-outline" size={24} color="rgba(255,255,255,0.7)" />
         </Pressable>
-        <Pressable onPress={onShowReconstruction} style={[styles.actionButton, styles.reconstructionButton]}>
+        <Pressable
+          onPress={onShowReconstruction}
+          style={[styles.actionButton, styles.reconstructionButton]}>
           <MaterialIcons name="auto-awesome" size={24} color="#06b6d4" />
         </Pressable>
       </View>

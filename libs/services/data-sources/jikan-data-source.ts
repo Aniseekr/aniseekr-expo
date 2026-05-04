@@ -115,7 +115,7 @@ interface JikanStaffEntry {
 
 interface JikanRelationEntry {
   relation?: string;
-  entry?: Array<{ mal_id?: number; type?: string; name?: string; url?: string }>;
+  entry?: { mal_id?: number; type?: string; name?: string; url?: string }[];
 }
 
 interface JikanStreamingEntry {
@@ -190,10 +190,7 @@ export class JikanDataSource implements AnimeDataSource {
     const params: Record<string, string | number | boolean> = { page };
     if (this.shouldFilterAdult()) params.sfw = true;
 
-    const res = await this.client.get<JikanResponse<JikanAnime[]>>(
-      '/top/anime',
-      params
-    );
+    const res = await this.client.get<JikanResponse<JikanAnime[]>>('/top/anime', params);
     return (res.data ?? []).map((a) => this.mapAnime(a));
   }
 
@@ -242,9 +239,7 @@ export class JikanDataSource implements AnimeDataSource {
     const malId = Number.parseInt(id, 10);
     if (!Number.isFinite(malId) || malId <= 0) return null;
 
-    const res = await this.client.get<JikanResponse<JikanStatistics>>(
-      `/anime/${malId}/statistics`
-    );
+    const res = await this.client.get<JikanResponse<JikanStatistics>>(`/anime/${malId}/statistics`);
     const stats = res.data;
     if (!stats) return null;
 
@@ -258,10 +253,12 @@ export class JikanDataSource implements AnimeDataSource {
     // refine via `key.startsWith('status:')`). Encoded with explicit keys to
     // avoid colliding with score buckets.
     if (typeof stats.watching === 'number') ratingDistribution['status:watching'] = stats.watching;
-    if (typeof stats.completed === 'number') ratingDistribution['status:completed'] = stats.completed;
+    if (typeof stats.completed === 'number')
+      ratingDistribution['status:completed'] = stats.completed;
     if (typeof stats.on_hold === 'number') ratingDistribution['status:onHold'] = stats.on_hold;
     if (typeof stats.dropped === 'number') ratingDistribution['status:dropped'] = stats.dropped;
-    if (typeof stats.plan_to_watch === 'number') ratingDistribution['status:planToWatch'] = stats.plan_to_watch;
+    if (typeof stats.plan_to_watch === 'number')
+      ratingDistribution['status:planToWatch'] = stats.plan_to_watch;
     if (typeof stats.total === 'number') ratingDistribution['status:total'] = stats.total;
 
     return {
@@ -276,9 +273,7 @@ export class JikanDataSource implements AnimeDataSource {
     const malId = Number.parseInt(id, 10);
     if (!Number.isFinite(malId) || malId <= 0) return [];
 
-    const res = await this.client.get<JikanResponse<JikanStaffEntry[]>>(
-      `/anime/${malId}/staff`
-    );
+    const res = await this.client.get<JikanResponse<JikanStaffEntry[]>>(`/anime/${malId}/staff`);
     return (res.data ?? [])
       .map((entry): AnimeStaff | null => {
         const person = entry.person;
@@ -332,9 +327,7 @@ export class JikanDataSource implements AnimeDataSource {
     const malId = Number.parseInt(id, 10);
     if (!Number.isFinite(malId) || malId <= 0) return null;
 
-    const res = await this.client.get<JikanResponse<JikanThemes>>(
-      `/anime/${malId}/themes`
-    );
+    const res = await this.client.get<JikanResponse<JikanThemes>>(`/anime/${malId}/themes`);
     if (!res.data) return null;
     return {
       openings: res.data.openings ?? [],
@@ -400,10 +393,7 @@ export class JikanDataSource implements AnimeDataSource {
       platformImages,
       malScore: typeof anime.score === 'number' ? anime.score : null,
       totalEpisodes: anime.episodes ?? null,
-      year:
-        typeof anime.year === 'number'
-          ? anime.year
-          : (anime.aired?.prop?.from?.year ?? null),
+      year: typeof anime.year === 'number' ? anime.year : (anime.aired?.prop?.from?.year ?? null),
       season: anime.season ? anime.season.toUpperCase() : null,
       startDate,
       broadcastDay,

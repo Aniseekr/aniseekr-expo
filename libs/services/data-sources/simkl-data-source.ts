@@ -4,10 +4,7 @@
 import { SimklClient, wrapSimklPoster } from '../../clients/simkl-client';
 import { isDataSourceError } from './data-source-error';
 import type { PlatformImageData } from '../../models/platform-image-data';
-import {
-  PLATFORM_PRIORITY,
-  UnifiedAnimeItem,
-} from '../../models/unified-anime-item';
+import { PLATFORM_PRIORITY, UnifiedAnimeItem } from '../../models/unified-anime-item';
 import type { PlatformAnimeData } from '../../models/unified-anime-item';
 import type { PlatformType } from '../auth/types';
 import { getCurrentYear } from '../../utils/season-utils';
@@ -108,9 +105,7 @@ function parseAirDate(raw: string | null | undefined): {
  * Simkl is the only provider that publishes MAL/AniList/Kitsu IDs alongside
  * its own — a key reason we surface it as a data source.
  */
-function buildPlatformData(
-  ids: SimklIds
-): Partial<Record<PlatformType, PlatformAnimeData>> {
+function buildPlatformData(ids: SimklIds): Partial<Record<PlatformType, PlatformAnimeData>> {
   const out: Partial<Record<PlatformType, PlatformAnimeData>> = {};
   if (ids.simkl != null) out.simkl = { id: String(ids.simkl) };
   if (ids.mal != null) out.myanimelist = { id: String(ids.mal) };
@@ -200,10 +195,10 @@ export class SimklDataSource implements AnimeDataSource {
   }
 
   async fetchAnime(_page: number, _genreId?: number): Promise<UnifiedAnimeItem[]> {
-    const items = await SimklClient.get<SimklSearchItem[]>(
-      '/anime/trending',
-      { limit: SIMKL_PAGE_SIZE, extended: 'full' }
-    );
+    const items = await SimklClient.get<SimklSearchItem[]>('/anime/trending', {
+      limit: SIMKL_PAGE_SIZE,
+      extended: 'full',
+    });
     return (items ?? []).map(buildItem);
   }
 
@@ -232,10 +227,10 @@ export class SimklDataSource implements AnimeDataSource {
     let year = getCurrentYear(this.nowFn());
     for (let attempt = 0; attempt < SIMKL_TOP_FALLBACK_DEPTH; attempt++) {
       try {
-        const items = await SimklClient.get<SimklSearchItem[]>(
-          `/anime/best/${year}`,
-          { limit: SIMKL_PAGE_SIZE, extended: 'full' }
-        );
+        const items = await SimklClient.get<SimklSearchItem[]>(`/anime/best/${year}`, {
+          limit: SIMKL_PAGE_SIZE,
+          extended: 'full',
+        });
         if (items && items.length > 0) {
           return items.map(buildItem);
         }
@@ -256,10 +251,10 @@ export class SimklDataSource implements AnimeDataSource {
     _season?: string,
     _year?: number
   ): Promise<UnifiedAnimeItem[]> {
-    const items = await SimklClient.get<SimklSearchItem[]>(
-      '/anime/premieres',
-      { limit: SIMKL_PAGE_SIZE, extended: 'full' }
-    );
+    const items = await SimklClient.get<SimklSearchItem[]>('/anime/premieres', {
+      limit: SIMKL_PAGE_SIZE,
+      extended: 'full',
+    });
     return (items ?? []).map(buildItem);
   }
 

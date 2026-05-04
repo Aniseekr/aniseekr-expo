@@ -10,19 +10,28 @@ export interface RenderedNode {
   children: RenderedNode[];
 }
 
-const FALSY = (v: unknown): boolean =>
-  v === null || v === undefined || v === false || v === true;
+const FALSY = (v: unknown): boolean => v === null || v === undefined || v === false || v === true;
 
 function describeType(type: unknown): string {
   if (typeof type === 'string') return type;
-  if (typeof type === 'function') return (type as { displayName?: string; name?: string }).displayName || (type as { name?: string }).name || 'Component';
+  if (typeof type === 'function')
+    return (
+      (type as { displayName?: string; name?: string }).displayName ||
+      (type as { name?: string }).name ||
+      'Component'
+    );
   // forwardRef objects expose a $$typeof + render signature.
   if (type && typeof type === 'object') {
     const inner = (type as { render?: unknown }).render;
     if (typeof inner === 'function') {
-      return (inner as { displayName?: string; name?: string }).displayName || (inner as { name?: string }).name || 'ForwardRef';
+      return (
+        (inner as { displayName?: string; name?: string }).displayName ||
+        (inner as { name?: string }).name ||
+        'ForwardRef'
+      );
     }
-    const name = (type as { displayName?: string; name?: string }).displayName ||
+    const name =
+      (type as { displayName?: string; name?: string }).displayName ||
       (type as { name?: string }).name;
     if (name) return name;
   }
@@ -38,7 +47,8 @@ function evaluate(node: ReactNode): RenderedNode | RenderedNode[] | string | nul
       const r = evaluate(child);
       if (r === null) continue;
       if (Array.isArray(r)) out.push(...r);
-      else if (typeof r === 'string') out.push({ type: '#text', props: { value: r }, children: [] });
+      else if (typeof r === 'string')
+        out.push({ type: '#text', props: { value: r }, children: [] });
       else out.push(r);
     }
     return out;
@@ -63,7 +73,8 @@ function evaluate(node: ReactNode): RenderedNode | RenderedNode[] | string | nul
       const children: RenderedNode[] = [];
       if (Array.isArray(inner)) children.push(...inner);
       else if (inner && typeof inner !== 'string') children.push(inner);
-      else if (typeof inner === 'string') children.push({ type: '#text', props: { value: inner }, children: [] });
+      else if (typeof inner === 'string')
+        children.push({ type: '#text', props: { value: inner }, children: [] });
       return { type: describeType(type), props, children };
     }
   }
@@ -74,7 +85,8 @@ function evaluate(node: ReactNode): RenderedNode | RenderedNode[] | string | nul
     const r = evaluate(childrenNode);
     if (r === null) renderedChildren = [];
     else if (Array.isArray(r)) renderedChildren = r;
-    else if (typeof r === 'string') renderedChildren = [{ type: '#text', props: { value: r }, children: [] }];
+    else if (typeof r === 'string')
+      renderedChildren = [{ type: '#text', props: { value: r }, children: [] }];
     else renderedChildren = [r];
   }
 
@@ -117,7 +129,7 @@ export function findAll(
 
 /** Concatenate every text node's value in document order. */
 export function getAllText(root: RenderedNode): string[] {
-  return findAll(root, (n) => n.type === '#text').map(
-    (n) => String((n.props as { value?: unknown }).value ?? '')
+  return findAll(root, (n) => n.type === '#text').map((n) =>
+    String((n.props as { value?: unknown }).value ?? '')
   );
 }

@@ -233,14 +233,9 @@ const defaultAniListResolver: AniListResolver = async () => new AniListDataSourc
  *   - HTTP image URLs on bgm.tv hosts are rewritten to HTTPS.
  *   - Tags carry through as-is.
  */
-export function convertSubjectToUnifiedItem(
-  subject: BangumiV0Subject
-): UnifiedAnimeItem {
-  const cover = normalizeBangumiImage(
-    subject.images?.large ?? subject.images?.common ?? null
-  );
-  const titleChinese =
-    subject.name_cn && subject.name_cn.length > 0 ? subject.name_cn : null;
+export function convertSubjectToUnifiedItem(subject: BangumiV0Subject): UnifiedAnimeItem {
+  const cover = normalizeBangumiImage(subject.images?.large ?? subject.images?.common ?? null);
+  const titleChinese = subject.name_cn && subject.name_cn.length > 0 ? subject.name_cn : null;
   const title = titleChinese ?? subject.name;
 
   const platformImages: Partial<Record<PlatformType, PlatformImageData>> = {};
@@ -253,9 +248,7 @@ export function convertSubjectToUnifiedItem(
 
   const startDate = parseBangumiDate(subject.date);
   const tags = (subject.tags ?? []).map((t) => t.name).filter((n) => n.length > 0);
-  const { titleEnglish, titleRomaji, synonyms } = extractInfoboxAliases(
-    subject.infobox ?? null
-  );
+  const { titleEnglish, titleRomaji, synonyms } = extractInfoboxAliases(subject.infobox ?? null);
 
   return new UnifiedAnimeItem({
     title,
@@ -310,9 +303,7 @@ interface InfoboxAliases {
  * "别名" / "alias" rows and pick the first Latin-looking string as the
  * English title.
  */
-function extractInfoboxAliases(
-  infobox: BangumiInfoboxField[] | null
-): InfoboxAliases {
+function extractInfoboxAliases(infobox: BangumiInfoboxField[] | null): InfoboxAliases {
   if (!infobox) {
     return { titleEnglish: null, titleRomaji: null, synonyms: [] };
   }
@@ -338,9 +329,7 @@ function extractInfoboxAliases(
   return { titleEnglish, titleRomaji, synonyms };
 }
 
-function flattenInfoboxValue(
-  value: BangumiInfoboxField['value']
-): string[] {
+function flattenInfoboxValue(value: BangumiInfoboxField['value']): string[] {
   if (typeof value === 'string') return [value];
   if (Array.isArray(value)) {
     return value
@@ -367,16 +356,8 @@ function enrichItemWithCandidates(
   return cloneWithChineseTitle(item, chinese, match.id);
 }
 
-function candidateMatchesItem(
-  candidate: BangumiV0Subject,
-  item: UnifiedAnimeItem
-): boolean {
-  const knownTitles = [
-    item.titleJapanese,
-    item.titleEnglish,
-    item.titleRomaji,
-    item.title,
-  ]
+function candidateMatchesItem(candidate: BangumiV0Subject, item: UnifiedAnimeItem): boolean {
+  const knownTitles = [item.titleJapanese, item.titleEnglish, item.titleRomaji, item.title]
     .filter((t): t is string => typeof t === 'string' && t.length > 0)
     .map((t) => t.toLowerCase());
   if (knownTitles.length === 0) return false;
@@ -435,7 +416,5 @@ function cloneWithChineseTitle(
 }
 
 function pickBestSearchKeyword(item: UnifiedAnimeItem): string | null {
-  return (
-    item.titleJapanese ?? item.titleEnglish ?? item.titleRomaji ?? item.title ?? null
-  );
+  return item.titleJapanese ?? item.titleEnglish ?? item.titleRomaji ?? item.title ?? null;
 }

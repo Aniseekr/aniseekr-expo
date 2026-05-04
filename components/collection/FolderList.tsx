@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 // Define types locally for now, could be shared
 export interface CollectionFolder {
@@ -28,15 +29,34 @@ export interface FolderListProps {
   folders: CollectionFolder[];
   folderPreviews: { [key: string]: AnimePreview[] };
   onFolderPress?: (folder: CollectionFolder) => void;
+  onEditFolder?: (folder: CollectionFolder) => void;
 }
 
-export function FolderList({ folders, folderPreviews, onFolderPress }: FolderListProps) {
+export function FolderList({
+  folders,
+  folderPreviews,
+  onFolderPress,
+  onEditFolder,
+}: FolderListProps) {
   const renderFolderSection = (folder: CollectionFolder) => {
     const previews = folderPreviews[folder.id] || [];
 
+    const canEdit = !folder.isSystemFolder && !!onEditFolder;
+
     return (
       <View key={folder.id} style={styles.folderSection}>
-        <Pressable style={styles.folderHeader} onPress={() => onFolderPress?.(folder)}>
+        <Pressable
+          style={styles.folderHeader}
+          onPress={() => onFolderPress?.(folder)}
+          onLongPress={
+            canEdit
+              ? () => {
+                  hapticsBridge.longPress();
+                  onEditFolder?.(folder);
+                }
+              : undefined
+          }
+          delayLongPress={350}>
           <View style={styles.folderHeaderLeft}>
             <View style={styles.folderIconContainer}>
               <Ionicons name={folder.icon as any} size={24} color={Colors.text.primary} />

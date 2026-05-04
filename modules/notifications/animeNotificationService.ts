@@ -1,9 +1,9 @@
 /**
  * Anime Notification Service - STUB
- * 
+ *
  * expo-notifications doesn't work in Expo Go for SDK 53+.
  * This is a stub implementation that provides the same API but does nothing.
- * 
+ *
  * For production, use a development build instead of Expo Go.
  * See: https://docs.expo.dev/develop/development-builds/introduction/
  */

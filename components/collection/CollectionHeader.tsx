@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Pressable, Platform, StyleSheet } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 interface CollectionHeaderProps {
   categories: string[];
@@ -9,6 +10,7 @@ interface CollectionHeaderProps {
   categoryCounts: { [key: string]: number };
   categoryIcons?: Record<string, string>;
   onAddFolder?: () => void;
+  onPressSearch?: () => void;
 }
 
 export function CollectionHeader({
@@ -18,7 +20,18 @@ export function CollectionHeader({
   categoryCounts,
   categoryIcons,
   onAddFolder,
+  onPressSearch,
 }: CollectionHeaderProps) {
+  const handleSearchPress = () => {
+    hapticsBridge.tap();
+    onPressSearch?.();
+  };
+
+  const handleAddPress = () => {
+    hapticsBridge.tap();
+    onAddFolder?.();
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -29,10 +42,18 @@ export function CollectionHeader({
           <Text style={styles.title}>Collector</Text>
         </View>
         <View style={styles.actionsRow}>
-          <Pressable style={styles.actionButton}>
+          <Pressable
+            style={styles.actionButton}
+            onPress={handleSearchPress}
+            accessibilityRole="button"
+            accessibilityLabel="Search collection">
             <MaterialIcons name="search" size={22} color={Colors.text.primary} />
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onAddFolder}>
+          <Pressable
+            style={styles.actionButton}
+            onPress={handleAddPress}
+            accessibilityRole="button"
+            accessibilityLabel="Add folder">
             <MaterialIcons name="add" size={24} color={Colors.text.primary} />
           </Pressable>
         </View>

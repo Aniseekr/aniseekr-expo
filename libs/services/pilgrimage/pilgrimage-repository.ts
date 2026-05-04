@@ -56,9 +56,7 @@ export class PilgrimageRepository {
    *   - the anime has no Bangumi id (and ID-mapping fallback also yields nothing)
    *   - Anitabi returns 404 for the resolved id
    */
-  async getSpotsForAnime(
-    context: AnimeContext
-  ): Promise<AnitabiBangumi | null> {
+  async getSpotsForAnime(context: AnimeContext): Promise<AnitabiBangumi | null> {
     const bangumiId = await this.resolveBangumiId(context);
     if (bangumiId === null) return null;
 
@@ -68,18 +66,14 @@ export class PilgrimageRepository {
   /**
    * Convenience overload — fetch directly by Bangumi subject id.
    */
-  async getSpotsByBangumiId(
-    bangumiId: number
-  ): Promise<AnitabiBangumi | null> {
+  async getSpotsByBangumiId(bangumiId: number): Promise<AnitabiBangumi | null> {
     return this.service.getAnimePilgrimage(bangumiId);
   }
 
   /**
    * Lazy-load the full points list (e.g. once the user opens the map screen).
    */
-  async getDetailedPointsByBangumiId(
-    bangumiId: number
-  ): Promise<AnitabiPointDetail[]> {
+  async getDetailedPointsByBangumiId(bangumiId: number): Promise<AnitabiPointDetail[]> {
     return this.service.getDetailedPoints(bangumiId);
   }
 
@@ -104,7 +98,6 @@ export class PilgrimageRepository {
     const fetched = await Promise.all(
       candidates.map((id) =>
         this.service.getAnimePilgrimage(id).catch((err: unknown) => {
-          // eslint-disable-next-line no-console
           console.warn('[PilgrimageRepository] getNearbyAnime fetch failed:', id, err);
           return null;
         })
@@ -169,7 +162,6 @@ export class PilgrimageRepository {
           if (Number.isFinite(parsed) && parsed > 0) return parsed;
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[PilgrimageRepository] ID mapping failed:', err);
       }
     }

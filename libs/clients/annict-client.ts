@@ -15,8 +15,7 @@ import { rateLimiter } from '../services/rate-limiter';
 import { DataSourceError } from '../services/data-sources/data-source-error';
 
 export const ANNICT_BASE_URL = 'https://api.annict.com';
-export const ANNICT_USER_AGENT =
-  'Aniseekr/1.0 (https://github.com/Aniseekr)';
+export const ANNICT_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
 
 // MARK: - Wire types
 
@@ -127,7 +126,7 @@ export class AnnictClient {
    */
   async getWorks(params: {
     filterTitle?: string;
-    filterIds?: Array<number | string>;
+    filterIds?: (number | string)[];
     page?: number;
     perPage?: number;
     sort?: string;
@@ -157,10 +156,7 @@ export class AnnictClient {
    * Returns the raw token payload. Caches it internally with a 60s safety
    * margin so subsequent `getWorks` calls reuse the same bearer token.
    */
-  async obtainToken(
-    clientId: string,
-    clientSecret: string
-  ): Promise<AnnictOAuthTokenResponse> {
+  async obtainToken(clientId: string, clientSecret: string): Promise<AnnictOAuthTokenResponse> {
     if (!clientId || !clientSecret) {
       throw new DataSourceError({
         code: 'UNAUTHORIZED',
@@ -180,8 +176,7 @@ export class AnnictClient {
     }
 
     let response: Response;
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timer =
       controller !== undefined && this.timeoutMs > 0
         ? setTimeout(() => controller.abort(), this.timeoutMs)
@@ -270,8 +265,7 @@ export class AnnictClient {
     }
     const token = await this.getAccessToken();
     const url = `${ANNICT_BASE_URL}${path}`;
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timer =
       controller !== undefined && this.timeoutMs > 0
         ? setTimeout(() => controller.abort(), this.timeoutMs)

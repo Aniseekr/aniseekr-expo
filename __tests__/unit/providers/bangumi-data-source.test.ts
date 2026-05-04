@@ -11,16 +11,7 @@
 // The BangumiClient itself goes through the rate limiter; we reset it
 // before each test to avoid carrying cooldowns between tests.
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  spyOn,
-  mock,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn, mock, type Mock } from 'bun:test';
 import {
   BangumiDataSource,
   convertSubjectToUnifiedItem,
@@ -50,14 +41,15 @@ function captureFetch(handler: (call: FetchCall) => Response | Promise<Response>
   calls: FetchCall[];
 } {
   const calls: FetchCall[] = [];
-  const spy = spyOn(globalThis, 'fetch').mockImplementation(
-    (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString();
-      const call = { url, init };
-      calls.push(call);
-      return handler(call);
-    }) as unknown as typeof fetch
-  );
+  const spy = spyOn(globalThis, 'fetch').mockImplementation((async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    const call = { url, init };
+    calls.push(call);
+    return handler(call);
+  }) as unknown as typeof fetch);
   return { spy, calls };
 }
 
@@ -76,9 +68,7 @@ function buildStubAniList(items: UnifiedAnimeItem[] = []): {
 } {
   const search = mock(async (_q: string, _p?: number) => items);
   const top = mock(async (_p?: number) => items);
-  const seasonal = mock(
-    async (_p?: number, _s?: string, _y?: number) => items
-  );
+  const seasonal = mock(async (_p?: number, _s?: string, _y?: number) => items);
   const byGenre = mock(async (_p: number, _g?: number) => items);
   const genres = mock(async () => [] as AnimeGenre[]);
 

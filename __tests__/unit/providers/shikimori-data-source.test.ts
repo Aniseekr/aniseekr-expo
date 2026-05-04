@@ -68,9 +68,7 @@ describe('ShikimoriDataSource', () => {
   });
 
   it('SHIK-001 sends the User-Agent header on every request', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse([buildShikimoriListItem()]),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse([buildShikimoriListItem()])]);
     activeSpy = spy;
 
     await source.searchAnime('cowboy');
@@ -133,9 +131,7 @@ describe('ShikimoriDataSource', () => {
 
     const items = await source.searchAnime('cb');
     expect(items.length).toBe(1);
-    expect(items[0].coverImageURL).toBe(
-      'https://shikimori.one/uploads/preview/animes/1.jpg'
-    );
+    expect(items[0].coverImageURL).toBe('https://shikimori.one/uploads/preview/animes/1.jpg');
 
     // /missing/ paths are treated as null (Shikimori's not-found placeholder).
     const items2 = await source.searchAnime('missing');
@@ -144,9 +140,7 @@ describe('ShikimoriDataSource', () => {
 
   it('SHIK-004 maps russian field to titleRussian', async () => {
     const { spy } = captureFetch([
-      makeJsonResponse([
-        buildShikimoriListItem({ russian: 'Ковбой Бибоп' }),
-      ]),
+      makeJsonResponse([buildShikimoriListItem({ russian: 'Ковбой Бибоп' })]),
     ]);
     activeSpy = spy;
 
@@ -156,9 +150,7 @@ describe('ShikimoriDataSource', () => {
   });
 
   it('SHIK-005 fetchTopAnime uses order=ranked', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse([buildShikimoriListItem()]),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse([buildShikimoriListItem()])]);
     activeSpy = spy;
 
     await source.fetchTopAnime();

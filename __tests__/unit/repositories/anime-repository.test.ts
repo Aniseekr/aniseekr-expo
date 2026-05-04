@@ -10,20 +10,8 @@
  * (the import-side singleton is touched directly via `__resetForTests`).
  */
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-  spyOn,
-  type Mock,
-} from 'bun:test';
-import {
-  AnimeRepository,
-  CancellationError,
-} from '../../../libs/repositories/anime-repository';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn, type Mock } from 'bun:test';
+import { AnimeRepository, CancellationError } from '../../../libs/repositories/anime-repository';
 import {
   type AnimeDataSource,
   type AnimeGenre,
@@ -33,10 +21,7 @@ import { CacheService } from '../../../libs/services/cache-service';
 import { dataSourceConfig } from '../../../libs/services/data-source-config';
 import { UnifiedAnimeItem } from '../../../libs/models/unified-anime-item';
 import { queryClient } from '../../../libs/services/query-client';
-import {
-  IDMappingService,
-  idMappingService,
-} from '../../../libs/services/sync/id-mapping-service';
+import { IDMappingService, idMappingService } from '../../../libs/services/sync/id-mapping-service';
 import type { PlatformType } from '../../../libs/services/auth/types';
 
 // ---------- Helpers ----------
@@ -263,9 +248,7 @@ describe('AnimeRepository', () => {
   });
 
   it('REPO-013 disk cache hit short-circuits HTTP call', async () => {
-    const fetchSeasonal = mock(async () => [
-      makeItem({ id: 'a1', source: 'anilist' }),
-    ]);
+    const fetchSeasonal = mock(async () => [makeItem({ id: 'a1', source: 'anilist' })]);
     const source = buildMockSource({
       type: 'anilist',
       fetchSeasonalAnime: fetchSeasonal,
@@ -289,10 +272,12 @@ describe('AnimeRepository', () => {
   // -------- Genres fallback (REPO-020) --------
 
   it('REPO-020 genres fetch falls back to AniList when primary source throws', async () => {
-    const anilistGenres = mock(async (): Promise<AnimeGenre[]> => [
-      { id: 1, name: 'Action' },
-      { id: 2, name: 'Comedy' },
-    ]);
+    const anilistGenres = mock(
+      async (): Promise<AnimeGenre[]> => [
+        { id: 1, name: 'Action' },
+        { id: 2, name: 'Comedy' },
+      ]
+    );
     const anilist = buildMockSource({
       type: 'anilist',
       fetchGenres: anilistGenres,
@@ -325,9 +310,11 @@ describe('AnimeRepository', () => {
       fetchAnimeStaff: bangumiStaff,
     });
 
-    const jikanStaff = mock(async (id: string): Promise<AnimeStaff[]> => [
-      { id: `${id}-staff`, name: 'Director Test', role: 'Director' },
-    ]);
+    const jikanStaff = mock(
+      async (id: string): Promise<AnimeStaff[]> => [
+        { id: `${id}-staff`, name: 'Director Test', role: 'Director' },
+      ]
+    );
     const jikan = buildMockSource({
       type: 'myanimelist',
       fetchAnimeStaff: jikanStaff,
@@ -336,7 +323,11 @@ describe('AnimeRepository', () => {
     // Pin browse to bangumi.
     await dataSourceConfig.setBrowseSource('bangumi');
 
-    const repo = new AnimeRepository({ anilist: buildMockSource({ type: 'anilist' }), bangumi, myanimelist: jikan });
+    const repo = new AnimeRepository({
+      anilist: buildMockSource({ type: 'anilist' }),
+      bangumi,
+      myanimelist: jikan,
+    });
 
     // Provide a manual mapping so translateID can resolve bangumi → mal.
     idMappingService.setManualMapping('bangumi', 7157, 'myanimelist', 12189);
@@ -353,9 +344,11 @@ describe('AnimeRepository', () => {
       type: 'bangumi',
       fetchAnimeStaff: mock(async () => []),
     });
-    const jikanStaff = mock(async (id: string): Promise<AnimeStaff[]> => [
-      { id: 'mal-staff', name: 'MAL Director', role: 'Director' },
-    ]);
+    const jikanStaff = mock(
+      async (id: string): Promise<AnimeStaff[]> => [
+        { id: 'mal-staff', name: 'MAL Director', role: 'Director' },
+      ]
+    );
     const jikan = buildMockSource({
       type: 'myanimelist',
       fetchAnimeStaff: jikanStaff,

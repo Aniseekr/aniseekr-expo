@@ -67,9 +67,7 @@ export default function PilgrimageDetailScreen() {
 
         // Lazy-load the full detail set on top of the lite data.
         try {
-          const detailed: AnitabiPointDetail[] = await anitabiService.getDetailedPoints(
-            bangumiId
-          );
+          const detailed: AnitabiPointDetail[] = await anitabiService.getDetailedPoints(bangumiId);
           if (!cancelled && detailed.length > 0) {
             setPoints(detailed);
           }
@@ -80,8 +78,7 @@ export default function PilgrimageDetailScreen() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : 'Failed to load pilgrimage';
+        const message = err instanceof Error ? err.message : 'Failed to load pilgrimage';
         setError(message);
         setLoading(false);
       });
@@ -168,8 +165,7 @@ export default function PilgrimageDetailScreen() {
                   <Pressable
                     style={styles.viewMapBtn}
                     onPress={onOpenCenter}
-                    accessibilityRole="button"
-                  >
+                    accessibilityRole="button">
                     <Ionicons name="map-outline" size={16} color="#FFFFFF" />
                     <Text style={styles.viewMapText}>
                       View on {Platform.OS === 'ios' ? 'Apple Maps' : 'Google Maps'}

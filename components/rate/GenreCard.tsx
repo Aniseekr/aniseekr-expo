@@ -66,12 +66,7 @@ function GenreCardComponent({
 
         {/* Bottom-to-top gradient fade for text readability */}
         <LinearGradient
-          colors={[
-            'transparent',
-            'rgba(0,0,0,0.25)',
-            'rgba(0,0,0,0.65)',
-            'rgba(0,0,0,0.92)',
-          ]}
+          colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.92)']}
           style={styles.gradient}
         />
 

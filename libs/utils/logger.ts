@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Lightweight logger that mirrors the Swift `Logger.debug/info/warn/error`
  * API used across iOS aniseeker. Debug output is suppressed in production

@@ -3,11 +3,7 @@
 
 import { LocalDB, type PilgrimageRow, type PilgrimageSaveInput } from '../../db';
 import { AnitabiClient, DataSourceError } from '../../clients/anitabi-client';
-import type {
-  AnitabiBangumi,
-  AnitabiPoint,
-  AnitabiPointDetail,
-} from './types';
+import type { AnitabiBangumi, AnitabiPoint, AnitabiPointDetail } from './types';
 
 /** Default lite-cache TTL (7 days) in milliseconds. */
 export const PILGRIMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -82,7 +78,7 @@ export class AnitabiService {
       }
     } catch (err) {
       // SQLite read failures are non-fatal — fall through to network.
-      // eslint-disable-next-line no-console
+
       console.warn('[AnitabiService] SQLite read failed:', err);
     }
 
@@ -127,7 +123,6 @@ export class AnitabiService {
       };
       await this.db.savePilgrimage(save);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[AnitabiService] SQLite write failed:', err);
     }
 

@@ -1,8 +1,9 @@
-export type ViewMode = "discovery" | "tracking" | "trend";
+export type ViewMode = 'discovery' | 'tracking' | 'trend';
 
 export interface Anime {
   id: string;
   title: string;
+  titleEnglish?: string;
   image: string;
   bannerImage?: string;
   rank?: number;
@@ -11,6 +12,7 @@ export interface Anime {
   tags?: string[];
   mood?: string;
   description?: string;
+  episodes?: number;
   durationMinutes?: number;
   studios?: string[];
   startDate?: {
@@ -55,4 +57,3 @@ export type AIRecommendation = {
   anime: Anime | null;
   loading: boolean;
 };
-

@@ -8,38 +8,48 @@ interface GachaControlsProps {
   onShowRanking: () => void;
 }
 
-export function GachaControls({ onShowHistory, onShowCollection, onShowRanking }: GachaControlsProps) {
+export function GachaControls({
+  onShowHistory,
+  onShowCollection,
+  onShowRanking,
+}: GachaControlsProps) {
   return (
     <View style={styles.container}>
       <View style={styles.controlsRow}>
-        <ControlButton 
-          icon={<Ionicons name="time-outline" size={26} color="rgba(255,255,255,0.9)" />} 
-          label="History" 
-          onPress={onShowHistory} 
+        <ControlButton
+          icon={<Ionicons name="time-outline" size={26} color="rgba(255,255,255,0.9)" />}
+          label="History"
+          onPress={onShowHistory}
         />
         <View style={styles.divider} />
-        <ControlButton 
-          icon={<MaterialIcons name="collections" size={26} color="rgba(255,255,255,0.9)" />} 
-          label="Collection" 
-          onPress={onShowCollection} 
+        <ControlButton
+          icon={<MaterialIcons name="collections" size={26} color="rgba(255,255,255,0.9)" />}
+          label="Collection"
+          onPress={onShowCollection}
         />
         <View style={styles.divider} />
-        <ControlButton 
-          icon={<Ionicons name="stats-chart" size={26} color="rgba(255,255,255,0.9)" />} 
-          label="Ranking" 
-          onPress={onShowRanking} 
+        <ControlButton
+          icon={<Ionicons name="stats-chart" size={26} color="rgba(255,255,255,0.9)" />}
+          label="Ranking"
+          onPress={onShowRanking}
         />
       </View>
     </View>
   );
 }
 
-function ControlButton({ icon, label, onPress }: { icon: React.ReactNode, label: string, onPress: () => void }) {
+function ControlButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable onPress={onPress} style={styles.button}>
-      <View style={styles.iconContainer}>
-        {icon}
-      </View>
+      <View style={styles.iconContainer}>{icon}</View>
       <Text style={styles.label}>{label}</Text>
     </Pressable>
   );

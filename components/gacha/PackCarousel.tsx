@@ -11,7 +11,13 @@ interface PackCarouselProps {
   cardsPerPull: number;
 }
 
-export function PackCarousel({ onPull, canAfford, isPulling, pullCost, cardsPerPull }: PackCarouselProps) {
+export function PackCarousel({
+  onPull,
+  canAfford,
+  isPulling,
+  pullCost,
+  cardsPerPull,
+}: PackCarouselProps) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
@@ -27,15 +33,11 @@ export function PackCarousel({ onPull, canAfford, isPulling, pullCost, cardsPerP
           <Text style={styles.subtitle}>
             CONTAINS <Text style={styles.subtitleHighlight}>{cardsPerPull}</Text> SIGNALS
           </Text>
-          
+
           <Pressable
             onPress={onPull}
             disabled={!canAfford || isPulling}
-            style={[
-              styles.pullButton,
-              !canAfford && styles.pullButtonDisabled,
-            ]}
-          >
+            style={[styles.pullButton, !canAfford && styles.pullButtonDisabled]}>
             {isPulling ? (
               <ActivityIndicator color="#000" size="large" />
             ) : (

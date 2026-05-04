@@ -109,9 +109,7 @@ describe('JikanDataSource', () => {
   });
 
   it('MAL-002 searchAnime GETs /anime?q=… with the query string', async () => {
-    const { ds, calls } = buildSubject(() =>
-      fakeJson({ data: [baseAnime({ mal_id: 1 })] })
-    );
+    const { ds, calls } = buildSubject(() => fakeJson({ data: [baseAnime({ mal_id: 1 })] }));
 
     const results = await ds.searchAnime('cowboy', 2);
     expect(results).toHaveLength(1);
@@ -141,9 +139,7 @@ describe('JikanDataSource', () => {
   });
 
   it('MAL-004 fetchTopAnime GETs /top/anime?page=', async () => {
-    const { ds, calls } = buildSubject(() =>
-      fakeJson({ data: [baseAnime({ mal_id: 1 })] })
-    );
+    const { ds, calls } = buildSubject(() => fakeJson({ data: [baseAnime({ mal_id: 1 })] }));
 
     await ds.fetchTopAnime(3);
 
@@ -172,9 +168,7 @@ describe('JikanDataSource', () => {
   });
 
   it('MAL-007 score field maps to malScore unchanged (0-10)', async () => {
-    const { ds } = buildSubject(() =>
-      fakeJson({ data: [baseAnime({ mal_id: 1, score: 8.78 })] })
-    );
+    const { ds } = buildSubject(() => fakeJson({ data: [baseAnime({ mal_id: 1, score: 8.78 })] }));
 
     const [item] = await ds.searchAnime('cowboy', 1);
     expect(item.malScore).toBe(8.78);
@@ -241,7 +235,10 @@ describe('JikanDataSource', () => {
       fakeJson({
         data: baseAnime({
           themes: [{ mal_id: 1, name: 'Space' }],
-          demographics: [{ mal_id: 1, name: 'Seinen' }, { mal_id: 2, name: 'Space' }],
+          demographics: [
+            { mal_id: 1, name: 'Seinen' },
+            { mal_id: 2, name: 'Space' },
+          ],
         }),
       })
     );
@@ -260,9 +257,7 @@ describe('JikanDataSource', () => {
   });
 
   it('Detail mapping: season string lowercase becomes UPPERCASE', async () => {
-    const { ds } = buildSubject(() =>
-      fakeJson({ data: baseAnime({ season: 'spring' }) })
-    );
+    const { ds } = buildSubject(() => fakeJson({ data: baseAnime({ season: 'spring' }) }));
 
     const item = await ds.fetchAnimeDetail('1');
     expect(item.season).toBe('SPRING');

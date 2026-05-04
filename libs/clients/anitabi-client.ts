@@ -2,10 +2,7 @@
 // Domain logic (caching, fallback, ID resolution) lives in
 // libs/services/pilgrimage/ — this module only knows how to make requests.
 
-import type {
-  AnitabiBangumi,
-  AnitabiPointDetail,
-} from '../services/pilgrimage/types';
+import type { AnitabiBangumi, AnitabiPointDetail } from '../services/pilgrimage/types';
 
 const ANITABI_BASE_URL = 'https://api.anitabi.cn';
 const USER_AGENT = 'Aniseekr/1.0';
@@ -53,14 +50,8 @@ export class AnitabiClient {
    * GET /bangumi/{id}/lite — small payload with sample points.
    * Returns null when the anime has no pilgrimage entry (HTTP 404).
    */
-  static async getLite(
-    bangumiId: number,
-    opts: FetchOptions = {}
-  ): Promise<AnitabiBangumi | null> {
-    return AnitabiClient.request<AnitabiBangumi>(
-      `/bangumi/${bangumiId}/lite`,
-      opts
-    );
+  static async getLite(bangumiId: number, opts: FetchOptions = {}): Promise<AnitabiBangumi | null> {
+    return AnitabiClient.request<AnitabiBangumi>(`/bangumi/${bangumiId}/lite`, opts);
   }
 
   /**
@@ -71,26 +62,16 @@ export class AnitabiClient {
     bangumiId: number,
     opts: FetchOptions = {}
   ): Promise<AnitabiPointDetail[] | null> {
-    return AnitabiClient.request<AnitabiPointDetail[]>(
-      `/bangumi/${bangumiId}/points/detail`,
-      opts
-    );
+    return AnitabiClient.request<AnitabiPointDetail[]>(`/bangumi/${bangumiId}/points/detail`, opts);
   }
 
-  private static async request<T>(
-    path: string,
-    opts: FetchOptions
-  ): Promise<T | null> {
+  private static async request<T>(path: string, opts: FetchOptions): Promise<T | null> {
     const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     if (typeof fetchImpl !== 'function') {
-      throw new DataSourceError(
-        'NETWORK_ERROR',
-        'fetch is not available in this environment'
-      );
+      throw new DataSourceError('NETWORK_ERROR', 'fetch is not available in this environment');
     }
 
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timeoutMs = opts.timeoutMs ?? 30_000;
     const timer =
       controller !== undefined && timeoutMs > 0
@@ -121,10 +102,7 @@ export class AnitabiClient {
       return null;
     }
     if (response.status === 429) {
-      throw new DataSourceError(
-        'RATE_LIMITED',
-        'Anitabi rate limit exceeded'
-      );
+      throw new DataSourceError('RATE_LIMITED', 'Anitabi rate limit exceeded');
     }
     if (!response.ok) {
       throw new DataSourceError(

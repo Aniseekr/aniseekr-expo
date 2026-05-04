@@ -106,24 +106,13 @@ const GenreCarouselItem = memo(function GenreCarouselItem({
   ];
 
   const animatedStyle = useAnimatedStyle(() => {
-    const scale = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.88, 1, 0.88],
-      Extrapolation.CLAMP
-    );
-    const opacity = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.55, 1, 0.55],
-      Extrapolation.CLAMP
-    );
+    const scale = interpolate(scrollX.value, inputRange, [0.88, 1, 0.88], Extrapolation.CLAMP);
+    const opacity = interpolate(scrollX.value, inputRange, [0.55, 1, 0.55], Extrapolation.CLAMP);
     return { transform: [{ scale }], opacity };
   });
 
   return (
-    <Animated.View
-      style={[{ width: cardWidth, marginRight: spacing }, animatedStyle]}>
+    <Animated.View style={[{ width: cardWidth, marginRight: spacing }, animatedStyle]}>
       <View style={{ alignItems: 'center' }}>
         <GenreCard
           title={genre.displayName}

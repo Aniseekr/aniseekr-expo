@@ -14,8 +14,7 @@ import { rateLimiter } from '../services/rate-limiter';
 import { DataSourceError } from '../services/data-sources/data-source-error';
 
 export const BANGUMI_BASE_URL = 'https://api.bgm.tv';
-export const BANGUMI_USER_AGENT =
-  'Aniseekr/1.0 (https://github.com/Aniseekr)';
+export const BANGUMI_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
 
 // MARK: - Wire types (Bangumi v0 subject + search responses)
 
@@ -48,7 +47,7 @@ export interface BangumiCollection {
 
 export interface BangumiInfoboxField {
   key: string;
-  value: string | Array<{ v?: string; k?: string }>;
+  value: string | { v?: string; k?: string }[];
 }
 
 /** Bangumi v0 subject — used for both detail and search results. */
@@ -103,8 +102,9 @@ export function normalizeBangumiImage(url: string | null | undefined): string | 
   // Inspect host portion of the URL.
   // Pattern: http://<host>/...
   const slashEnd = url.indexOf('/', 'http://'.length);
-  const host = (slashEnd >= 0 ? url.slice('http://'.length, slashEnd) : url.slice('http://'.length))
-    .toLowerCase();
+  const host = (
+    slashEnd >= 0 ? url.slice('http://'.length, slashEnd) : url.slice('http://'.length)
+  ).toLowerCase();
   if (host.endsWith('bgm.tv')) {
     return 'https://' + url.slice('http://'.length);
   }
@@ -127,10 +127,7 @@ export class BangumiClient {
    * GET `/v0/subjects/{id}` — full Bangumi v0 subject record (Chinese title,
    * tags, infobox aliases, rating distribution, ...).
    */
-  static async getSubject(
-    id: number | string,
-    opts: FetchOptions = {}
-  ): Promise<BangumiV0Subject> {
+  static async getSubject(id: number | string, opts: FetchOptions = {}): Promise<BangumiV0Subject> {
     const result = await BangumiClient.request<BangumiV0Subject>(
       `/v0/subjects/${encodeURIComponent(String(id))}`,
       { method: 'GET' },
@@ -176,9 +173,7 @@ export class BangumiClient {
   }
 
   /** GET `/calendar` — current week's broadcasting anime. */
-  static async getCalendar(
-    opts: FetchOptions = {}
-  ): Promise<BangumiCalendarGroup[]> {
+  static async getCalendar(opts: FetchOptions = {}): Promise<BangumiCalendarGroup[]> {
     const result = await BangumiClient.request<BangumiCalendarGroup[]>(
       '/calendar',
       { method: 'GET' },
@@ -216,8 +211,7 @@ export class BangumiClient {
       headers.Authorization = `Bearer ${opts.accessToken}`;
     }
 
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timeoutMs = opts.timeoutMs ?? 30_000;
     const timer =
       controller !== undefined && timeoutMs > 0

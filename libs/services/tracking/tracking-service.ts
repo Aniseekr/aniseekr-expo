@@ -143,6 +143,51 @@ export class TrackingService {
     }
   }
 
+  async upsertTracking(input: {
+    animeId: string;
+    status: AnimeStatus;
+    score?: number;
+    progress?: number;
+    totalEpisodes?: number;
+    title?: string;
+    imageUrl?: string;
+    folderId?: string;
+  }): Promise<void> {
+    const db = await LocalDB.getDatabase();
+    const now = Date.now();
+
+    await db.runAsync(
+      `INSERT INTO user_anime (
+        anime_id, title, image_url, status, score, progress, total_episodes, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(anime_id) DO UPDATE SET
+        status = excluded.status,
+        score = COALESCE(excluded.score, user_anime.score),
+        progress = COALESCE(excluded.progress, user_anime.progress),
+        total_episodes = COALESCE(excluded.total_episodes, user_anime.total_episodes),
+        title = COALESCE(excluded.title, user_anime.title),
+        image_url = COALESCE(excluded.image_url, user_anime.image_url),
+        updated_at = excluded.updated_at`,
+      input.animeId,
+      input.title ?? null,
+      input.imageUrl ?? null,
+      input.status,
+      input.score ?? null,
+      input.progress ?? 0,
+      input.totalEpisodes ?? null,
+      now
+    );
+
+    if (input.folderId) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO collection_folder_items (folder_id, anime_id, added_at) VALUES (?, ?, ?)`,
+        input.folderId,
+        input.animeId,
+        now
+      );
+    }
+  }
+
   async getStatus(animeId: string): Promise<UserAnimeStatus | null> {
     const db = await LocalDB.getDatabase();
     const row = await db.getFirstAsync<{

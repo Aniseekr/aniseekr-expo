@@ -24,26 +24,26 @@ function GlassCardComponent({
     if (intensity !== undefined) return intensity;
     switch (variant) {
       case 'clear':
-        return 10;
+        return 20;
       case 'frosted':
-        return 60;
+        return 80;
       case 'dark':
-        return 40;
+        return 60;
       default:
-        return 30;
+        return 50;
     }
   };
 
-  const getTint = () => {
+  const getTint = (): React.ComponentProps<typeof BlurView>['tint'] => {
     switch (variant) {
       case 'clear':
-        return 'light';
+        return 'systemUltraThinMaterialDark';
       case 'frosted':
-        return 'default';
+        return 'systemThickMaterialDark';
       case 'dark':
-        return 'dark';
+        return 'systemThickMaterialDark';
       default:
-        return 'dark';
+        return 'systemThickMaterialDark';
     }
   };
 
@@ -53,6 +53,7 @@ function GlassCardComponent({
   if (Platform.OS === 'ios') {
     return (
       <BlurView intensity={getIntensity()} tint={getTint()} style={baseStyle} {...props}>
+        <View style={styles.innerBorder} pointerEvents="none" />
         <View className={`bg-white/5 ${className || ''}`}>{children}</View>
       </BlurView>
     );
@@ -64,6 +65,7 @@ function GlassCardComponent({
       className={`bg-white/10 ${className || ''}`}
       style={[styles.base, styles.android, style]}
       {...props}>
+      <View style={styles.innerBorder} pointerEvents="none" />
       {children}
     </View>
   );
@@ -75,6 +77,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: Colors.glass.border,
+  },
+  innerBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   darkBorder: {
     borderColor: Colors.glass.dark,

@@ -24,11 +24,11 @@ const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
  */
 export interface AniListGraphQLResponse<T> {
   data?: T;
-  errors?: Array<{
+  errors?: {
     message: string;
     status?: number;
     locations?: unknown[];
-  }>;
+  }[];
 }
 
 export interface AniListClientOptions {
@@ -64,17 +64,17 @@ export interface AniListAnime {
   season: string | null;
   seasonYear: number | null;
   genres: string[];
-  tags: Array<{
+  tags: {
     name: string;
     rank: number;
     description: string | null;
     category: string | null;
     isMediaSpoiler?: boolean;
-  }>;
+  }[];
   studios: {
-    nodes: Array<{
+    nodes: {
       name: string;
-    }>;
+    }[];
   };
   startDate: {
     year: number | null;
@@ -283,10 +283,10 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(
-      query,
-      { page, perPage }
-    );
+    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
+      page,
+      perPage,
+    });
     return data.Page.media;
   }
 
@@ -303,10 +303,10 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(
-      query,
-      { page, perPage }
-    );
+    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
+      page,
+      perPage,
+    });
     return data.Page.media;
   }
 
@@ -328,18 +328,16 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(
-      query,
-      { page, perPage, season: season.toUpperCase(), seasonYear: year }
-    );
+    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
+      page,
+      perPage,
+      season: season.toUpperCase(),
+      seasonYear: year,
+    });
     return data.Page.media;
   }
 
-  static async searchAnime(
-    search: string,
-    page = 1,
-    perPage = 20
-  ): Promise<AniListAnime[]> {
+  static async searchAnime(search: string, page = 1, perPage = 20): Promise<AniListAnime[]> {
     const query = `
       query ($page: Int, $perPage: Int, $search: String) {
         Page(page: $page, perPage: $perPage) {
@@ -352,18 +350,15 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(
-      query,
-      { page, perPage, search }
-    );
+    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
+      page,
+      perPage,
+      search,
+    });
     return data.Page.media;
   }
 
-  static async getAnimeByGenre(
-    genre: string,
-    page = 1,
-    perPage = 20
-  ): Promise<AniListAnime[]> {
+  static async getAnimeByGenre(genre: string, page = 1, perPage = 20): Promise<AniListAnime[]> {
     const query = `
       query ($page: Int, $perPage: Int, $genre: String) {
         Page(page: $page, perPage: $perPage) {
@@ -376,10 +371,11 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(
-      query,
-      { page, perPage, genre }
-    );
+    const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
+      page,
+      perPage,
+      genre,
+    });
     return data.Page.media;
   }
 
@@ -394,10 +390,9 @@ export class AniListClient {
       }
       ${MEDIA_FRAGMENT}
     `;
-    const data = await AniListClient.getDefaultInstance().query<{ Media: AniListAnime }>(
-      query,
-      { id }
-    );
+    const data = await AniListClient.getDefaultInstance().query<{ Media: AniListAnime }>(query, {
+      id,
+    });
     return data.Media;
   }
 
@@ -407,9 +402,7 @@ export class AniListClient {
         GenreCollection
       }
     `;
-    const data = await AniListClient.getDefaultInstance().query<GenreCollectionResponse>(
-      query
-    );
+    const data = await AniListClient.getDefaultInstance().query<GenreCollectionResponse>(query);
     return data.GenreCollection;
   }
 }

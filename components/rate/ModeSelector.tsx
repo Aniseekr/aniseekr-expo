@@ -4,11 +4,7 @@
 import { memo, useEffect } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet, useWindowDimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Colors, FontFamily, Radius, Shadow } from '../../constants/DesignSystem';
 
 export type ModeSelectorOption<T extends string = string> = {
@@ -59,16 +55,13 @@ function ModeSelectorComponent<T extends string = string>({
   return (
     <View style={[styles.pill, { borderRadius: Radius.tabBar }]}>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={40} tint="systemThickMaterialDark" style={StyleSheet.absoluteFill} />
       ) : null}
       <View style={styles.pillBackground} pointerEvents="none" />
       <View style={[styles.pillBorder, { borderRadius: Radius.tabBar }]} pointerEvents="none" />
 
       <View style={styles.row}>
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.indicator, indicatorStyle]}
-        />
+        <Animated.View pointerEvents="none" style={[styles.indicator, indicatorStyle]} />
         {options.map((option) => {
           const isActive = option.value === value;
           return (
@@ -78,11 +71,7 @@ function ModeSelectorComponent<T extends string = string>({
               style={styles.segment}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}>
-              <Text
-                style={[
-                  styles.label,
-                  isActive ? styles.labelActive : styles.labelInactive,
-                ]}>
+              <Text style={[styles.label, isActive ? styles.labelActive : styles.labelInactive]}>
                 {option.label}
               </Text>
             </Pressable>

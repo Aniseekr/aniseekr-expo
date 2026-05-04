@@ -1,65 +1,106 @@
-// Inline badge shown on UnifiedAnimeItem cards when the anime has pilgrimage
-// data. Loads lazily; renders nothing until data arrives.
+// Inline badge shown on anime cards/list items when the anime has pilgrimage
+// data. Loads lazily; renders nothing until data arrives. Optionally tappable
+// — provide `onPress` to make it act as a shortcut into the pilgrimage detail.
 //
 // Spec: spec/pilgrimage_spec.md §7 (NearbyPilgrimageBadge).
 
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
 import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
 
 export type NearbyPilgrimageBadgeVariant = 'icon' | 'pill';
 
-export interface NearbyPilgrimageBadgeProps {
-  bangumiId: number;
+interface BaseProps {
   variant?: NearbyPilgrimageBadgeVariant;
+  /** Tap handler. Receives the resolved pilgrimage payload. */
+  onPress?: (anime: AnitabiBangumi) => void;
 }
 
-export function NearbyPilgrimageBadge({
-  bangumiId,
-  variant = 'pill',
-}: NearbyPilgrimageBadgeProps) {
+interface ByBangumiId extends BaseProps {
+  bangumiId: number;
+  sourcePlatform?: never;
+  id?: never;
+}
+
+interface ByPlatformId extends BaseProps {
+  sourcePlatform: string;
+  id: string | number;
+  bangumiId?: never;
+}
+
+export type NearbyPilgrimageBadgeProps = ByBangumiId | ByPlatformId;
+
+export function NearbyPilgrimageBadge(props: NearbyPilgrimageBadgeProps) {
+  const { variant = 'pill', onPress } = props;
+  const bangumiId = 'bangumiId' in props ? props.bangumiId : undefined;
+  const sourcePlatform = 'sourcePlatform' in props ? props.sourcePlatform : undefined;
+  const sourceId = 'id' in props ? props.id : undefined;
   const [data, setData] = useState<AnitabiBangumi | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setData(null);
 
-    pilgrimageRepository
-      .getSpotsByBangumiId(bangumiId)
+    const fetcher = bangumiId
+      ? pilgrimageRepository.getSpotsByBangumiId(bangumiId)
+      : pilgrimageRepository.getSpotsForAnime({
+          sourcePlatform,
+          id: sourceId,
+        });
+
+    fetcher
       .then((result) => {
-        if (cancelled) return;
-        setData(result);
+        if (!cancelled) setData(result);
       })
       .catch((err) => {
-        // Swallow — a fetch failure should never break the host card.
-        // eslint-disable-next-line no-console
         console.warn('[NearbyPilgrimageBadge] fetch failed:', err);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [bangumiId]);
+  }, [bangumiId, sourcePlatform, sourceId]);
 
   if (!data) return null;
 
+  const handlePress = () => {
+    if (!onPress) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    onPress(data);
+  };
+
   if (variant === 'icon') {
+    const Wrapper: typeof Pressable | typeof View = onPress ? Pressable : View;
     return (
-      <View style={styles.iconBadge} testID="pilgrimage-badge-icon">
+      <Wrapper
+        onPress={onPress ? handlePress : undefined}
+        style={styles.iconBadge}
+        testID="pilgrimage-badge-icon">
         <Ionicons name="location" size={12} color="#FFFFFF" />
-      </View>
+      </Wrapper>
     );
   }
 
+  const Wrapper: typeof Pressable | typeof View = onPress ? Pressable : View;
   return (
-    <View style={styles.pill} testID="pilgrimage-badge-pill">
+    <Wrapper
+      onPress={onPress ? handlePress : undefined}
+      style={({ pressed }: { pressed?: boolean }) => [
+        styles.pill,
+        onPress && pressed ? styles.pillPressed : null,
+      ]}
+      testID="pilgrimage-badge-pill">
       <Ionicons name="location" size={12} color="#FFFFFF" />
       <Text style={styles.pillText} numberOfLines={1}>
         {data.city || `${data.pointsLength} spots`}
       </Text>
-    </View>
+      {onPress ? (
+        <Ionicons name="chevron-forward" size={11} color="rgba(255,255,255,0.85)" />
+      ) : null}
+    </Wrapper>
   );
 }
 
@@ -73,6 +114,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
     alignSelf: 'flex-start',
+  },
+  pillPressed: {
+    opacity: 0.75,
   },
   pillText: {
     color: '#FFFFFF',

@@ -1,11 +1,4 @@
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -83,7 +76,6 @@ export default function DataSourceScreen() {
         // Fire-and-forget; coordinator updates state via subscription.
         void dataSourceSwitchingCoordinator.beginSwitch(previous, platform);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[DataSourceScreen] setBrowseSource failed', err);
       }
     },
@@ -110,8 +102,8 @@ export default function DataSourceScreen() {
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.description}>
-            Select the platform used to power discovery and seasonal browsing. This does not
-            change which platforms sync your library.
+            Select the platform used to power discovery and seasonal browsing. This does not change
+            which platforms sync your library.
           </Text>
 
           {initLoading ? (
@@ -123,8 +115,7 @@ export default function DataSourceScreen() {
               {platforms.map((platform, index) => {
                 const isSelected = platform.platform === browseSource;
                 const isSwitchingTo =
-                  switchingState.kind === 'switching' &&
-                  switchingState.to === platform.platform;
+                  switchingState.kind === 'switching' && switchingState.to === platform.platform;
                 return (
                   <View key={platform.platform}>
                     <Pressable
@@ -133,17 +124,9 @@ export default function DataSourceScreen() {
                         styles.row,
                         pressed && { backgroundColor: Colors.glass.light },
                       ]}
-                      disabled={
-                        switchingState.kind === 'switching' || isSelected
-                      }
-                    >
+                      disabled={switchingState.kind === 'switching' || isSelected}>
                       <View style={styles.rowLeft}>
-                        <View
-                          style={[
-                            styles.iconCircle,
-                            { backgroundColor: platform.color },
-                          ]}
-                        >
+                        <View style={[styles.iconCircle, { backgroundColor: platform.color }]}>
                           <Text style={styles.iconLetter}>
                             {platform.displayName.substring(0, 1)}
                           </Text>
@@ -157,16 +140,9 @@ export default function DataSourceScreen() {
                       </View>
                       <View style={styles.rowRight}>
                         {isSwitchingTo ? (
-                          <ActivityIndicator
-                            color={Colors.text.primary}
-                            size="small"
-                          />
+                          <ActivityIndicator color={Colors.text.primary} size="small" />
                         ) : isSelected ? (
-                          <Ionicons
-                            name="checkmark-circle"
-                            size={22}
-                            color={Colors.success}
-                          />
+                          <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
                         ) : (
                           <Ionicons
                             name="radio-button-off"
@@ -184,9 +160,7 @@ export default function DataSourceScreen() {
           )}
 
           {switchingState.kind === 'failed' ? (
-            <Text style={styles.errorText}>
-              Switch failed: {switchingState.error.message}
-            </Text>
+            <Text style={styles.errorText}>Switch failed: {switchingState.error.message}</Text>
           ) : null}
         </ScrollView>
       </SafeAreaView>

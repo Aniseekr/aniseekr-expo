@@ -46,6 +46,7 @@ import { queryClient, type QueryKeyObject } from '../services/query-client';
 import { idMappingService } from '../services/sync/id-mapping-service';
 import { AnnictClient } from '../clients/annict-client';
 import { Logger } from '../utils/logger';
+import { achievementService } from '../services/achievements/achievement-service';
 
 const SEASONAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const GENRES_STALE_TIME_MS = 60 * 60 * 1000; // 1 hour
@@ -85,16 +86,8 @@ export function unifiedToLegacyAnime(item: UnifiedAnimeItem): Anime {
   return {
     id: item.id,
     title:
-      item.titleEnglish ||
-      item.title ||
-      item.titleRomaji ||
-      item.titleJapanese ||
-      'Unknown Title',
-    image:
-      item.bestImage('extraLarge') ??
-      item.bestImage('large') ??
-      item.coverImageURL ??
-      '',
+      item.titleEnglish || item.title || item.titleRomaji || item.titleJapanese || 'Unknown Title',
+    image: item.bestImage('extraLarge') ?? item.bestImage('large') ?? item.coverImageURL ?? '',
     bannerImage: item.bestImage('banner') ?? item.bannerImageURL ?? undefined,
     rank: item.anilistScore ?? Math.round((item.normalizedScore ?? 0) * 10),
     score: item.normalizedScore ?? undefined,
@@ -191,9 +184,7 @@ export class AnimeRepository {
     const idStr = String(id);
     const key = makeKey('animeDetail', { source: source.type, id: idStr });
 
-    return this.queryClientImpl.fetch(key, async () =>
-      source.fetchAnimeDetail(idStr, source.type)
-    );
+    return this.queryClientImpl.fetch(key, async () => source.fetchAnimeDetail(idStr, source.type));
   }
 
   async searchAnime(
@@ -209,15 +200,10 @@ export class AnimeRepository {
       page: pageNum,
     });
 
-    return this.queryClientImpl.fetch(key, async () =>
-      source.searchAnime(query, pageNum)
-    );
+    return this.queryClientImpl.fetch(key, async () => source.searchAnime(query, pageNum));
   }
 
-  async fetchTopAnime(
-    page?: number,
-    preferredSource?: PlatformType
-  ): Promise<UnifiedAnimeItem[]> {
+  async fetchTopAnime(page?: number, preferredSource?: PlatformType): Promise<UnifiedAnimeItem[]> {
     const source = this.resolveSource(preferredSource);
     const pageNum = page ?? 1;
     const key = makeKey('topAnime', { source: source.type, page: pageNum });
@@ -272,8 +258,7 @@ export class AnimeRepository {
     // 2. Disk cache write — only if non-empty AND source still matches OR
     //    explicit preferredSource was passed.
     const currentBrowseSource = this.config.browseSource;
-    const sourceMatches =
-      currentBrowseSource === requestPlatform || preferredSource !== undefined;
+    const sourceMatches = currentBrowseSource === requestPlatform || preferredSource !== undefined;
     if (result.length > 0 && sourceMatches) {
       await this.cacheServiceImpl.set(cacheKey, result, SEASONAL_CACHE_TTL_MS);
     }
@@ -337,10 +322,7 @@ export class AnimeRepository {
 
   // MARK: - Cross-platform media data
 
-  async fetchAnimeStaff(
-    id: number,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeStaff[]> {
+  async fetchAnimeStaff(id: number, sourcePlatform?: PlatformType): Promise<AnimeStaff[]> {
     const source = this.resolveSource(undefined);
     const originPlatform = sourcePlatform ?? source.type;
 
@@ -365,10 +347,7 @@ export class AnimeRepository {
     return result;
   }
 
-  async fetchAnimeRelations(
-    id: number,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeRelation[]> {
+  async fetchAnimeRelations(id: number, sourcePlatform?: PlatformType): Promise<AnimeRelation[]> {
     const source = this.resolveSource(undefined);
     const originPlatform = sourcePlatform ?? source.type;
 
@@ -391,10 +370,7 @@ export class AnimeRepository {
     return result;
   }
 
-  async fetchAnimeStreaming(
-    id: number,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeStreaming[]> {
+  async fetchAnimeStreaming(id: number, sourcePlatform?: PlatformType): Promise<AnimeStreaming[]> {
     const source = this.resolveSource(undefined);
     const originPlatform = sourcePlatform ?? source.type;
 
@@ -417,10 +393,7 @@ export class AnimeRepository {
     return result;
   }
 
-  async fetchAnimeThemes(
-    id: number,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeTheme | null> {
+  async fetchAnimeThemes(id: number, sourcePlatform?: PlatformType): Promise<AnimeTheme | null> {
     const source = this.resolveSource(undefined);
     const originPlatform = sourcePlatform ?? source.type;
     const queryId = await this.translateId(id, originPlatform, source.type);
@@ -451,7 +424,7 @@ export class AnimeRepository {
   async fetchMultiPlatformRatings(
     id: number,
     sourcePlatform?: PlatformType
-  ): Promise<PlatformRatingData[]> {
+  ): Promise<{ platform: PlatformType; data: PlatformRatingData }[]> {
     const platforms: PlatformType[] = ['myanimelist', 'bangumi', 'anilist'];
     const originPlatform = sourcePlatform ?? 'myanimelist';
 
@@ -481,9 +454,10 @@ export class AnimeRepository {
 
     return settled
       .map((v, idx) => (v ? { platform: platforms[idx], data: v } : null))
-      .filter((entry): entry is { platform: PlatformType; data: PlatformRatingData } => entry !== null)
-      .sort((a, b) => (order[a.platform] ?? 999) - (order[b.platform] ?? 999))
-      .map((entry) => entry.data);
+      .filter(
+        (entry): entry is { platform: PlatformType; data: PlatformRatingData } => entry !== null
+      )
+      .sort((a, b) => (order[a.platform] ?? 999) - (order[b.platform] ?? 999));
   }
 
   // MARK: - Source resolution + ID translation
@@ -563,10 +537,7 @@ export class AnimeRepository {
   }
 
   /** Resolve a MAL id from any-platform id via IDMappingService. */
-  private async resolveMalId(
-    id: number,
-    sourcePlatform: PlatformType
-  ): Promise<number | null> {
+  private async resolveMalId(id: number, sourcePlatform: PlatformType): Promise<number | null> {
     if (sourcePlatform === 'myanimelist') return id;
     const mapped = await this.idMapping.translate(id, sourcePlatform, 'myanimelist');
     if (mapped == null) return null;
@@ -603,11 +574,7 @@ export class AnimeRepository {
     return data.map(mapAniListToAnime);
   }
 
-  static async getSeasonalAnime(
-    season?: string,
-    year?: number,
-    page = 1
-  ): Promise<Anime[]> {
+  static async getSeasonalAnime(season?: string, year?: number, page = 1): Promise<Anime[]> {
     const date = new Date();
     const currentMonth = date.getMonth();
     const currentYear = date.getFullYear();
@@ -662,8 +629,7 @@ export class AnimeRepository {
       genres.slice(0, 20).map(async (name) => {
         try {
           const anime = await AniListClient.getAnimeByGenre(name, 1, 1);
-          const image =
-            anime[0]?.coverImage?.extraLarge ?? anime[0]?.coverImage?.large ?? '';
+          const image = anime[0]?.coverImage?.extraLarge ?? anime[0]?.coverImage?.large ?? '';
           return {
             id: name,
             displayName: name,
@@ -691,6 +657,9 @@ export class AnimeRepository {
 
   static async rateAnime(id: string, action: 'like' | 'pass'): Promise<void> {
     await LocalDB.addRating(id, action);
+    const stats = await LocalDB.getStats();
+    await achievementService.track('rating.total', 1, stats.totalRated);
+
     if (action === 'like') {
       const anime = await AnimeRepository.getAnimeDetails(id);
       await LocalDB.addFavorite({
@@ -698,6 +667,12 @@ export class AnimeRepository {
         title: anime.title,
         image: anime.image,
       });
+      const collection = await LocalDB.getFavorites();
+      await achievementService.track('rating.like', 1, stats.likedCount);
+      await achievementService.track('collection.add', 1);
+      await achievementService.track('collection.size', 0, collection.length);
+    } else {
+      await achievementService.track('rating.pass', 1);
     }
   }
 
@@ -737,8 +712,7 @@ export class AnimeRepository {
 function mapAniListToAnime(item: AniListAnime): Anime {
   return {
     id: String(item.id),
-    title:
-      item.title.english || item.title.romaji || item.title.native || 'Unknown Title',
+    title: item.title.english || item.title.romaji || item.title.native || 'Unknown Title',
     image: item.coverImage.extraLarge || item.coverImage.large,
     rank: item.averageScore || 0,
     score: item.averageScore || 0,
@@ -752,10 +726,13 @@ function mapAniListToAnime(item: AniListAnime): Anime {
 }
 
 function mapAniListDetailToAnime(item: AniListAnime): Anime {
+  const primary = item.title.english || item.title.romaji || item.title.native || 'Unknown Title';
+  const english =
+    item.title.english && item.title.english !== primary ? item.title.english : undefined;
   return {
     id: String(item.id),
-    title:
-      item.title.english || item.title.romaji || item.title.native || 'Unknown Title',
+    title: primary,
+    titleEnglish: english,
     image: item.coverImage.extraLarge || item.coverImage.large,
     bannerImage: item.bannerImage || undefined,
     rank: item.averageScore || 0,
@@ -764,6 +741,7 @@ function mapAniListDetailToAnime(item: AniListAnime): Anime {
     tags: item.genres,
     mood: item.description ? item.description.replace(/<[^>]*>?/gm, '') : '',
     description: item.description ? item.description.replace(/<[^>]*>?/gm, '') : undefined,
+    episodes: item.episodes ?? undefined,
     durationMinutes: item.duration || 24,
     studios: item.studios?.nodes?.map((node) => node.name) || undefined,
     startDate: item.startDate || undefined,

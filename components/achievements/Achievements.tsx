@@ -177,7 +177,7 @@ export function AchievementsList({
             achievement={achievement}
             unlocked={achievement.unlocked}
             progress={achievement.progress}
-            onPress={onAchievementPress}
+            onPress={() => onAchievementPress(achievement)}
           />
         </TouchableOpacity>
       ))}
@@ -341,13 +341,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     lineHeight: 22,
     marginBottom: 16,
-  },
-
-  progressLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 4,
   },
 
   dialogActions: {

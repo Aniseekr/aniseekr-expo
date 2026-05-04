@@ -83,9 +83,7 @@ describe('SimklDataSource', () => {
   });
 
   it('SIMKL-001 sends the simkl-api-key header on every request', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse(buildSimklDetail()),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse(buildSimklDetail())]);
     activeSpy = spy;
 
     await source.fetchAnimeDetail('36603');
@@ -98,9 +96,7 @@ describe('SimklDataSource', () => {
   });
 
   it('SIMKL-002 fetchAnimeDetail uses /anime/{id} with extended=full', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse(buildSimklDetail()),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse(buildSimklDetail())]);
     activeSpy = spy;
 
     const item = await source.fetchAnimeDetail('36603');
@@ -113,9 +109,7 @@ describe('SimklDataSource', () => {
   });
 
   it('SIMKL-003 searchAnime hits /search/anime?q={q}', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse([buildSimklSearchItem()]),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse([buildSimklSearchItem()])]);
     activeSpy = spy;
 
     const items = await source.searchAnime('cowboy');
@@ -127,9 +121,7 @@ describe('SimklDataSource', () => {
   });
 
   it('SIMKL-004 fetchTopAnime hits /anime/best/{currentYear}', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse([buildSimklSearchItem()]),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse([buildSimklSearchItem()])]);
     activeSpy = spy;
 
     await source.fetchTopAnime();
@@ -177,9 +169,7 @@ describe('SimklDataSource', () => {
     activeSpy = spy;
 
     const item = await source.fetchAnimeDetail('36603');
-    expect(item.coverImageURL).toBe(
-      'https://wsrv.nl/?url=https://simkl.in/posters/36/36603_w.jpg'
-    );
+    expect(item.coverImageURL).toBe('https://wsrv.nl/?url=https://simkl.in/posters/36/36603_w.jpg');
 
     // The helper itself should also produce the same URL for direct callers.
     expect(wrapSimklPoster('36/36603_w.jpg')).toBe(

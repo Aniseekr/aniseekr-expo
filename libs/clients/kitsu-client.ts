@@ -19,10 +19,7 @@ export interface KitsuRequestOptions {
  * Build a fully-qualified URL from a path and query params, encoding values
  * the way JSON:API expects (e.g. `filter[text]=foo`).
  */
-function buildUrl(
-  path: string,
-  params: Record<string, string | number | undefined> = {}
-): string {
+function buildUrl(path: string, params: Record<string, string | number | undefined> = {}): string {
   const url = new URL(`${KITSU_BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) continue;
@@ -72,8 +69,7 @@ export class KitsuClient {
 
     await rateLimiter.waitForAvailability('kitsu');
 
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : undefined;
     const timeoutMs = opts.timeoutMs ?? 30_000;
     const timer =
       controller !== undefined && timeoutMs > 0

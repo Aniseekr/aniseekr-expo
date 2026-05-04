@@ -1,9 +1,9 @@
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Photo } from "./types";
-import Animated, { FadeInUp, FadeOutDown, Layout } from "react-native-reanimated";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { BlurView } from "expo-blur";
-import { LinearGradient } from "expo-linear-gradient";
+import { Platform, View, Text, Pressable, StyleSheet } from 'react-native';
+import { Photo } from './types';
+import Animated, { FadeInUp, FadeOutDown, Layout } from 'react-native-reanimated';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = {
   photo: Photo | null;
@@ -14,27 +14,29 @@ type Props = {
 export function RatingInfoOverlay({ photo, onClose, onMoreDetails }: Props) {
   if (!photo) return null;
 
-  const formattedScore = photo.score 
-    ? photo.score >= 10 
-      ? photo.score.toFixed(0) 
+  const formattedScore = photo.score
+    ? photo.score >= 10
+      ? photo.score.toFixed(0)
       : photo.score.toFixed(1)
-    : "N/A";
+    : 'N/A';
 
   return (
-    <Animated.View 
-      entering={FadeInUp.springify().damping(18)} 
+    <Animated.View
+      entering={FadeInUp.springify().damping(18)}
       exiting={FadeOutDown.springify()}
       layout={Layout.springify()}
-      style={styles.container}
-    >
+      style={styles.container}>
       {/* Glassmorphism Card */}
       <View style={styles.card}>
-        <BlurView intensity={60} tint="dark" style={styles.blurView}>
+        <BlurView
+          intensity={80}
+          tint={Platform.OS === 'ios' ? 'systemThickMaterialDark' : 'dark'}
+          style={styles.blurView}>
           {/* Title Row */}
           <View style={styles.titleRow}>
             <View style={styles.titleContainer}>
               <Text style={styles.title} numberOfLines={2}>
-                {photo.title || "Unknown Title"}
+                {photo.title || 'Unknown Title'}
               </Text>
               {photo.jpTitle && photo.jpTitle !== photo.title && (
                 <Text style={styles.subtitle} numberOfLines={1}>
@@ -42,7 +44,7 @@ export function RatingInfoOverlay({ photo, onClose, onMoreDetails }: Props) {
                 </Text>
               )}
             </View>
-            
+
             {/* Score Badge */}
             <View style={styles.scoreBadge}>
               <Ionicons name="star" size={16} color="#FBBF24" />
@@ -54,12 +56,12 @@ export function RatingInfoOverlay({ photo, onClose, onMoreDetails }: Props) {
           <View style={styles.metadataRow}>
             <View style={styles.metadataItem}>
               <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.metadataText}>{photo.year || "Unknown"}</Text>
+              <Text style={styles.metadataText}>{photo.year || 'Unknown'}</Text>
             </View>
             <View style={styles.metadataSeparator} />
             <View style={styles.metadataItem}>
               <Ionicons name="tv-outline" size={12} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.metadataText}>{photo.type || "Anime"}</Text>
+              <Text style={styles.metadataText}>{photo.type || 'Anime'}</Text>
             </View>
           </View>
 
@@ -76,10 +78,7 @@ export function RatingInfoOverlay({ photo, onClose, onMoreDetails }: Props) {
 
           {/* Action Buttons */}
           <View style={styles.actionsRow}>
-            <Pressable 
-              onPress={onMoreDetails} 
-              style={styles.detailButton}
-            >
+            <Pressable onPress={onMoreDetails} style={styles.detailButton}>
               <Ionicons name="information-circle-outline" size={18} color="#fff" />
               <Text style={styles.detailButtonText}>Details</Text>
             </Pressable>

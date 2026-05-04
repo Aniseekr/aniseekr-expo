@@ -35,7 +35,10 @@ class FakeDatabase {
   async execAsync(_sql: string): Promise<void> {
     return;
   }
-  async runAsync(sql: string, ...params: unknown[]): Promise<{ changes: number; lastInsertRowId: number }> {
+  async runAsync(
+    sql: string,
+    ...params: unknown[]
+  ): Promise<{ changes: number; lastInsertRowId: number }> {
     const r = this.run(sql, params);
     return { changes: r.changes, lastInsertRowId: r.lastInsertRowId };
   }
@@ -205,9 +208,7 @@ mock.module('expo-image', () => {
 mock.module('react-native', () => {
   const React = require('react');
   const passthrough = (tag: string) =>
-    React.forwardRef((props: any, ref: any) =>
-      React.createElement(tag, { ...props, ref })
-    );
+    React.forwardRef((props: any, ref: any) => React.createElement(tag, { ...props, ref }));
 
   const StyleSheet = {
     create<T extends Record<string, unknown>>(styles: T): T {

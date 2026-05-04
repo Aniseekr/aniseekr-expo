@@ -21,10 +21,11 @@ export class CacheService {
   static async get<T>(key: string): Promise<T | null> {
     try {
       if (!this.db) await this.init();
-      const result = await this.db!.getFirstAsync<{ value: string; timestamp: number; ttl: number }>(
-        'SELECT value, timestamp, ttl FROM cache WHERE key = ?',
-        key
-      );
+      const result = await this.db!.getFirstAsync<{
+        value: string;
+        timestamp: number;
+        ttl: number;
+      }>('SELECT value, timestamp, ttl FROM cache WHERE key = ?', key);
 
       if (!result) return null;
 
@@ -42,7 +43,8 @@ export class CacheService {
     }
   }
 
-  static async set(key: string, value: any, ttlMs: number = 3600000) { // Default 1 hour
+  static async set(key: string, value: any, ttlMs: number = 3600000) {
+    // Default 1 hour
     try {
       if (!this.db) await this.init();
       const stringValue = JSON.stringify(value);
@@ -64,7 +66,7 @@ export class CacheService {
       if (!this.db) await this.init();
       await this.db!.runAsync('DELETE FROM cache WHERE key = ?', key);
     } catch (error) {
-       console.warn('CacheService.delete error:', error);
+      console.warn('CacheService.delete error:', error);
     }
   }
 
@@ -73,7 +75,7 @@ export class CacheService {
       if (!this.db) await this.init();
       await this.db!.runAsync('DELETE FROM cache');
     } catch (error) {
-        console.warn('CacheService.clear error:', error);
+      console.warn('CacheService.clear error:', error);
     }
   }
 }

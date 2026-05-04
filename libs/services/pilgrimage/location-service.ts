@@ -77,7 +77,6 @@ export class LocationService {
       const result = await this.module.requestForegroundPermissionsAsync();
       return result.status === 'granted';
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[LocationService] requestPermission failed:', err);
       return false;
     }
@@ -102,7 +101,6 @@ export class LocationService {
         granted = await this.requestPermission();
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[LocationService] permission lookup failed:', err);
       return null;
     }
@@ -120,7 +118,6 @@ export class LocationService {
       this.cached = { value, at: this.now() };
       return value;
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn('[LocationService] getCurrentLocation failed:', err);
       return null;
     }
@@ -147,8 +144,7 @@ export class LocationService {
 
     const sinDLat = Math.sin(dLat / 2);
     const sinDLng = Math.sin(dLng / 2);
-    const h =
-      sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+    const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
 
     return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
   }
@@ -185,7 +181,6 @@ export class LocationService {
           }
         );
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[LocationService] watchPositionAsync failed:', err);
       }
     })();

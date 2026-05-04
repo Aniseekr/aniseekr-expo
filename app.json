@@ -29,6 +29,20 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "AniSeekr needs access to your photos so you can pick a profile picture.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "AniSeekr uses Face ID to confirm before showing adult content."
+        }
       ]
     ],
     "orientation": "portrait",
@@ -39,14 +53,14 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kidneyweakx.aniseekr",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "AniSeekr uses your location to surface nearby anime pilgrimage spots."
+        "NSLocationWhenInUseUsageDescription": "AniSeekr uses your location to surface nearby anime pilgrimage spots.",
+        "NSPhotoLibraryUsageDescription": "AniSeekr needs access to your photos so you can pick a profile picture.",
+        "NSFaceIDUsageDescription": "AniSeekr uses Face ID to confirm before showing adult content."
       }
     },
     "android": {
@@ -55,10 +69,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.kidneyweakx.aniseekr",
-      "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
-      ]
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
     },
     "extra": {
       "eas": {

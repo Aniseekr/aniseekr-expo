@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,20 @@ import { collectionService } from '../../libs/services/collection/collection-ser
 import { AnimatedPressable } from '../common/AnimatedPressable';
 import { Ionicons } from '@expo/vector-icons';
 
+export interface NewFolderData {
+  name: string;
+  icon: string;
+  isShared: boolean;
+  isR18: boolean;
+}
+
 interface CreateFolderModalProps {
   visible: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated?: () => void;
+  onCreate?: (data: NewFolderData) => Promise<void>;
+  onUpdate?: (id: string, data: NewFolderData) => Promise<void>;
+  editing?: { id: string; name: string; icon: string; isR18: boolean; isShared: boolean };
 }
 
 const ICONS = [
@@ -32,27 +42,72 @@ const ICONS = [
   'game-controller',
 ];
 
-export function CreateFolderModal({ visible, onClose, onCreated }: CreateFolderModalProps) {
+export function CreateFolderModal({
+  visible,
+  onClose,
+  onCreated,
+  onCreate,
+  onUpdate,
+  editing,
+}: CreateFolderModalProps) {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('folder');
   const [isShared, setIsShared] = useState(false);
   const [isR18, setIsR18] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
+  const isEditMode = !!editing;
 
-    setLoading(true);
-    try {
-      await collectionService.createCustomFolder(name, icon, isShared, isR18);
+  useEffect(() => {
+    if (!visible) return;
+    if (editing) {
+      setName(editing.name);
+      setIcon(editing.icon || 'folder');
+      setIsShared(!!editing.isShared);
+      setIsR18(!!editing.isR18);
+    } else {
       setName('');
       setIcon('folder');
       setIsShared(false);
       setIsR18(false);
-      onCreated();
+    }
+  }, [visible, editing]);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+
+    setLoading(true);
+    try {
+      const data: NewFolderData = {
+        name: name.trim(),
+        icon,
+        isShared,
+        isR18,
+      };
+
+      if (isEditMode && editing) {
+        if (onUpdate) {
+          await onUpdate(editing.id, data);
+        } else {
+          await collectionService.updateFolder(editing.id, data);
+        }
+      } else {
+        if (onCreate) {
+          await onCreate(data);
+        } else {
+          await collectionService.createCustomFolder(
+            data.name,
+            data.icon,
+            data.isShared,
+            data.isR18
+          );
+        }
+      }
+
+      onCreated?.();
       onClose();
     } catch (error) {
-      console.error('Failed to create folder:', error);
+      console.error(isEditMode ? 'Failed to update folder:' : 'Failed to create folder:', error);
     } finally {
       setLoading(false);
     }
@@ -63,7 +118,7 @@ export function CreateFolderModal({ visible, onClose, onCreated }: CreateFolderM
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
           <View style={styles.header}>
-            <Text style={styles.title}>Create Folder</Text>
+            <Text style={styles.title}>{isEditMode ? 'Edit folder' : 'Create Folder'}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
@@ -115,9 +170,11 @@ export function CreateFolderModal({ visible, onClose, onCreated }: CreateFolderM
 
             <AnimatedPressable
               style={[styles.createButton, !name.trim() ? styles.createButtonDisabled : undefined]}
-              onPress={handleCreate}
+              onPress={handleSubmit}
               disabled={!name.trim() || loading}>
-              <Text style={styles.createButtonText}>Create Folder</Text>
+              <Text style={styles.createButtonText}>
+                {isEditMode ? 'Save changes' : 'Create Folder'}
+              </Text>
             </AnimatedPressable>
           </View>
         </View>

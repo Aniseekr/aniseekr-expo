@@ -1,9 +1,9 @@
-import { Image } from "expo-image";
-import { memo } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { Recommendation } from "./types";
-import { GlassCard } from "../common/GlassCard";
+import { Image } from 'expo-image';
+import { memo } from 'react';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Recommendation } from './types';
+import { GlassCard } from '../common/GlassCard';
 
 type Props = {
   data: Recommendation[];
@@ -11,7 +11,13 @@ type Props = {
   onRefresh?: () => void;
 };
 
-function RecommendationItem({ item, onSelect }: { item: Recommendation; onSelect?: (id: string) => void }) {
+function RecommendationItem({
+  item,
+  onSelect,
+}: {
+  item: Recommendation;
+  onSelect?: (id: string) => void;
+}) {
   const router = useRouter();
 
   const handlePress = () => {
@@ -19,14 +25,14 @@ function RecommendationItem({ item, onSelect }: { item: Recommendation; onSelect
       onSelect(item.id);
     } else {
       router.push({
-        pathname: "/(rate)/rating",
+        pathname: '/(rate)/rating',
         params: { animeId: item.anime.id, genreName: item.anime.title },
       });
     }
   };
 
   return (
-    <Pressable onPress={handlePress} className="w-56 mr-3">
+    <Pressable onPress={handlePress} className="mr-3 w-56">
       <GlassCard style={{ overflow: 'hidden' }}>
         <Image
           source={{ uri: item.anime.image }}
@@ -35,11 +41,11 @@ function RecommendationItem({ item, onSelect }: { item: Recommendation; onSelect
           contentFit="cover"
           transition={120}
         />
-        <View className="p-3 gap-1">
-          <Text className="text-white font-semibold" numberOfLines={2}>
+        <View className="gap-1 p-3">
+          <Text className="font-semibold text-white" numberOfLines={2}>
             {item.anime.title}
           </Text>
-          <Text className="text-white/70 text-xs" numberOfLines={2}>
+          <Text className="text-xs text-white/70" numberOfLines={2}>
             {item.reason}
           </Text>
         </View>
@@ -51,11 +57,11 @@ function RecommendationItem({ item, onSelect }: { item: Recommendation; onSelect
 function PersonalizedRecommendationComponent({ data, onSelect, onRefresh }: Props) {
   return (
     <View className="gap-3">
-      <View className="flex-row justify-between items-center px-1">
-        <Text className="text-white text-lg font-semibold">Personalized Picks</Text>
+      <View className="flex-row items-center justify-between px-1">
+        <Text className="text-lg font-semibold text-white">Personalized Picks</Text>
         {onRefresh ? (
-          <Pressable onPress={onRefresh} className="px-3 py-1 rounded-full bg-white/10">
-            <Text className="text-white text-xs">Refresh</Text>
+          <Pressable onPress={onRefresh} className="rounded-full bg-white/10 px-3 py-1">
+            <Text className="text-xs text-white">Refresh</Text>
           </Pressable>
         ) : null}
       </View>
@@ -72,4 +78,3 @@ function PersonalizedRecommendationComponent({ data, onSelect, onRefresh }: Prop
 }
 
 export const PersonalizedRecommendation = memo(PersonalizedRecommendationComponent);
-

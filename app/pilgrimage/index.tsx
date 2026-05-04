@@ -15,27 +15,56 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Haptics from 'expo-haptics';
 import { AniCard } from '../../components/common/AniCard';
 import { AnimePilgrimageCard } from '../../components/pilgrimage/AnimePilgrimageCard';
-import { PilgrimageMapView } from '../../components/pilgrimage/PilgrimageMapView';
+import {
+  PilgrimageMapView,
+  type PilgrimageMapAnime,
+} from '../../components/pilgrimage/PilgrimageMapView';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
 import { locationService, type LatLng } from '../../libs/services/pilgrimage/location-service';
+import {
+  collectionPilgrimageService,
+  type CollectionPilgrimageEntry,
+  type CollectionStatus,
+} from '../../libs/services/pilgrimage/collection-pilgrimage-service';
 import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
 
 type ViewMode = 'list' | 'map';
+type SourceMode = 'mine' | 'all';
+
+interface DisplayItem {
+  anime: AnitabiBangumi;
+  inCollection: boolean;
+  status?: CollectionStatus;
+  isFavorite?: boolean;
+}
+
+const STATUS_LABELS: Record<CollectionStatus, string> = {
+  watching: 'Watching',
+  completed: 'Completed',
+  on_hold: 'On Hold',
+  dropped: 'Dropped',
+  plan_to_watch: 'Plan to Watch',
+};
 
 export default function PilgrimageHubScreen() {
   const { top } = useSafeAreaInsets();
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [anime, setAnime] = useState<AnitabiBangumi[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sourceMode, setSourceMode] = useState<SourceMode>('mine');
+  const [featured, setFeatured] = useState<AnitabiBangumi[]>([]);
+  const [collected, setCollected] = useState<CollectionPilgrimageEntry[]>([]);
+  const [collectionTotal, setCollectionTotal] = useState(0);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
+  const [loadingMine, setLoadingMine] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
 
+  // Load featured anime once.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setLoadingFeatured(true);
     setError(null);
 
     Promise.allSettled(
@@ -47,22 +76,20 @@ export default function PilgrimageHubScreen() {
         if (cancelled) return;
         const fulfilled = results
           .filter(
-            (r): r is PromiseFulfilledResult<AnitabiBangumi | null> =>
-              r.status === 'fulfilled'
+            (r): r is PromiseFulfilledResult<AnitabiBangumi | null> => r.status === 'fulfilled'
           )
           .map((r) => r.value)
           .filter((value): value is AnitabiBangumi => value !== null)
           .sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
 
-        setAnime(fulfilled);
-        setLoading(false);
+        setFeatured(fulfilled);
+        setLoadingFeatured(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : 'Failed to load pilgrimage data';
+        const message = err instanceof Error ? err.message : 'Failed to load pilgrimage data';
         setError(message);
-        setLoading(false);
+        setLoadingFeatured(false);
       });
 
     return () => {
@@ -70,6 +97,33 @@ export default function PilgrimageHubScreen() {
     };
   }, []);
 
+  // Load collected anime once. Re-fetched on focus would be nicer but the
+  // collection screen only writes via this app session, and a manual refresh
+  // can be wired up later.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingMine(true);
+
+    Promise.all([collectionPilgrimageService.getEntries(), collectionPilgrimageService.getStats()])
+      .then(([entries, stats]) => {
+        if (cancelled) return;
+        setCollected(entries);
+        setCollectionTotal(stats.total);
+        setLoadingMine(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCollected([]);
+        setCollectionTotal(0);
+        setLoadingMine(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Lazy-fetch user location only when the map is visible.
   useEffect(() => {
     if (viewMode !== 'map' || userLocation) return;
     let cancelled = false;
@@ -84,10 +138,33 @@ export default function PilgrimageHubScreen() {
     };
   }, [viewMode, userLocation]);
 
-  const mapEntries = useMemo(
+  // Build the display list based on the current source filter.
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    if (sourceMode === 'mine') {
+      return collected.map((entry) => ({
+        anime: entry.anime,
+        inCollection: true,
+        status: entry.status,
+        isFavorite: entry.isFavorite,
+      }));
+    }
+    const collectedIds = new Set(collected.map((e) => e.bangumiId));
+    const collectedById = new Map(collected.map((e) => [e.bangumiId, e]));
+    return featured.map((anime) => {
+      const match = collectedById.get(anime.id);
+      return {
+        anime,
+        inCollection: collectedIds.has(anime.id),
+        status: match?.status,
+        isFavorite: match?.isFavorite,
+      };
+    });
+  }, [sourceMode, collected, featured]);
+
+  const mapEntries = useMemo<PilgrimageMapAnime[]>(
     () =>
-      anime.map((item) => {
-        const [latitude, longitude] = item.geo ?? [];
+      displayItems.map((item) => {
+        const [latitude, longitude] = item.anime.geo ?? [];
         const hasValidGeo =
           typeof latitude === 'number' &&
           typeof longitude === 'number' &&
@@ -96,14 +173,15 @@ export default function PilgrimageHubScreen() {
           (latitude !== 0 || longitude !== 0);
 
         return {
-          anime: item,
+          anime: item.anime,
+          inCollection: item.inCollection,
           distanceKm:
             userLocation && hasValidGeo
               ? locationService.getDistanceKm(userLocation, { latitude, longitude })
               : undefined,
         };
       }),
-    [anime, userLocation]
+    [displayItems, userLocation]
   );
 
   const handleAnimePress = useCallback(
@@ -113,12 +191,19 @@ export default function PilgrimageHubScreen() {
     [router]
   );
 
-  const handleToggle = useCallback((mode: ViewMode) => {
+  const handleViewToggle = useCallback((mode: ViewMode) => {
     Haptics.selectionAsync().catch(() => undefined);
     setViewMode(mode);
   }, []);
 
-  const popular = useMemo(() => anime.slice(0, 5), [anime]);
+  const handleSourceToggle = useCallback((mode: SourceMode) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setSourceMode(mode);
+  }, []);
+
+  const popular = useMemo(() => displayItems.slice(0, 5), [displayItems]);
+  const collectionMatched = collected.length;
+  const isLoading = sourceMode === 'mine' ? loadingMine : loadingFeatured;
 
   return (
     <View style={styles.container}>
@@ -135,86 +220,174 @@ export default function PilgrimageHubScreen() {
           <Text style={styles.subtitle}>Real-world anime locations</Text>
         </View>
 
-        <View style={styles.toggleWrap}>
-          <ViewModeToggle value={viewMode} onChange={handleToggle} />
+        <View style={styles.controlsWrap}>
+          <SourceToggle value={sourceMode} onChange={handleSourceToggle} />
+          <CollectionStatChip
+            matched={collectionMatched}
+            total={collectionTotal}
+            loading={loadingMine}
+            active={sourceMode === 'mine'}
+            onPress={() => handleSourceToggle(sourceMode === 'mine' ? 'all' : 'mine')}
+          />
+          <ViewModeToggle value={viewMode} onChange={handleViewToggle} />
         </View>
 
         {viewMode === 'map' ? (
           <View style={styles.mapWrap}>
-            <PilgrimageMapView
-              animeList={mapEntries}
-              userLocation={userLocation}
-              onMarkerPress={handleAnimePress}
-              style={styles.mapView}
-            />
+            {isLoading && mapEntries.length === 0 ? (
+              <View style={styles.mapLoading}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+              </View>
+            ) : mapEntries.length === 0 ? (
+              renderEmpty(sourceMode, error)
+            ) : (
+              <PilgrimageMapView
+                animeList={mapEntries}
+                userLocation={userLocation}
+                onMarkerPress={handleAnimePress}
+                style={styles.mapView}
+              />
+            )}
           </View>
         ) : (
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-          {loading ? (
-            <View style={styles.stateContainer}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-              <Text style={styles.stateText}>Loading pilgrimage spots…</Text>
-            </View>
-          ) : error ? (
-            <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
-              <MaterialIcons name="error-outline" size={32} color={Colors.error} />
-              <Text style={styles.errorTitle}>Couldn’t load locations</Text>
-              <Text style={styles.errorBody}>{error}</Text>
-            </AniCard>
-          ) : anime.length === 0 ? (
-            <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
-              <MaterialIcons name="explore-off" size={32} color={Colors.text.tertiary} />
-              <Text style={styles.errorTitle}>No pilgrimage data yet</Text>
-              <Text style={styles.errorBody}>
-                Curated anime locations will appear here once available.
-              </Text>
-            </AniCard>
-          ) : (
-            <>
-              {popular.length > 0 ? (
+            showsVerticalScrollIndicator={false}>
+            {isLoading ? (
+              <View style={styles.stateContainer}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={styles.stateText}>
+                  {sourceMode === 'mine'
+                    ? 'Scanning your collection…'
+                    : 'Loading pilgrimage spots…'}
+                </Text>
+              </View>
+            ) : error && sourceMode === 'all' ? (
+              <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
+                <MaterialIcons name="error-outline" size={32} color={Colors.error} />
+                <Text style={styles.errorTitle}>Couldn’t load locations</Text>
+                <Text style={styles.errorBody}>{error}</Text>
+              </AniCard>
+            ) : displayItems.length === 0 ? (
+              renderEmpty(sourceMode, null)
+            ) : (
+              <>
+                {popular.length > 0 ? (
+                  <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>
+                        {sourceMode === 'mine' ? 'Top in your collection' : 'Popular Spots'}
+                      </Text>
+                      <Text style={styles.sectionCount}>{displayItems.length}</Text>
+                    </View>
+                    <FlatList
+                      horizontal
+                      data={popular}
+                      keyExtractor={(item) => `popular-${item.anime.id}`}
+                      renderItem={({ item }) => (
+                        <View style={styles.popularItem}>
+                          <AnimePilgrimageCard
+                            anime={item.anime}
+                            inCollection={item.inCollection}
+                            collectionLabel={collectionLabel(item)}
+                            onPress={handleAnimePress}
+                          />
+                        </View>
+                      )}
+                      contentContainerStyle={styles.popularList}
+                      showsHorizontalScrollIndicator={false}
+                    />
+                  </View>
+                ) : null}
+
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Popular Spots</Text>
-                    <Text style={styles.sectionCount}>{anime.length}</Text>
+                    <Text style={styles.sectionTitle}>
+                      {sourceMode === 'mine' ? 'All your spots' : 'All Anime'}
+                    </Text>
                   </View>
-                  <FlatList
-                    horizontal
-                    data={popular}
-                    keyExtractor={(item) => `popular-${item.id}`}
-                    renderItem={({ item }) => (
-                      <View style={styles.popularItem}>
-                        <AnimePilgrimageCard anime={item} onPress={handleAnimePress} />
-                      </View>
-                    )}
-                    contentContainerStyle={styles.popularList}
-                    showsHorizontalScrollIndicator={false}
-                  />
+                  <View style={styles.listColumn}>
+                    {displayItems.map((item) => (
+                      <AnimePilgrimageCard
+                        key={item.anime.id}
+                        anime={item.anime}
+                        inCollection={item.inCollection}
+                        collectionLabel={collectionLabel(item)}
+                        onPress={handleAnimePress}
+                      />
+                    ))}
+                  </View>
                 </View>
-              ) : null}
-
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>All Anime</Text>
-                </View>
-                <View style={styles.listColumn}>
-                  {anime.map((item) => (
-                    <AnimePilgrimageCard
-                      key={item.id}
-                      anime={item}
-                      onPress={handleAnimePress}
-                    />
-                  ))}
-                </View>
-              </View>
-            </>
-          )}
+              </>
+            )}
           </ScrollView>
         )}
       </SafeAreaView>
+    </View>
+  );
+}
+
+function collectionLabel(item: DisplayItem): string | undefined {
+  if (!item.inCollection) return undefined;
+  if (item.status) return STATUS_LABELS[item.status];
+  if (item.isFavorite) return 'Favorite';
+  return 'In Collection';
+}
+
+function renderEmpty(sourceMode: SourceMode, error: string | null) {
+  if (error) {
+    return (
+      <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
+        <MaterialIcons name="error-outline" size={32} color={Colors.error} />
+        <Text style={styles.errorTitle}>Couldn’t load locations</Text>
+        <Text style={styles.errorBody}>{error}</Text>
+      </AniCard>
+    );
+  }
+
+  if (sourceMode === 'mine') {
+    return (
+      <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
+        <MaterialIcons name="explore" size={32} color={Colors.text.tertiary} />
+        <Text style={styles.errorTitle}>No pilgrimage spots from your collection yet</Text>
+        <Text style={styles.errorBody}>
+          Add anime set in Japan to your collection — we’ll match them against the Anitabi location
+          database. Tap “All” above to explore curated picks.
+        </Text>
+      </AniCard>
+    );
+  }
+
+  return (
+    <AniCard variant="bordered" padding={Spacing.cardPadding} style={styles.errorCard}>
+      <MaterialIcons name="explore-off" size={32} color={Colors.text.tertiary} />
+      <Text style={styles.errorTitle}>No pilgrimage data yet</Text>
+      <Text style={styles.errorBody}>Curated anime locations will appear here once available.</Text>
+    </AniCard>
+  );
+}
+
+interface SourceToggleProps {
+  value: SourceMode;
+  onChange: (mode: SourceMode) => void;
+}
+
+function SourceToggle({ value, onChange }: SourceToggleProps) {
+  return (
+    <View style={toggleStyles.outer}>
+      <ToggleSegment
+        active={value === 'mine'}
+        label="Mine"
+        icon="favorite"
+        onPress={() => onChange('mine')}
+      />
+      <ToggleSegment
+        active={value === 'all'}
+        label="All"
+        icon="public"
+        onPress={() => onChange('all')}
+      />
     </View>
   );
 }
@@ -256,8 +429,7 @@ function ToggleSegment({ active, label, icon, onPress }: ToggleSegmentProps) {
       onPress={onPress}
       style={toggleStyles.segment}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-    >
+      accessibilityState={{ selected: active }}>
       {active ? (
         <LinearGradient
           colors={Colors.gradients.primary as [string, string]}
@@ -267,20 +439,45 @@ function ToggleSegment({ active, label, icon, onPress }: ToggleSegmentProps) {
         />
       ) : null}
       <View style={toggleStyles.segmentContent}>
-        <MaterialIcons
-          name={icon}
-          size={16}
-          color={active ? '#000000' : Colors.text.secondary}
-        />
+        <MaterialIcons name={icon} size={16} color={active ? '#000000' : Colors.text.secondary} />
         <Text
           style={[
             toggleStyles.segmentLabel,
             { color: active ? '#000000' : Colors.text.secondary },
-          ]}
-        >
+          ]}>
           {label}
         </Text>
       </View>
+    </Pressable>
+  );
+}
+
+interface CollectionStatChipProps {
+  matched: number;
+  total: number;
+  loading: boolean;
+  active: boolean;
+  onPress: () => void;
+}
+
+function CollectionStatChip({ matched, total, loading, active, onPress }: CollectionStatChipProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        chipStyles.chip,
+        active ? chipStyles.chipActive : null,
+        pressed ? chipStyles.chipPressed : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${matched} of ${total} collected anime have pilgrimage spots`}>
+      <MaterialIcons name="place" size={14} color={active ? '#000' : Colors.primary} />
+      <Text style={[chipStyles.chipText, active ? chipStyles.chipTextActive : null]}>
+        {loading ? '…' : `${matched} / ${total}`}
+      </Text>
+      <Text style={[chipStyles.chipSubText, active ? chipStyles.chipTextActive : null]}>
+        spots in collection
+      </Text>
     </Pressable>
   );
 }
@@ -327,9 +524,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     ...Typography.bodyMedium,
   },
-  toggleWrap: {
+  controlsWrap: {
     paddingHorizontal: Spacing.screenPadding,
     paddingBottom: Spacing.md,
+    gap: Spacing.sm,
   },
   scrollView: {
     flex: 1,
@@ -354,6 +552,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     color: Colors.text.primary,
     marginTop: Spacing.xs,
+    textAlign: 'center',
     ...Typography.titleMedium,
   },
   errorBody: {
@@ -401,9 +600,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: Colors.glass.border,
+    backgroundColor: Colors.background.secondary,
   },
   mapView: {
     flex: 1,
+  },
+  mapLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
@@ -433,5 +638,39 @@ const toggleStyles = StyleSheet.create({
     ...Typography.titleSmall,
     fontSize: 14,
     fontWeight: '600',
+  },
+});
+
+const chipStyles = StyleSheet.create({
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.glass.medium,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+  },
+  chipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipPressed: {
+    opacity: 0.85,
+  },
+  chipText: {
+    color: Colors.text.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  chipSubText: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+  },
+  chipTextActive: {
+    color: '#000',
   },
 });

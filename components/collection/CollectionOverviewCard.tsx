@@ -76,11 +76,7 @@ export function CollectionOverviewCard({
                   />
                 ) : (
                   <View style={styles.thumbPlaceholder}>
-                    <MaterialIcons
-                      name="image"
-                      size={IconSize.md}
-                      color={Colors.text.tertiary}
-                    />
+                    <MaterialIcons name="image" size={IconSize.md} color={Colors.text.tertiary} />
                   </View>
                 )}
               </Pressable>

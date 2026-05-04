@@ -103,9 +103,7 @@ describe('KitsuDataSource', () => {
   });
 
   it('KITSU-004 page=2 sets page[offset]=20', async () => {
-    const { spy, calls } = captureFetch([
-      makeJsonResponse({ data: [] }),
-    ]);
+    const { spy, calls } = captureFetch([makeJsonResponse({ data: [] })]);
     activeSpy = spy;
 
     await source.searchAnime('q', 2);

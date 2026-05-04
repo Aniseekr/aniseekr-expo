@@ -13,10 +13,20 @@ export interface AnimePilgrimageCardProps {
   anime: AnitabiBangumi;
   /** Optional distance from the user, in kilometres. */
   distance?: number;
+  /** Show a green check badge when this anime is in the user's collection. */
+  inCollection?: boolean;
+  /** Optional sub-label (e.g. "Watching · ep 3") rendered next to the city tag. */
+  collectionLabel?: string;
   onPress?: (anime: AnitabiBangumi) => void;
 }
 
-export function AnimePilgrimageCard({ anime, distance, onPress }: AnimePilgrimageCardProps) {
+export function AnimePilgrimageCard({
+  anime,
+  distance,
+  inCollection,
+  collectionLabel,
+  onPress,
+}: AnimePilgrimageCardProps) {
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.(anime);
@@ -35,9 +45,9 @@ export function AnimePilgrimageCard({ anime, distance, onPress }: AnimePilgrimag
       style={({ pressed }) => [
         styles.card,
         pressed && styles.cardPressed,
-        { borderColor: `${themeColor}30` },
-      ]}
-    >
+        { borderColor: inCollection ? '#30D158' : `${themeColor}30` },
+        inCollection && styles.cardInCollection,
+      ]}>
       <View style={styles.imageContainer}>
         <Image
           source={{ uri: (anime.cover ?? '').replace('?plan=h160', '?plan=h360') }}
@@ -59,6 +69,13 @@ export function AnimePilgrimageCard({ anime, distance, onPress }: AnimePilgrimag
         <View style={styles.spotCountBadge}>
           <Text style={styles.spotCountText}>{anime.pointsLength} spots</Text>
         </View>
+
+        {inCollection ? (
+          <View style={styles.collectedBadge}>
+            <Ionicons name="checkmark" size={11} color="#000" />
+            <Text style={styles.collectedBadgeText}>{collectionLabel || 'In Collection'}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.content}>
@@ -119,6 +136,27 @@ const styles = StyleSheet.create({
   cardPressed: {
     transform: [{ scale: 0.98 }],
     opacity: 0.9,
+  },
+  cardInCollection: {
+    borderWidth: 1.5,
+  },
+  collectedBadge: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#30D158',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  collectedBadgeText: {
+    color: '#000',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   imageContainer: {
     height: 120,

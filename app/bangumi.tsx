@@ -1,9 +1,10 @@
 // Bangumi seasonal screen — calendar mode uses the iOS-style focus-day carousel
 // with a sticky today section on top, plus a list mode fallback.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,24 +12,35 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SeasonHeader } from '../components/bangumi/SeasonHeader';
 import { Anime } from '../components/rate/types';
 import { AnimeList, AnimeRowCard } from '../components/bangumi/AnimeList';
 import { FocusDayCarousel } from '../components/bangumi/FocusDayCarousel';
 import { TodayUpdatesSection } from '../components/bangumi/TodayUpdatesSection';
-import { AnimeRepository } from '../libs/repositories/anime-repository';
-import { animeNotificationService } from '../modules/notifications/animeNotificationService';
+import { SpecialContentSection } from '../components/bangumi/SpecialContentSection';
+import { YearPickerSheet } from '../components/bangumi/YearPickerSheet';
 import {
-  Colors,
-  FontFamily,
-  Radius,
-  Spacing,
-  Typography,
-} from '../constants/DesignSystem';
+  BangumiSettingsSheet,
+  BangumiTypeFilter,
+  DEFAULT_BANGUMI_PREFS,
+  BangumiPreferences,
+} from '../components/bangumi/BangumiSettingsSheet';
+import { NotificationManagerSheet } from '../components/bangumi/NotificationManagerSheet';
+import { shareSchedule } from '../components/bangumi/shareSchedule';
+import { ShareScheduleCard } from '../components/bangumi/ShareScheduleCard';
+import { AddTrackingSheet } from '../components/bangumi/AddTrackingSheet';
+import { AnimeRepository } from '../libs/repositories/anime-repository';
+import { dataSourceConfig } from '../libs/services/data-source-config';
+import { animeNotificationService } from '../modules/notifications/animeNotificationService';
+import { loadBangumiPrefs, saveBangumiPrefs } from '../libs/services/bangumi-prefs';
+import { loadUserPrefs, patchUserPrefs } from '../libs/services/user-prefs';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
+import { useTheme } from '../context/ThemeContext';
+import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 import { BrowseSourceChip } from '../components/common/BrowseSourceChip';
 
-type ViewMode = 'calendar' | 'list';
 type FilterMode = 'all' | 'tracking';
 type Season = 'winter' | 'spring' | 'summer' | 'fall';
 
@@ -74,72 +86,154 @@ function getTodayDayString(): string {
   return dayMapping[day] || 'Mondays';
 }
 
+function matchesTypeFilter(anime: Anime, filter: BangumiTypeFilter): boolean {
+  if (filter === 'all') return true;
+  const f = (anime.format ?? '').toUpperCase();
+  switch (filter) {
+    case 'tv':
+      return f === 'TV' || f === 'TV_SHORT';
+    case 'movie':
+      return f === 'MOVIE';
+    case 'ova':
+      return f === 'OVA';
+    case 'special':
+      return f === 'SPECIAL' || f === 'ONA';
+    default:
+      return true;
+  }
+}
+
 export default function BangumiScreen() {
   const { top } = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
-  const [filterMode, setFilterMode] = useState<FilterMode>('tracking');
-  const [showUnknownDays] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const { season: currentSeason, year: currentYear } = getCurrentSeason();
   const [selectedSeason, setSelectedSeason] = useState<Season>(currentSeason);
   const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [groupedAnime, setGroupedAnime] = useState<DailyAnime[]>([]);
+  const [rawAnime, setRawAnime] = useState<Anime[]>([]);
+  const [sourcePlatform, setSourcePlatform] = useState<string>(() => dataSourceConfig.browseSource);
+  const [prefs, setPrefsState] = useState<BangumiPreferences>(DEFAULT_BANGUMI_PREFS);
+  const [hydrated, setHydrated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showNotifManager, setShowNotifManager] = useState(false);
+  const [pendingShare, setPendingShare] = useState(false);
+  const [trackingTarget, setTrackingTarget] = useState<Anime | null>(null);
+  const [adultContent, setAdultContent] = useState(false);
+  const hydratedRef = useRef(false);
+  const shareCardRef = useRef<View>(null);
+
+  const setPrefs = useCallback<React.Dispatch<React.SetStateAction<BangumiPreferences>>>((next) => {
+    setPrefsState((prev) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (p: BangumiPreferences) => BangumiPreferences)(prev)
+          : next;
+      // Only persist after the initial hydration completes so we don't
+      // immediately overwrite saved prefs with the default state.
+      if (hydratedRef.current) {
+        void saveBangumiPrefs(resolved);
+      }
+      return resolved;
+    });
+  }, []);
 
   useEffect(() => {
-    onRefresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSeason, selectedYear]);
+    let cancelled = false;
+    (async () => {
+      const [loaded, userPrefs] = await Promise.all([loadBangumiPrefs(), loadUserPrefs()]);
+      if (cancelled) return;
+      setPrefsState(loaded);
+      setAdultContent(userPrefs.allowAdultContent);
+      hydratedRef.current = true;
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAdultContentChange = useCallback((value: boolean) => {
+    setAdultContent(value);
+    void patchUserPrefs({ allowAdultContent: value });
+  }, []);
+
+  const viewMode = prefs.viewMode;
+  const filterMode = prefs.filterMode;
+  const showUnknownDays = prefs.showUnknownDays;
+  const typeFilter = prefs.typeFilter;
+  const setFilterMode = useCallback(
+    (mode: FilterMode) => setPrefs((p) => ({ ...p, filterMode: mode })),
+    [setPrefs]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setIsLoading(true);
     try {
-      const rawAnime = await AnimeRepository.getSeasonalAnime(
+      const fetched = await AnimeRepository.getSeasonalAnime(
         selectedSeason.toUpperCase(),
         selectedYear
       );
-
-      const days = [
-        'Sundays',
-        'Mondays',
-        'Tuesdays',
-        'Wednesdays',
-        'Thursdays',
-        'Fridays',
-        'Saturdays',
-      ];
-      const grouped: { [key: string]: Anime[] } = {};
-      days.forEach((d) => (grouped[d] = []));
-      grouped['Unknown'] = [];
-
-      rawAnime.forEach((anime: Anime) => {
-        if (anime.nextAiringEpisode && anime.nextAiringEpisode.airingAt) {
-          const date = new Date(anime.nextAiringEpisode.airingAt * 1000);
-          const dayIndex = date.getDay();
-          const dayName = days[dayIndex];
-          grouped[dayName].push(anime);
-        } else {
-          grouped['Unknown'].push(anime);
-        }
-      });
-
-      const dailyAnimeList: DailyAnime[] = [
-        ...days.map((day) => ({ day, anime: grouped[day] })),
-        { day: 'Unknown', anime: grouped['Unknown'] },
-      ];
-      setGroupedAnime(dailyAnimeList);
+      setRawAnime(fetched);
+      setSourcePlatform(dataSourceConfig.browseSource);
+      setError(null);
     } catch (e) {
       console.error('Failed to fetch bangumi', e);
+      setError("Couldn't load this season. Pull to retry.");
     } finally {
       setRefreshing(false);
       setIsLoading(false);
     }
   }, [selectedSeason, selectedYear]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    onRefresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason, selectedYear, hydrated]);
+
+  const filteredAnime = useMemo(
+    () => rawAnime.filter((a) => matchesTypeFilter(a, typeFilter)),
+    [rawAnime, typeFilter]
+  );
+
+  const groupedAnime = useMemo<DailyAnime[]>(() => {
+    const days = [
+      'Sundays',
+      'Mondays',
+      'Tuesdays',
+      'Wednesdays',
+      'Thursdays',
+      'Fridays',
+      'Saturdays',
+    ];
+    const grouped: { [key: string]: Anime[] } = {};
+    days.forEach((d) => (grouped[d] = []));
+    grouped['Unknown'] = [];
+
+    filteredAnime.forEach((anime) => {
+      if (anime.nextAiringEpisode && anime.nextAiringEpisode.airingAt) {
+        const date = new Date(anime.nextAiringEpisode.airingAt * 1000);
+        const dayIndex = date.getDay();
+        const dayName = days[dayIndex];
+        grouped[dayName].push(anime);
+      } else {
+        grouped['Unknown'].push(anime);
+      }
+    });
+
+    return [
+      ...days.map((day) => ({ day, anime: grouped[day] })),
+      { day: 'Unknown', anime: grouped['Unknown'] },
+    ];
+  }, [filteredAnime]);
+
   const toggleViewMode = useCallback(() => {
-    setViewMode((prev) => (prev === 'calendar' ? 'list' : 'calendar'));
-  }, []);
+    setPrefs((p) => ({ ...p, viewMode: p.viewMode === 'calendar' ? 'list' : 'calendar' }));
+  }, [setPrefs]);
 
   const switchToPreviousSeason = useCallback(() => {
     const seasonOrder: Season[] = ['winter', 'spring', 'summer', 'fall'];
@@ -164,8 +258,7 @@ export default function BangumiScreen() {
   }, [selectedSeason]);
 
   const seasonDisplayName = useMemo(
-    () =>
-      `${selectedYear} ${selectedSeason.charAt(0).toUpperCase() + selectedSeason.slice(1)}`,
+    () => `${selectedYear} ${selectedSeason.charAt(0).toUpperCase() + selectedSeason.slice(1)}`,
     [selectedSeason, selectedYear]
   );
 
@@ -180,9 +273,40 @@ export default function BangumiScreen() {
     [groupedAnime, todayDay]
   );
 
+  const specialAnime = useMemo(() => {
+    // When the user picks a non-'all' type filter, the daily list already
+    // reflects exactly what they want — hide the "Movies & specials" section
+    // to avoid redundant or contradictory rows.
+    if (typeFilter !== 'all') return [];
+    const isSpecial = (a: Anime) => {
+      const f = (a.format ?? '').toUpperCase();
+      return ['MOVIE', 'OVA', 'ONA', 'SPECIAL'].includes(f);
+    };
+    return rawAnime.filter(isSpecial);
+  }, [rawAnime, typeFilter]);
+
+  const handleShare = useCallback(async () => {
+    const seasonLabel = `${selectedYear} ${selectedSeason.charAt(0).toUpperCase() + selectedSeason.slice(1)}`;
+    setPendingShare(true);
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await shareSchedule({
+        seasonLabel,
+        groupedAnime,
+        totalCount,
+        viewRef: shareCardRef,
+      });
+    } finally {
+      setPendingShare(false);
+    }
+  }, [selectedYear, selectedSeason, groupedAnime, totalCount]);
+
   const listViewData = groupedAnime.filter(
     (g) => g.anime.length > 0 || (g.day === 'Unknown' && showUnknownDays)
   );
+
+  const scrollToTodayKey = `${selectedSeason}-${selectedYear}-${typeFilter ?? 'all'}`;
 
   // Request notification permissions on mount
   useEffect(() => {
@@ -224,20 +348,113 @@ export default function BangumiScreen() {
             viewMode={viewMode}
             onViewModeToggle={toggleViewMode}
             totalCount={totalCount}
+            onLabelTap={() => setShowYearPicker(true)}
+            onOpenSettings={() => setShowSettings(true)}
           />
         </View>
 
-        {viewMode === 'calendar' ? (
-          <View style={styles.calendarContainer}>
-            <TodayUpdatesSection todayAnime={todayAnime} />
-            <FocusDayCarousel
-              weekDays={weekDays}
-              groupedAnime={groupedAnime}
-              showUnknownDays={showUnknownDays}
-              isCurrentDay={(day) => day === todayDay}
-              initialDay={todayDay}
-            />
+        {error ? (
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: theme.background.tertiary,
+                borderColor: theme.glassBorder,
+              },
+            ]}>
+            <MaterialIcons name="error-outline" size={20} color={theme.accent} />
+            <Text style={[styles.errorText, { color: theme.text.primary }]} numberOfLines={2}>
+              {error}
+            </Text>
+            <Pressable
+              onPress={() => {
+                hapticsBridge.tap();
+                onRefresh();
+              }}
+              style={({ pressed }) => [
+                styles.retryButton,
+                {
+                  backgroundColor: theme.accent,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+              hitSlop={8}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
           </View>
+        ) : null}
+
+        <YearPickerSheet
+          visible={showYearPicker}
+          selectedYear={selectedYear}
+          onClose={() => setShowYearPicker(false)}
+          onSelect={(y) => setSelectedYear(y)}
+          onPrevYear={() => setSelectedYear((y) => y - 1)}
+          onNextYear={() => setSelectedYear((y) => y + 1)}
+        />
+
+        <BangumiSettingsSheet
+          visible={showSettings}
+          preferences={prefs}
+          adultContent={adultContent}
+          onAdultContentChange={handleAdultContentChange}
+          onClose={() => setShowSettings(false)}
+          onChange={setPrefs}
+          onOpenNotifications={() => {
+            setShowSettings(false);
+            setShowNotifManager(true);
+          }}
+          onShare={() => {
+            setShowSettings(false);
+            handleShare();
+          }}
+        />
+
+        <AddTrackingSheet
+          visible={!!trackingTarget}
+          anime={trackingTarget}
+          onClose={() => setTrackingTarget(null)}
+        />
+
+        <NotificationManagerSheet
+          visible={showNotifManager}
+          onClose={() => setShowNotifManager(false)}
+        />
+
+        {viewMode === 'calendar' ? (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 140 }}
+            refreshControl={
+              <RefreshControl
+                tintColor={Colors.text.primary}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.primary]}
+                progressBackgroundColor={Colors.background.secondary}
+              />
+            }>
+            <TodayUpdatesSection todayAnime={todayAnime} />
+            <View style={styles.calendarContainer}>
+              <FocusDayCarousel
+                weekDays={weekDays}
+                groupedAnime={groupedAnime}
+                showUnknownDays={showUnknownDays}
+                isCurrentDay={(day) => day === todayDay}
+                initialDay={todayDay}
+                scrollToTodayKey={scrollToTodayKey}
+                sourcePlatform={sourcePlatform}
+              />
+            </View>
+            {specialAnime.length > 0 ? (
+              <SpecialContentSection
+                title="Movies & specials"
+                subtitle={`${specialAnime.length} releases this season`}
+                icon="movie-creation"
+                anime={specialAnime}
+              />
+            ) : null}
+          </ScrollView>
         ) : (
           <ScrollView
             style={{ flex: 1 }}
@@ -252,16 +469,39 @@ export default function BangumiScreen() {
               />
             }>
             {/* Show a compact weekly calendar above the list as a navigator */}
-            {todayAnime.length > 0 ? (
-              <TodayUpdatesSection todayAnime={todayAnime} />
-            ) : null}
+            {todayAnime.length > 0 ? <TodayUpdatesSection todayAnime={todayAnime} /> : null}
             <AnimeList
               listViewData={listViewData}
-              renderAnimeCard={(anime) => <AnimeRowCard key={anime.id} anime={anime} />}
+              renderAnimeCard={(anime) => (
+                <AnimeRowCard
+                  key={anime.id}
+                  anime={anime}
+                  sourcePlatform={sourcePlatform}
+                  onAddTracking={setTrackingTarget}
+                />
+              )}
             />
+            {specialAnime.length > 0 ? (
+              <SpecialContentSection
+                title="Movies & specials"
+                subtitle={`${specialAnime.length} releases this season`}
+                icon="movie-creation"
+                anime={specialAnime}
+              />
+            ) : null}
           </ScrollView>
         )}
       </SafeAreaView>
+      {pendingShare ? (
+        <View pointerEvents="none" style={styles.shareCardWrapper}>
+          <ShareScheduleCard
+            ref={shareCardRef}
+            seasonLabel={seasonDisplayName}
+            groupedAnime={groupedAnime}
+            totalCount={totalCount}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -302,5 +542,35 @@ const styles = StyleSheet.create({
       android: { elevation: 0 },
     }),
     borderRadius: Radius.card,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  errorText: {
+    ...Typography.bodySmall,
+    flex: 1,
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xxs + 2,
+    borderRadius: Radius.chip,
+  },
+  retryText: {
+    ...Typography.captionSmall,
+    fontWeight: '700',
+    color: '#0E0A06',
+  },
+  shareCardWrapper: {
+    position: 'absolute',
+    top: -10000,
+    left: -10000,
   },
 });

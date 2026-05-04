@@ -1,10 +1,7 @@
 // Shikimori data source — implements `AnimeDataSource` against the Shikimori
 // REST API. Mapping rules mirror the iOS aniseeker port (see api_contracts.md §6).
 
-import {
-  prefixShikimoriImage,
-  ShikimoriClient,
-} from '../../clients/shikimori-client';
+import { prefixShikimoriImage, ShikimoriClient } from '../../clients/shikimori-client';
 import type { PlatformImageData } from '../../models/platform-image-data';
 import { UnifiedAnimeItem } from '../../models/unified-anime-item';
 import type { PlatformType } from '../auth/types';
@@ -152,7 +149,10 @@ function firstNonEmpty(values: (string | null | undefined)[] | null | undefined)
   return null;
 }
 
-function buildShikimoriItem(item: ShikimoriAnimeBase, opts?: { mergeDetail?: ShikimoriAnimeDetail }) {
+function buildShikimoriItem(
+  item: ShikimoriAnimeBase,
+  opts?: { mergeDetail?: ShikimoriAnimeDetail }
+) {
   const detail = opts?.mergeDetail;
   const coverImageURL = prefixShikimoriImage(item.image?.original);
   const previewImage = prefixShikimoriImage(item.image?.preview ?? null);
@@ -175,16 +175,12 @@ function buildShikimoriItem(item: ShikimoriAnimeBase, opts?: { mergeDetail?: Shi
   const titleRomaji = item.name;
 
   const synonyms = ([] as string[])
-    .concat(((item.synonyms ?? []).filter((v): v is string => !!v)))
-    .concat(((detail?.synonyms ?? []).filter((v): v is string => !!v)));
+    .concat((item.synonyms ?? []).filter((v): v is string => !!v))
+    .concat((detail?.synonyms ?? []).filter((v): v is string => !!v));
 
-  const genres = (detail?.genres ?? [])
-    .map((g) => g.name)
-    .filter((n): n is string => !!n);
+  const genres = (detail?.genres ?? []).map((g) => g.name).filter((n): n is string => !!n);
 
-  const studios = (detail?.studios ?? [])
-    .map((s) => s.name)
-    .filter((n): n is string => !!n);
+  const studios = (detail?.studios ?? []).map((s) => s.name).filter((n): n is string => !!n);
 
   const idMal = detail?.myanimelist_id ?? null;
   const synopsis = stripShikimoriDescription(detail?.description ?? null);
@@ -237,10 +233,7 @@ export class ShikimoriDataSource implements AnimeDataSource {
       limit: SHIKIMORI_PAGE_SIZE,
     };
     if (genreId != null) params.genre = genreId;
-    const items = await ShikimoriClient.get<ShikimoriAnimeListItem[]>(
-      '/animes',
-      params
-    );
+    const items = await ShikimoriClient.get<ShikimoriAnimeListItem[]>('/animes', params);
     return (items ?? []).map((it) => buildShikimoriItem(it));
   }
 
@@ -277,27 +270,18 @@ export class ShikimoriDataSource implements AnimeDataSource {
     } else if (year != null) {
       params.season = String(year);
     }
-    const items = await ShikimoriClient.get<ShikimoriAnimeListItem[]>(
-      '/animes',
-      params
-    );
+    const items = await ShikimoriClient.get<ShikimoriAnimeListItem[]>('/animes', params);
     return (items ?? []).map((it) => buildShikimoriItem(it));
   }
 
   async fetchAnimeDetail(id: string): Promise<UnifiedAnimeItem> {
-    const detail = await ShikimoriClient.get<ShikimoriAnimeDetail>(
-      `/animes/${id}`,
-      {}
-    );
+    const detail = await ShikimoriClient.get<ShikimoriAnimeDetail>(`/animes/${id}`, {});
     return buildShikimoriItem(detail, { mergeDetail: detail });
   }
 
   async fetchAnimeStaff(id: string): Promise<AnimeStaff[]> {
     try {
-      const items = await ShikimoriClient.get<ShikimoriPersonRoleItem[]>(
-        `/animes/${id}/roles`,
-        {}
-      );
+      const items = await ShikimoriClient.get<ShikimoriPersonRoleItem[]>(`/animes/${id}/roles`, {});
       const out: AnimeStaff[] = [];
       for (const role of items ?? []) {
         const person = role.person;
@@ -317,10 +301,7 @@ export class ShikimoriDataSource implements AnimeDataSource {
 
   async fetchAnimeRelations(id: string): Promise<AnimeRelation[]> {
     try {
-      const items = await ShikimoriClient.get<ShikimoriRelationItem[]>(
-        `/animes/${id}/related`,
-        {}
-      );
+      const items = await ShikimoriClient.get<ShikimoriRelationItem[]>(`/animes/${id}/related`, {});
       const out: AnimeRelation[] = [];
       for (const rel of items ?? []) {
         const a = rel.anime;

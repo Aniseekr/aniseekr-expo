@@ -1,5 +1,5 @@
-import { memo } from "react";
-import { Pressable, Text, View, Platform, StyleSheet } from "react-native";
+import { memo } from 'react';
+import { Pressable, Text, View, Platform, StyleSheet } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 type Option = {
@@ -15,9 +15,9 @@ type Props = {
 };
 
 const options: Option[] = [
-  { key: "genres", icon: "local-offer", label: "Genres", color: "#60a5fa" },
-  { key: "mood", icon: "favorite", label: "Mood", color: "#c084fc" },
-  { key: "duration", icon: "schedule", label: "Duration", color: "#4ade80" },
+  { key: 'genres', icon: 'local-offer', label: 'Genres', color: '#60a5fa' },
+  { key: 'mood', icon: 'favorite', label: 'Mood', color: '#c084fc' },
+  { key: 'duration', icon: 'schedule', label: 'Duration', color: '#4ade80' },
 ];
 
 function TrackingSelectorComponent({ value, onChange }: Props) {
@@ -35,17 +35,13 @@ function TrackingSelectorComponent({ value, onChange }: Props) {
                 styles.optionButton,
                 selected && styles.optionButtonActive,
                 selected && { borderColor: option.color },
-              ]}
-            >
-              <MaterialIcons 
-                name={option.icon as any} 
-                size={18} 
-                color={selected ? option.color : 'rgba(255, 255, 255, 0.6)'} 
-              />
-              <Text style={[
-                styles.optionText,
-                selected && { color: option.color }
               ]}>
+              <MaterialIcons
+                name={option.icon as any}
+                size={18}
+                color={selected ? option.color : 'rgba(255, 255, 255, 0.6)'}
+              />
+              <Text style={[styles.optionText, selected && { color: option.color }]}>
                 {option.label}
               </Text>
             </Pressable>
@@ -111,4 +107,3 @@ const styles = StyleSheet.create({
 });
 
 export const TrackingSelector = memo(TrackingSelectorComponent);
-

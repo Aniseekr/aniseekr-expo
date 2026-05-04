@@ -3,15 +3,7 @@
 // horizontal scroller of compact today-cards underneath.
 
 import { memo, useState } from 'react';
-import {
-  Image,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -44,7 +36,7 @@ function TodayUpdatesSectionComponent({
   return (
     <View style={styles.container}>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={20} tint="systemThickMaterialDark" style={StyleSheet.absoluteFill} />
       ) : null}
       <View pointerEvents="none" style={styles.surface} />
       <View pointerEvents="none" style={styles.surfaceBorder} />
@@ -71,11 +63,7 @@ function TodayUpdatesSectionComponent({
               key={anime.id}
               onPress={() => router.push(`/(rate)/anime/${anime.id}`)}
               style={styles.card}>
-              <Image
-                source={{ uri: anime.image }}
-                style={styles.poster}
-                resizeMode="cover"
-              />
+              <Image source={{ uri: anime.image }} style={styles.poster} resizeMode="cover" />
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle} numberOfLines={2}>
                   {anime.title}

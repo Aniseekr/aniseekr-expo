@@ -3,10 +3,15 @@ import { authService } from '../auth/auth-service';
 import { getProvider } from '../providers';
 import { isWritableProvider } from '../providers/base-provider';
 import { idMappingService } from './id-mapping-service';
+import { conflictResolutionService } from './conflict-resolution-service';
+import { offlineQueueService, SyncJob } from './offline-queue-service';
+import { syncDirtyTracker } from './sync-dirty-tracker';
 
 export interface SyncResult {
   items: UniversalAnimeItem[];
   errors: { platform: PlatformType; error: string }[];
+  conflictIds: number[];
+  queuedJobs: number;
 }
 
 export class MultiPlatformSyncService {
@@ -28,7 +33,7 @@ export class MultiPlatformSyncService {
       platforms.map(async (platform) => {
         try {
           const provider = getProvider(platform);
-          const creds = authService.getCredentials(platform);
+          const creds = await authService.getValidCredentials(platform);
           if (!creds) return;
 
           const items = await provider.fetchUserList(creds.token.accessToken);
@@ -40,11 +45,18 @@ export class MultiPlatformSyncService {
       })
     );
 
-    const mergedItems = await this.mergeItems(allItems);
+    const { merged, conflictIds } = await this.mergeItems(allItems);
+    const queuedJobs = await this.propagateChanges(merged, allItems);
 
-    await this.propagateChanges(mergedItems, allItems);
+    const queueSummary = await this.drainOfflineQueue();
+    if (queueSummary.dead > 0) {
+      errors.push({
+        platform: platforms[0] ?? 'anilist',
+        error: `${queueSummary.dead} sync jobs moved to dead-letter queue`,
+      });
+    }
 
-    return { items: mergedItems, errors };
+    return { items: merged, errors, conflictIds, queuedJobs };
   }
 
   async syncProgressUpdate(
@@ -54,33 +66,96 @@ export class MultiPlatformSyncService {
     score?: number
   ): Promise<void> {
     const platforms = authService.getConnectedPlatforms();
+    const targets: { platform: PlatformType; targetId: string }[] = [];
 
-    await Promise.all(
-      platforms.map(async (platform) => {
-        try {
-          const provider = getProvider(platform);
-          if (!isWritableProvider(provider)) return;
+    for (const platform of platforms) {
+      const provider = getProvider(platform);
+      if (!isWritableProvider(provider)) continue;
+      const targetId = await this.resolveId(item, platform);
+      if (!targetId) continue;
+      targets.push({ platform, targetId });
+    }
+    if (targets.length === 0) return;
 
-          const creds = authService.getCredentials(platform);
-          if (!creds) return;
-
-          const platformId = await this.resolveId(item, platform);
-          if (!platformId) return;
-
-          await provider.updateProgress(platformId, progress, creds.token.accessToken);
-          await provider.updateStatus(platformId, status, creds.token.accessToken);
-
-          if (score !== undefined) {
-            await provider.updateScore(platformId, score, creds.token.accessToken);
-          }
-        } catch (error) {
-          console.error(`Failed to push update to ${platform}:`, error);
-        }
-      })
-    );
+    const queueJobs: Parameters<typeof offlineQueueService.enqueueBatch>[0] = [];
+    for (const { platform, targetId } of targets) {
+      queueJobs.push(
+        { type: 'progress', platform, payload: { animeId: targetId, progress } },
+        { type: 'status', platform, payload: { animeId: targetId, status } }
+      );
+      if (typeof score === 'number') {
+        queueJobs.push({
+          type: 'score',
+          platform,
+          payload: { animeId: targetId, score },
+        });
+      }
+      await syncDirtyTracker.markDirtyForAllPlatforms(
+        targetId,
+        [platform],
+        score !== undefined ? 'all' : 'progress'
+      );
+    }
+    await offlineQueueService.enqueueBatch(queueJobs);
+    await this.drainOfflineQueue();
   }
 
-  private async mergeItems(items: UniversalAnimeItem[]): Promise<UniversalAnimeItem[]> {
+  async drainOfflineQueue() {
+    return offlineQueueService.drain((job) => this.executeJob(job));
+  }
+
+  private async executeJob(job: SyncJob): Promise<void> {
+    const provider = getProvider(job.platform);
+    if (!isWritableProvider(provider)) {
+      throw new Error(`Provider ${job.platform} does not support writes`);
+    }
+    const creds = await authService.getValidCredentials(job.platform);
+    if (!creds) {
+      throw new Error(`Platform ${job.platform} is not connected`);
+    }
+
+    const token = creds.token.accessToken;
+    const animeId = job.payload.animeId;
+
+    switch (job.jobType) {
+      case 'progress':
+        if (typeof job.payload.progress !== 'number') {
+          throw new Error('progress job missing progress');
+        }
+        await provider.updateProgress(animeId, job.payload.progress, token);
+        await syncDirtyTracker.clear(animeId, job.platform, 'progress');
+        return;
+      case 'status':
+        if (!job.payload.status) {
+          throw new Error('status job missing status');
+        }
+        await provider.updateStatus(animeId, job.payload.status, token);
+        await syncDirtyTracker.clear(animeId, job.platform, 'status');
+        return;
+      case 'score':
+        if (typeof job.payload.score !== 'number') {
+          throw new Error('score job missing score');
+        }
+        await provider.updateScore(animeId, job.payload.score, token);
+        await syncDirtyTracker.clear(animeId, job.platform, 'score');
+        return;
+      case 'add':
+        if (!job.payload.status) {
+          throw new Error('add job missing status');
+        }
+        await provider.addToList(animeId, job.payload.status, token);
+        await syncDirtyTracker.clear(animeId, job.platform);
+        return;
+      case 'remove':
+        await provider.removeFromList(animeId, token);
+        await syncDirtyTracker.clear(animeId, job.platform);
+        return;
+    }
+  }
+
+  private async mergeItems(
+    items: UniversalAnimeItem[]
+  ): Promise<{ merged: UniversalAnimeItem[]; conflictIds: number[] }> {
     const enrichedItems = await Promise.all(
       items.map(async (item) => {
         const newItem = { ...item, platformIds: { ...item.platformIds } };
@@ -124,7 +199,15 @@ export class MultiPlatformSyncService {
       groups.push(group);
     }
 
-    return groups.map((group) => this.mergeGroup(group));
+    const merged: UniversalAnimeItem[] = [];
+    const conflictIds: number[] = [];
+    for (const group of groups) {
+      const result = await conflictResolutionService.mergeGroup(group);
+      merged.push(result.merged);
+      conflictIds.push(...result.conflictIds);
+    }
+
+    return { merged, conflictIds };
   }
 
   private areSameAnime(a: UniversalAnimeItem, b: UniversalAnimeItem): boolean {
@@ -137,46 +220,17 @@ export class MultiPlatformSyncService {
     return false;
   }
 
-  private mergeGroup(group: UniversalAnimeItem[]): UniversalAnimeItem {
-    if (group.length === 0) throw new Error('Empty group');
-    if (group.length === 1) return group[0];
-
-    const bestItem = group.reduce((prev, curr) => {
-      if (curr.status === 'completed' && prev.status !== 'completed') return curr;
-      if (prev.status === 'completed' && curr.status !== 'completed') return prev;
-
-      if (curr.progress > prev.progress) return curr;
-      if (prev.progress > curr.progress) return prev;
-
-      if (curr.updatedAt > prev.updatedAt) return curr;
-      return prev;
-    });
-
-    const platformIds = { ...group[0].platformIds };
-    for (const item of group) {
-      Object.assign(platformIds, item.platformIds);
-    }
-
-    return {
-      ...bestItem,
-      platformIds,
-      title: group.find((i) => i.titleEnglish)?.titleEnglish || bestItem.title,
-    };
-  }
-
   private async propagateChanges(
     merged: UniversalAnimeItem[],
     original: UniversalAnimeItem[]
-  ): Promise<void> {
+  ): Promise<number> {
     const platforms = authService.getConnectedPlatforms();
+    const queueJobs: Parameters<typeof offlineQueueService.enqueueBatch>[0] = [];
 
     for (const item of merged) {
       for (const platform of platforms) {
         const provider = getProvider(platform);
         if (!isWritableProvider(provider)) continue;
-
-        const creds = authService.getCredentials(platform);
-        if (!creds) continue;
 
         const platformId = item.platformIds[platform];
         if (!platformId) continue;
@@ -186,33 +240,47 @@ export class MultiPlatformSyncService {
         );
 
         if (originalItem) {
-          try {
-            if (originalItem.progress < item.progress) {
-              await provider.updateProgress(platformId, item.progress, creds.token.accessToken);
-            }
-            if (originalItem.status !== item.status) {
-              await provider.updateStatus(platformId, item.status, creds.token.accessToken);
-            }
-            if (item.score && originalItem.score !== item.score) {
-              await provider.updateScore(platformId, item.score, creds.token.accessToken);
-            }
-          } catch (error) {
-            console.error(`Failed to sync updates to ${platform}:`, error);
+          if (originalItem.progress < item.progress) {
+            queueJobs.push({
+              type: 'progress',
+              platform,
+              payload: { animeId: platformId, progress: item.progress },
+            });
           }
-        } else {
-          try {
-            if (item.status === 'watching' || item.status === 'completed') {
-              await provider.addToList(platformId, item.status, creds.token.accessToken);
-              if (item.progress > 0) {
-                await provider.updateProgress(platformId, item.progress, creds.token.accessToken);
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to add to ${platform}:`, error);
+          if (originalItem.status !== item.status) {
+            queueJobs.push({
+              type: 'status',
+              platform,
+              payload: { animeId: platformId, status: item.status },
+            });
+          }
+          if (typeof item.score === 'number' && originalItem.score !== item.score) {
+            queueJobs.push({
+              type: 'score',
+              platform,
+              payload: { animeId: platformId, score: item.score },
+            });
+          }
+        } else if (item.status === 'watching' || item.status === 'completed') {
+          queueJobs.push({
+            type: 'add',
+            platform,
+            payload: { animeId: platformId, status: item.status },
+          });
+          if (item.progress > 0) {
+            queueJobs.push({
+              type: 'progress',
+              platform,
+              payload: { animeId: platformId, progress: item.progress },
+            });
           }
         }
       }
     }
+
+    if (queueJobs.length === 0) return 0;
+    await offlineQueueService.enqueueBatch(queueJobs);
+    return queueJobs.length;
   }
 
   private async resolveId(

@@ -190,35 +190,28 @@ export class KitsuDataSource implements AnimeDataSource {
 
   async searchAnime(query: string, page?: number): Promise<UnifiedAnimeItem[]> {
     const offset = offsetForPage(page);
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>(
-      '/anime',
-      {
-        'filter[text]': query,
-        'page[limit]': KITSU_PAGE_SIZE,
-        'page[offset]': offset,
-      }
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>('/anime', {
+      'filter[text]': query,
+      'page[limit]': KITSU_PAGE_SIZE,
+      'page[offset]': offset,
+    });
     return (response.data ?? []).map(buildKitsuItem);
   }
 
   async fetchAnime(page: number, _genreId?: number): Promise<UnifiedAnimeItem[]> {
     const offset = offsetForPage(page);
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>(
-      '/anime',
-      {
-        sort: '-userCount',
-        'page[limit]': KITSU_PAGE_SIZE,
-        'page[offset]': offset,
-      }
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>('/anime', {
+      sort: '-userCount',
+      'page[limit]': KITSU_PAGE_SIZE,
+      'page[offset]': offset,
+    });
     return (response.data ?? []).map(buildKitsuItem);
   }
 
   async fetchGenres(): Promise<AnimeGenre[]> {
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuCategoryResource[]>>(
-      '/categories',
-      { 'page[limit]': 50 }
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuCategoryResource[]>>('/categories', {
+      'page[limit]': 50,
+    });
     return (response.data ?? []).flatMap((category) => {
       const name = category.attributes?.title;
       if (!name) return [];
@@ -230,14 +223,11 @@ export class KitsuDataSource implements AnimeDataSource {
 
   async fetchTopAnime(page?: number): Promise<UnifiedAnimeItem[]> {
     const offset = offsetForPage(page);
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>(
-      '/anime',
-      {
-        sort: '-averageRating',
-        'page[limit]': KITSU_PAGE_SIZE,
-        'page[offset]': offset,
-      }
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>('/anime', {
+      sort: '-averageRating',
+      'page[limit]': KITSU_PAGE_SIZE,
+      'page[offset]': offset,
+    });
     return (response.data ?? []).map(buildKitsuItem);
   }
 
@@ -254,26 +244,20 @@ export class KitsuDataSource implements AnimeDataSource {
     };
     if (season) params['filter[season]'] = season.toLowerCase();
     if (year != null) params['filter[seasonYear]'] = year;
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>(
-      '/anime',
-      params
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource[]>>('/anime', params);
     return (response.data ?? []).map(buildKitsuItem);
   }
 
   async fetchAnimeDetail(id: string): Promise<UnifiedAnimeItem> {
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource>>(
-      `/anime/${id}`,
-      {}
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuAnimeResource>>(`/anime/${id}`, {});
     return buildKitsuItem(response.data);
   }
 
   async fetchAnimeStaff(id: string): Promise<AnimeStaff[]> {
-    const response = await KitsuClient.get<KitsuJsonApi<KitsuResource[]>>(
-      `/anime/${id}/staff`,
-      { include: 'person', 'page[limit]': 20 }
-    );
+    const response = await KitsuClient.get<KitsuJsonApi<KitsuResource[]>>(`/anime/${id}/staff`, {
+      include: 'person',
+      'page[limit]': 20,
+    });
     const personMap = new Map<string, KitsuPersonAttributes>();
     for (const inc of response.included ?? []) {
       if (inc.type === 'people' || inc.type === 'persons') {
@@ -283,9 +267,8 @@ export class KitsuDataSource implements AnimeDataSource {
     const out: AnimeStaff[] = [];
     for (const entry of response.data ?? []) {
       const attrs = (entry.attributes ?? {}) as KitsuStaffAttributes;
-      const personRel = (entry.relationships?.person as
-        | { data?: { id?: string } }
-        | undefined)?.data;
+      const personRel = (entry.relationships?.person as { data?: { id?: string } } | undefined)
+        ?.data;
       const personId = personRel?.id;
       const person = personId ? personMap.get(personId) : undefined;
       out.push({
@@ -312,9 +295,8 @@ export class KitsuDataSource implements AnimeDataSource {
     const out: AnimeRelation[] = [];
     for (const entry of response.data ?? []) {
       const attrs = (entry.attributes ?? {}) as { role?: string | null };
-      const destRel = (entry.relationships?.destination as
-        | { data?: { id?: string } }
-        | undefined)?.data;
+      const destRel = (entry.relationships?.destination as { data?: { id?: string } } | undefined)
+        ?.data;
       const destId = destRel?.id ?? '';
       const dest = destId ? animeMap.get(destId) : undefined;
       const titles = dest?.titles ?? null;
@@ -324,8 +306,7 @@ export class KitsuDataSource implements AnimeDataSource {
         type: attrs.role ?? 'related',
         title,
         format: dest?.subtype ? dest.subtype.toUpperCase() : undefined,
-        imageUrl:
-          dest?.posterImage?.large ?? dest?.posterImage?.medium ?? undefined,
+        imageUrl: dest?.posterImage?.large ?? dest?.posterImage?.medium ?? undefined,
       });
     }
     return out;

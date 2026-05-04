@@ -48,10 +48,10 @@ export class CharacterService {
    */
   async fetchTopCharacters(page: number = 1, limit: number = 25): Promise<Character[]> {
     try {
-      const response = await JikanClient.get<JikanResponse<Character[]>>(
-        '/top/characters',
-        { page, limit }
-      );
+      const response = await JikanClient.get<JikanResponse<Character[]>>('/top/characters', {
+        page,
+        limit,
+      });
       // Jikan API returns { data: [...], pagination: {...} }
       return (response as any).data || [];
     } catch (error) {
@@ -81,9 +81,7 @@ export class CharacterService {
    */
   async fetchCharacterDetails(id: number): Promise<Character> {
     try {
-      const response = await JikanClient.get<JikanResponse<Character>>(
-        `/characters/${id}`
-      );
+      const response = await JikanClient.get<JikanResponse<Character>>(`/characters/${id}`);
       return (response as any).data;
     } catch (error) {
       console.error(`Error fetching character ${id}:`, error);
@@ -150,4 +148,3 @@ export class CharacterService {
 }
 
 export const characterService = CharacterService.getInstance();
-

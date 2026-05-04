@@ -44,7 +44,7 @@ interface RawAniListCoverImage {
 }
 
 interface RawAniListStudios {
-  nodes?: Array<{ name?: string | null; isAnimationStudio?: boolean | null }>;
+  nodes?: { name?: string | null; isAnimationStudio?: boolean | null }[];
 }
 
 interface RawAniListTag {
@@ -254,10 +254,10 @@ export class AniListDataSource implements AnimeDataSource {
     if (typeof genreId === 'number') {
       const name = this.genreIdToName.get(genreId);
       if (name) {
-        const data = await this.client.query<PageWrapper<RawAniListMedia>>(
-          BY_GENRE_QUERY,
-          { genres: [name], page }
-        );
+        const data = await this.client.query<PageWrapper<RawAniListMedia>>(BY_GENRE_QUERY, {
+          genres: [name],
+          page,
+        });
         return (data.Page.media ?? []).map((m) => this.mapMedia(m));
       }
     }
@@ -294,19 +294,17 @@ export class AniListDataSource implements AnimeDataSource {
   ): Promise<UnifiedAnimeItem[]> {
     const seasonUpper = (season ?? getCurrentSeason()).toUpperCase();
     const targetYear = year ?? getCurrentYear();
-    const data = await this.client.query<PageWrapper<RawAniListMedia>>(
-      SEASONAL_QUERY,
-      { season: seasonUpper, year: targetYear, page }
-    );
+    const data = await this.client.query<PageWrapper<RawAniListMedia>>(SEASONAL_QUERY, {
+      season: seasonUpper,
+      year: targetYear,
+      page,
+    });
     return (data.Page.media ?? []).map((m) => this.mapMedia(m));
   }
 
   // MARK: - AnimeDetailProvider
 
-  async fetchAnimeDetail(
-    id: string,
-    sourcePlatform?: PlatformType
-  ): Promise<UnifiedAnimeItem> {
+  async fetchAnimeDetail(id: string, sourcePlatform?: PlatformType): Promise<UnifiedAnimeItem> {
     const variables = await this.resolveAniListVariables(id, sourcePlatform);
     if (Object.keys(variables).length === 0) {
       throw new DataSourceError({
@@ -318,23 +316,15 @@ export class AniListDataSource implements AnimeDataSource {
 
     let data: MediaWrapper<RawAniListMedia>;
     try {
-      data = await this.client.query<MediaWrapper<RawAniListMedia>>(
-        DETAIL_QUERY,
-        variables
-      );
+      data = await this.client.query<MediaWrapper<RawAniListMedia>>(DETAIL_QUERY, variables);
     } catch (err) {
       // NOT_FOUND with `id` → retry once with `idMal` (per api_contracts.md §1).
-      if (
-        err instanceof DataSourceError &&
-        err.code === 'NOT_FOUND' &&
-        'id' in variables
-      ) {
+      if (err instanceof DataSourceError && err.code === 'NOT_FOUND' && 'id' in variables) {
         const numeric = Number(id);
         if (Number.isFinite(numeric)) {
-          data = await this.client.query<MediaWrapper<RawAniListMedia>>(
-            DETAIL_QUERY,
-            { idMal: numeric }
-          );
+          data = await this.client.query<MediaWrapper<RawAniListMedia>>(DETAIL_QUERY, {
+            idMal: numeric,
+          });
         } else {
           throw err;
         }
@@ -365,10 +355,7 @@ export class AniListDataSource implements AnimeDataSource {
 
   // MARK: - AnimeMediaProvider
 
-  async fetchAnimeStaff(
-    id: string,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeStaff[]> {
+  async fetchAnimeStaff(id: string, sourcePlatform?: PlatformType): Promise<AnimeStaff[]> {
     const data = await this.fetchDetailRaw(id, sourcePlatform);
     if (!data) return [];
     const edges = data.staff?.edges ?? [];
@@ -386,10 +373,7 @@ export class AniListDataSource implements AnimeDataSource {
       .filter((s): s is AnimeStaff => s !== null);
   }
 
-  async fetchAnimeRelations(
-    id: string,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeRelation[]> {
+  async fetchAnimeRelations(id: string, sourcePlatform?: PlatformType): Promise<AnimeRelation[]> {
     const data = await this.fetchDetailRaw(id, sourcePlatform);
     if (!data) return [];
     const edges = data.relations?.edges ?? [];
@@ -408,10 +392,7 @@ export class AniListDataSource implements AnimeDataSource {
       .filter((r): r is AnimeRelation => r !== null);
   }
 
-  async fetchAnimeStreaming(
-    id: string,
-    sourcePlatform?: PlatformType
-  ): Promise<AnimeStreaming[]> {
+  async fetchAnimeStreaming(id: string, sourcePlatform?: PlatformType): Promise<AnimeStreaming[]> {
     const data = await this.fetchDetailRaw(id, sourcePlatform);
     if (!data) return [];
     const links = data.externalLinks ?? [];
@@ -486,10 +467,7 @@ export class AniListDataSource implements AnimeDataSource {
     const variables = await this.resolveAniListVariables(id, sourcePlatform);
     if (Object.keys(variables).length === 0) return null;
     try {
-      const data = await this.client.query<MediaWrapper<RawAniListMedia>>(
-        DETAIL_QUERY,
-        variables
-      );
+      const data = await this.client.query<MediaWrapper<RawAniListMedia>>(DETAIL_QUERY, variables);
       return data.Media ?? null;
     } catch (err) {
       if (err instanceof DataSourceError && err.code === 'NOT_FOUND') return null;
@@ -515,12 +493,7 @@ export class AniListDataSource implements AnimeDataSource {
     const description = stripHtml(media.description);
 
     return new UnifiedAnimeItem({
-      title:
-        title.userPreferred ||
-        title.romaji ||
-        title.english ||
-        title.native ||
-        'Unknown',
+      title: title.userPreferred || title.romaji || title.english || title.native || 'Unknown',
       titleEnglish: title.english ?? null,
       titleJapanese: title.native ?? null,
       titleRomaji: title.romaji ?? null,
@@ -565,9 +538,7 @@ function collectStudios(connection: RawAniListStudios | null | undefined): strin
     .map((n) => n.name)
     .filter((n): n is string => typeof n === 'string' && n.length > 0);
   if (animation.length > 0) return animation;
-  return nodes
-    .map((n) => n.name)
-    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+  return nodes.map((n) => n.name).filter((n): n is string => typeof n === 'string' && n.length > 0);
 }
 
 function collectTags(tags: RawAniListTag[] | null | undefined): string[] {

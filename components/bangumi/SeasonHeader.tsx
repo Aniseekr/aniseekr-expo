@@ -3,11 +3,7 @@
 // followed by a Tracking|All filter pill and a calendar/list toggle button.
 
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 
@@ -22,6 +18,8 @@ interface SeasonHeaderProps {
   viewMode: 'calendar' | 'list';
   onViewModeToggle: () => void;
   totalCount?: number;
+  onLabelTap?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const FILTER_SEGMENT_WIDTH = 84;
@@ -35,12 +33,14 @@ export function SeasonHeader({
   viewMode,
   onViewModeToggle,
   totalCount,
+  onLabelTap,
+  onOpenSettings,
 }: SeasonHeaderProps) {
   const indicatorX = useSharedValue(filterMode === 'tracking' ? 0 : FILTER_SEGMENT_WIDTH);
-  indicatorX.value = withSpring(
-    filterMode === 'tracking' ? 0 : FILTER_SEGMENT_WIDTH,
-    { damping: 18, stiffness: 220 }
-  );
+  indicatorX.value = withSpring(filterMode === 'tracking' ? 0 : FILTER_SEGMENT_WIDTH, {
+    damping: 18,
+    stiffness: 220,
+  });
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: indicatorX.value }],
@@ -62,9 +62,9 @@ export function SeasonHeader({
             <MaterialIcons name="chevron-left" size={18} color={Colors.text.secondary} />
           </Pressable>
           <View style={styles.capsuleDivider} />
-          <View style={styles.seasonLabel}>
+          <Pressable onPress={onLabelTap} disabled={!onLabelTap} style={styles.seasonLabel}>
             <Text style={styles.seasonText}>{seasonDisplayName}</Text>
-          </View>
+          </Pressable>
           <View style={styles.capsuleDivider} />
           <Pressable onPress={onNextSeason} style={styles.capsuleButton}>
             <MaterialIcons name="chevron-right" size={18} color={Colors.text.secondary} />
@@ -90,13 +90,20 @@ export function SeasonHeader({
           })}
         </View>
 
-        <Pressable onPress={onViewModeToggle} style={styles.viewModeButton}>
-          <MaterialIcons
-            name={viewMode === 'calendar' ? 'view-list' : 'calendar-today'}
-            size={20}
-            color={Colors.text.primary}
-          />
-        </Pressable>
+        <View style={styles.actionGroup}>
+          {onOpenSettings ? (
+            <Pressable onPress={onOpenSettings} style={styles.viewModeButton}>
+              <MaterialIcons name="tune" size={20} color={Colors.text.primary} />
+            </Pressable>
+          ) : null}
+          <Pressable onPress={onViewModeToggle} style={styles.viewModeButton}>
+            <MaterialIcons
+              name={viewMode === 'calendar' ? 'view-list' : 'calendar-today'}
+              size={20}
+              color={Colors.text.primary}
+            />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -203,5 +210,9 @@ const styles = StyleSheet.create({
     ...Platform.select({
       android: { elevation: 1 },
     }),
+  },
+  actionGroup: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
   },
 });

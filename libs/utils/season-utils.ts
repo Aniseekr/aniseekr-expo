@@ -13,7 +13,7 @@ export function getSeasonForMonth(month: number): Season {
   // 3, 4, 5 → SPRING
   // 6, 7, 8 → SUMMER
   // 9, 10, 11 → FALL
-  const m = ((Math.floor(month) - 1) % 12 + 12) % 12 + 1;
+  const m = ((((Math.floor(month) - 1) % 12) + 12) % 12) + 1;
   if (m === 12 || m <= 2) return 'WINTER';
   if (m <= 5) return 'SPRING';
   if (m <= 8) return 'SUMMER';

@@ -1,0 +1,282 @@
+import { memo, useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
+import * as Notifications from 'expo-notifications';
+import { Spacing, Typography } from '../../constants/DesignSystem';
+import { useTheme } from '../../context/ThemeContext';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { EmptyStateView } from '../common/EmptyStateView';
+
+interface PendingNotification {
+  identifier: string;
+  title: string;
+  body: string;
+  scheduledFor?: Date;
+}
+
+interface NotificationManagerSheetProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
+function NotificationManagerSheetComponent({ visible, onClose }: NotificationManagerSheetProps) {
+  const { theme } = useTheme();
+  const [pending, setPending] = useState<PendingNotification[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPending = useCallback(async () => {
+    setLoading(true);
+    try {
+      const items = await Notifications.getAllScheduledNotificationsAsync();
+      const mapped: PendingNotification[] = items.map((n) => {
+        let scheduledFor: Date | undefined;
+        const trigger = n.trigger as any;
+        if (trigger?.date) {
+          scheduledFor = new Date(trigger.date);
+        } else if (trigger?.seconds) {
+          scheduledFor = new Date(Date.now() + trigger.seconds * 1000);
+        }
+        return {
+          identifier: n.identifier,
+          title: n.content.title ?? 'Reminder',
+          body: n.content.body ?? '',
+          scheduledFor,
+        };
+      });
+      setPending(mapped);
+    } catch (e) {
+      console.warn('[NotificationManager] failed:', e);
+      setPending([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) fetchPending();
+  }, [visible, fetchPending]);
+
+  const handleDelete = async (id: string) => {
+    hapticsBridge.warning();
+    try {
+      await Notifications.cancelScheduledNotificationAsync(id);
+      setPending((prev) => prev.filter((p) => p.identifier !== id));
+    } catch (e) {
+      console.warn('[NotificationManager] cancel failed:', e);
+      hapticsBridge.error();
+    }
+  };
+
+  const handleClearAll = async () => {
+    hapticsBridge.warning();
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      setPending([]);
+      hapticsBridge.success();
+    } catch (e) {
+      console.warn('[NotificationManager] cancel-all failed:', e);
+      hapticsBridge.error();
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Animated.View
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(160)}
+        style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Animated.View
+          entering={FadeInUp.springify().damping(18)}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: theme.background.secondary,
+              borderColor: theme.glassBorder,
+            },
+          ]}>
+          <SafeAreaView edges={['bottom']}>
+            <View style={styles.handle} />
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.title, { color: theme.text.primary }]}>Reminders</Text>
+                <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
+                  {pending.length} pending notification{pending.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={12}>
+                <MaterialIcons name="close" size={22} color={theme.text.secondary} />
+              </Pressable>
+            </View>
+
+            {loading ? (
+              <View style={styles.loaderWrap}>
+                <ActivityIndicator color={theme.accent} />
+              </View>
+            ) : pending.length === 0 ? (
+              <EmptyStateView
+                icon="notifications-none"
+                title="No pending reminders"
+                description="Tap the bell on an episode to schedule a reminder."
+              />
+            ) : (
+              <>
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {pending.map((n) => (
+                    <View
+                      key={n.identifier}
+                      style={[
+                        styles.row,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <View style={[styles.icon, { backgroundColor: theme.accent + '24' }]}>
+                        <MaterialIcons name="notifications-active" size={20} color={theme.accent} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.rowTitle, { color: theme.text.primary }]}
+                          numberOfLines={1}>
+                          {n.title}
+                        </Text>
+                        <Text
+                          style={[styles.rowBody, { color: theme.text.secondary }]}
+                          numberOfLines={2}>
+                          {n.body}
+                        </Text>
+                        {n.scheduledFor ? (
+                          <Text style={[styles.scheduled, { color: theme.text.tertiary }]}>
+                            {n.scheduledFor.toLocaleString()}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        onPress={() => handleDelete(n.identifier)}
+                        hitSlop={8}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                        <MaterialIcons
+                          name="delete-outline"
+                          size={22}
+                          color={theme.text.secondary}
+                        />
+                      </Pressable>
+                    </View>
+                  ))}
+                </ScrollView>
+                <Pressable
+                  onPress={handleClearAll}
+                  style={({ pressed }) => [
+                    styles.clearAllButton,
+                    {
+                      borderColor: '#FF453A33',
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}>
+                  <MaterialIcons name="delete-sweep" size={18} color="#FF453A" />
+                  <Text style={styles.clearAllLabel}>Clear all</Text>
+                </Pressable>
+              </>
+            )}
+          </SafeAreaView>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingTop: 8,
+    paddingBottom: Spacing.md,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginBottom: Spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  title: {
+    ...Typography.headlineSmall,
+  },
+  subtitle: {
+    ...Typography.bodySmall,
+    marginTop: 2,
+  },
+  loaderWrap: {
+    paddingVertical: Spacing.xl,
+    alignItems: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: Spacing.xs,
+  },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowTitle: {
+    ...Typography.titleMedium,
+  },
+  rowBody: {
+    ...Typography.bodySmall,
+    marginTop: 2,
+  },
+  scheduled: {
+    ...Typography.captionSmall,
+    marginTop: 4,
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+    backgroundColor: '#FF453A12',
+  },
+  clearAllLabel: {
+    ...Typography.titleSmall,
+    fontWeight: '700',
+    color: '#FF453A',
+  },
+});
+
+export const NotificationManagerSheet = memo(NotificationManagerSheetComponent);

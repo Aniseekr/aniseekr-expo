@@ -25,6 +25,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../rate/types';
+import { NearbyPilgrimageBadge } from '../pilgrimage/NearbyPilgrimageBadge';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 
 export interface DailyAnime {
@@ -38,6 +39,14 @@ interface FocusDayCarouselProps {
   showUnknownDays?: boolean;
   isCurrentDay: (day: string) => boolean;
   initialDay?: string;
+  /**
+   * Opaque key. When this changes the carousel resets user-interaction state
+   * and re-snaps to {@link initialDay}. Parent passes a string composed of
+   * the season/year/filter combo so a hard reset is implied.
+   */
+  scrollToTodayKey?: string | number;
+  /** Optional browse-source platform — used by the inline pilgrimage badge. */
+  sourcePlatform?: string;
 }
 
 const CARD_WIDTH_RATIO = 0.88;
@@ -55,6 +64,8 @@ function FocusDayCarouselComponent({
   showUnknownDays = false,
   isCurrentDay,
   initialDay,
+  scrollToTodayKey,
+  sourcePlatform,
 }: FocusDayCarouselProps) {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = screenWidth * CARD_WIDTH_RATIO;
@@ -63,9 +74,7 @@ function FocusDayCarouselComponent({
 
   const displayDays = useMemo(() => {
     const list = [...weekDays];
-    const hasUnknown = groupedAnime.some(
-      (d) => d.day === 'Unknown' && d.anime.length > 0
-    );
+    const hasUnknown = groupedAnime.some((d) => d.day === 'Unknown' && d.anime.length > 0);
     if (hasUnknown && showUnknownDays && !list.includes('Unknown')) {
       list.push('Unknown');
     }
@@ -74,6 +83,7 @@ function FocusDayCarouselComponent({
 
   const scrollX = useSharedValue(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
+  const userInteractedRef = useRef(false);
 
   const initialIndex = useMemo(() => {
     if (!initialDay) return 0;
@@ -91,11 +101,27 @@ function FocusDayCarouselComponent({
     });
   }, [initialIndex, itemFullWidth, scrollX]);
 
+  // Hard reset: when the parent flips scrollToTodayKey, re-snap to initialDay
+  // and clear the user-interaction flag.
+  useEffect(() => {
+    if (scrollToTodayKey === undefined) return;
+    userInteractedRef.current = false;
+    const x = initialIndex * itemFullWidth;
+    scrollX.value = x;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x, animated: true });
+    });
+  }, [scrollToTodayKey, initialIndex, itemFullWidth, scrollX]);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollX.value = event.contentOffset.x;
     },
   });
+
+  const handleScrollEndDrag = () => {
+    userInteractedRef.current = true;
+  };
 
   return (
     <Animated.ScrollView
@@ -111,10 +137,10 @@ function FocusDayCarouselComponent({
         paddingVertical: Spacing.md,
       }}
       onScroll={scrollHandler}
+      onScrollEndDrag={handleScrollEndDrag}
       scrollEventThrottle={16}>
       {displayDays.map((day, index) => {
-        const dayData =
-          groupedAnime.find((g) => g.day === day) ?? { day, anime: [] };
+        const dayData = groupedAnime.find((g) => g.day === day) ?? { day, anime: [] };
         const isToday = isCurrentDay(day);
         return (
           <FocusDayItem
@@ -127,6 +153,7 @@ function FocusDayCarouselComponent({
             cardWidth={cardWidth}
             isToday={isToday}
             spacing={SPACING}
+            sourcePlatform={sourcePlatform}
           />
         );
       })}
@@ -143,6 +170,7 @@ interface FocusDayItemProps {
   cardWidth: number;
   isToday: boolean;
   spacing: number;
+  sourcePlatform?: string;
 }
 
 const FocusDayItem = memo(function FocusDayItem({
@@ -154,6 +182,7 @@ const FocusDayItem = memo(function FocusDayItem({
   cardWidth,
   isToday,
   spacing,
+  sourcePlatform,
 }: FocusDayItemProps) {
   const router = useRouter();
   const inputRange = [
@@ -163,24 +192,9 @@ const FocusDayItem = memo(function FocusDayItem({
   ];
 
   const cardStyle = useAnimatedStyle(() => {
-    const scale = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.94, 1, 0.94],
-      Extrapolation.CLAMP
-    );
-    const opacity = interpolate(
-      scrollX.value,
-      inputRange,
-      [0.55, 1, 0.55],
-      Extrapolation.CLAMP
-    );
-    const translateY = interpolate(
-      scrollX.value,
-      inputRange,
-      [10, 0, 10],
-      Extrapolation.CLAMP
-    );
+    const scale = interpolate(scrollX.value, inputRange, [0.94, 1, 0.94], Extrapolation.CLAMP);
+    const opacity = interpolate(scrollX.value, inputRange, [0.55, 1, 0.55], Extrapolation.CLAMP);
+    const translateY = interpolate(scrollX.value, inputRange, [10, 0, 10], Extrapolation.CLAMP);
     return {
       transform: [{ scale }, { translateY }],
       opacity,
@@ -191,18 +205,10 @@ const FocusDayItem = memo(function FocusDayItem({
 
   return (
     <Animated.View
-      style={[
-        styles.cardWrapper,
-        { width: cardWidth, marginRight: spacing },
-        cardStyle,
-      ]}>
-      <View
-        style={[
-          styles.card,
-          isToday ? styles.cardToday : styles.cardDefault,
-        ]}>
+      style={[styles.cardWrapper, { width: cardWidth, marginRight: spacing }, cardStyle]}>
+      <View style={[styles.card, isToday ? styles.cardToday : styles.cardDefault]}>
         {Platform.OS === 'ios' ? (
-          <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={28} tint="systemThickMaterialDark" style={StyleSheet.absoluteFill} />
         ) : null}
         <View
           pointerEvents="none"
@@ -216,9 +222,7 @@ const FocusDayItem = memo(function FocusDayItem({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.dayTitle}>{dayFullName(day)}</Text>
-            {isToday ? (
-              <View style={styles.todayDot} />
-            ) : null}
+            {isToday ? <View style={styles.todayDot} /> : null}
           </View>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{dayData.anime.length} shows</Text>
@@ -239,11 +243,7 @@ const FocusDayItem = memo(function FocusDayItem({
                 onPress={() => router.push(`/(rate)/anime/${anime.id}`)}
                 style={styles.row}>
                 {isToday ? <View style={styles.trackedBar} /> : null}
-                <Image
-                  source={{ uri: anime.image }}
-                  style={styles.poster}
-                  resizeMode="cover"
-                />
+                <Image source={{ uri: anime.image }} style={styles.poster} resizeMode="cover" />
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle} numberOfLines={1}>
                     {anime.title}
@@ -256,17 +256,18 @@ const FocusDayItem = memo(function FocusDayItem({
                       </View>
                     ) : null}
                     {anime.format || anime.type ? (
-                      <Text style={styles.metaText}>
-                        {anime.format ?? anime.type}
-                      </Text>
+                      <Text style={styles.metaText}>{anime.format ?? anime.type}</Text>
+                    ) : null}
+                    {sourcePlatform ? (
+                      <NearbyPilgrimageBadge
+                        sourcePlatform={sourcePlatform}
+                        id={anime.id}
+                        variant="icon"
+                      />
                     ) : null}
                   </View>
                 </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={Colors.text.tertiary}
-                />
+                <Ionicons name="chevron-forward" size={14} color={Colors.text.tertiary} />
               </Pressable>
             ))
           )}

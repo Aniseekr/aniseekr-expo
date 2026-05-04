@@ -1,6 +1,6 @@
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { Colors, Radius, Spacing, Typography, FontFamily, Shadow } from '../../constants/DesignSystem';
+import { Colors, Spacing, Typography, FontFamily, Shadow } from '../../constants/DesignSystem';
 
 export interface PlatformInfo {
   id: string;
@@ -9,6 +9,8 @@ export interface PlatformInfo {
   iconUrl?: string;
   initial: string;
   isConnected?: boolean;
+  username?: string;
+  avatarUrl?: string;
 }
 
 const DEFAULT_PLATFORMS: PlatformInfo[] = [

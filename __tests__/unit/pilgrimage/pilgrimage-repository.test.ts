@@ -4,9 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { LocalDB } from '../../../libs/db';
 import { IDMappingService } from '../../../libs/services/sync/id-mapping-service';
-import {
-  AnitabiService,
-} from '../../../libs/services/pilgrimage/anitabi-service';
+import { AnitabiService } from '../../../libs/services/pilgrimage/anitabi-service';
 import { PilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 

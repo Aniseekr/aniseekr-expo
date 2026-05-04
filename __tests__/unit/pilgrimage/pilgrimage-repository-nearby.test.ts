@@ -72,7 +72,7 @@ class StubAnitabiService {
   }
   async getAnimePilgrimage(id: number): Promise<AnitabiBangumi | null> {
     if (this.failures.has(id)) throw new Error('boom');
-    return this.byId.has(id) ? this.byId.get(id) ?? null : null;
+    return this.byId.has(id) ? (this.byId.get(id) ?? null) : null;
   }
   async getDetailedPoints(): Promise<never[]> {
     return [];
@@ -136,7 +136,7 @@ describe('PilgrimageRepository.getNearbyAnime', () => {
     const stub = new StubAnitabiService();
     stub.setEntry(1, sampleBangumi({ id: 1, title: 'A', geo: [35.69, 139.69] }));
     stub.setEntry(2, sampleBangumi({ id: 2, title: 'B', geo: [35.01, 135.77] }));
-    stub.setEntry(3, sampleBangumi({ id: 3, title: 'C', geo: [33.59, 130.40] }));
+    stub.setEntry(3, sampleBangumi({ id: 3, title: 'C', geo: [33.59, 130.4] }));
 
     const repo = new PilgrimageRepository({
       service: stub as unknown as AnitabiService,

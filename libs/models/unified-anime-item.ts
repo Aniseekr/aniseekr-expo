@@ -179,9 +179,7 @@ export class UnifiedAnimeItem {
     this.titleChinese = init.titleChinese ?? null;
     this.titleChineseTraditional =
       init.titleChineseTraditional ??
-      (init.titleChinese != null
-        ? convertSimplifiedToTraditional(init.titleChinese)
-        : null);
+      (init.titleChinese != null ? convertSimplifiedToTraditional(init.titleChinese) : null);
     this.titleRussian = init.titleRussian ?? null;
     this.titleRomaji = init.titleRomaji ?? null;
     this.synonyms = init.synonyms ? [...init.synonyms] : [];
@@ -302,12 +300,9 @@ export class UnifiedAnimeItem {
     titleCn?: string | null;
     synonyms?: string[];
   }): string {
-    const titles = [
-      params.titleDefault,
-      params.titleEn,
-      params.titleJp,
-      params.titleCn,
-    ].filter((t): t is string => t != null);
+    const titles = [params.titleDefault, params.titleEn, params.titleJp, params.titleCn].filter(
+      (t): t is string => t != null
+    );
     const synonyms = params.synonyms ?? [];
     return [...titles, ...synonyms].join(' ').toLowerCase();
   }
@@ -333,8 +328,7 @@ export class UnifiedAnimeItem {
     const anilist = items.find((it) => it.sourcePlatform === 'anilist');
     const fallback = items[0];
 
-    const title =
-      bangumi?.title ?? mal?.title ?? anilist?.title ?? fallback.title ?? 'Unknown';
+    const title = bangumi?.title ?? mal?.title ?? anilist?.title ?? fallback.title ?? 'Unknown';
 
     const coverImageURL =
       anilist?.coverImageURL ??
@@ -380,20 +374,14 @@ export class UnifiedAnimeItem {
 
     return new UnifiedAnimeItem({
       title,
-      titleEnglish:
-        anilist?.titleEnglish ?? mal?.titleEnglish ?? bangumi?.titleEnglish ?? null,
-      titleJapanese:
-        bangumi?.titleJapanese ??
-        mal?.titleJapanese ??
-        anilist?.titleJapanese ??
-        null,
+      titleEnglish: anilist?.titleEnglish ?? mal?.titleEnglish ?? bangumi?.titleEnglish ?? null,
+      titleJapanese: bangumi?.titleJapanese ?? mal?.titleJapanese ?? anilist?.titleJapanese ?? null,
       titleChinese: bangumi?.titleChinese ?? null,
       titleChineseTraditional: bangumi?.titleChineseTraditional ?? null,
       titleRussian: items.find((it) => it.titleRussian != null)?.titleRussian ?? null,
       titleRomaji: anilist?.titleRomaji ?? null,
       synonyms: uniqueSorted(items.flatMap((it) => it.synonyms)),
-      synopsis:
-        anilist?.synopsis ?? bangumi?.synopsis ?? mal?.synopsis ?? fallback.synopsis,
+      synopsis: anilist?.synopsis ?? bangumi?.synopsis ?? mal?.synopsis ?? fallback.synopsis,
       idMal: mal?.idMal ?? items.find((it) => it.idMal != null)?.idMal ?? null,
       format: anilist?.format ?? mal?.format ?? bangumi?.format ?? fallback.format,
       coverImageURL,
@@ -419,11 +407,7 @@ export class UnifiedAnimeItem {
         fallback.totalEpisodes,
       year: anilist?.year ?? mal?.year ?? bangumi?.year ?? fallback.year,
       season: anilist?.season ?? mal?.season ?? bangumi?.season ?? fallback.season,
-      startDate:
-        anilist?.startDate ??
-        mal?.startDate ??
-        bangumi?.startDate ??
-        fallback.startDate,
+      startDate: anilist?.startDate ?? mal?.startDate ?? bangumi?.startDate ?? fallback.startDate,
       broadcastDay:
         anilist?.broadcastDay ??
         mal?.broadcastDay ??

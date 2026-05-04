@@ -84,7 +84,11 @@ describe('AniListDataSource', () => {
               {
                 id: 1,
                 idMal: 100,
-                title: { romaji: 'Cowboy Bebop', english: 'Cowboy Bebop', native: 'カウボーイビバップ' },
+                title: {
+                  romaji: 'Cowboy Bebop',
+                  english: 'Cowboy Bebop',
+                  native: 'カウボーイビバップ',
+                },
                 coverImage: { large: 'https://img/large.jpg', extraLarge: 'https://img/xl.jpg' },
                 bannerImage: 'https://img/banner.jpg',
                 averageScore: 86,
@@ -321,4 +325,3 @@ describe('AniListDataSource', () => {
     expect(item.tags).not.toContain('Sister Death');
   });
 });
-

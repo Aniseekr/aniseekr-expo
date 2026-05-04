@@ -1,15 +1,34 @@
-import { View, Text, Platform, StyleSheet, Pressable } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Platform, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Colors, Radius, TabBar as TabBarTokens } from '../constants/DesignSystem';
 
 const PILL_HORIZONTAL_MARGIN = 16;
 const PILL_INNER_PADDING = 8;
+const INDICATOR_INSET = 4;
+
+const SLIDE_SPRING = { damping: 22, stiffness: 240, mass: 0.6 } as const;
+const FOCUS_SPRING = { damping: 18, stiffness: 220, mass: 0.5 } as const;
+const PRESS_IN_SPRING = { damping: 14, stiffness: 320 } as const;
+const PRESS_OUT_SPRING = { damping: 12, stiffness: 280 } as const;
 
 export default function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const [tabRowWidth, setTabRowWidth] = useState(0);
+
+  const indicatorX = useSharedValue(0);
+  const indicatorOpacity = useSharedValue(0);
 
   const bottomMargin = Platform.select({
     ios: insets.bottom > 0 ? insets.bottom : 16,
@@ -22,28 +41,62 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
     options?.tabBarButton === null ||
     options?.tabBarVisible === false;
 
-  const { options: activeOptions } = descriptors[state.routes[state.index].key];
-  if (isHidden(activeOptions)) {
-    return null;
-  }
-
   const visibleRoutes = state.routes.filter((route) => {
     const { options } = descriptors[route.key];
     return !isHidden(options);
   });
 
+  const activeRouteKey = state.routes[state.index]?.key;
+  const focusedVisibleIndex = Math.max(
+    0,
+    visibleRoutes.findIndex((r) => r.key === activeRouteKey)
+  );
+
+  const tabCount = visibleRoutes.length;
+  const tabWidth = tabCount > 0 ? tabRowWidth / tabCount : 0;
+
+  useEffect(() => {
+    if (tabWidth <= 0) {
+      indicatorOpacity.value = 0;
+      return;
+    }
+    const target = focusedVisibleIndex * tabWidth;
+    if (indicatorOpacity.value === 0) {
+      indicatorX.value = target;
+      indicatorOpacity.value = withTiming(1, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      });
+    } else {
+      indicatorX.value = withSpring(target, SLIDE_SPRING);
+    }
+  }, [focusedVisibleIndex, tabWidth, indicatorOpacity, indicatorX]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value }],
+    width: Math.max(0, tabWidth - INDICATOR_INSET * 2),
+    opacity: indicatorOpacity.value,
+  }));
+
+  const activeOptions = activeRouteKey ? descriptors[activeRouteKey]?.options : undefined;
+  if (!activeOptions || isHidden(activeOptions)) {
+    return null;
+  }
+
   return (
     <View style={[styles.container, { bottom: bottomMargin }]} pointerEvents="box-none">
       <View style={styles.pill}>
         <BlurView
-          intensity={Platform.OS === 'ios' ? 60 : 80}
-          tint="dark"
+          intensity={80}
+          tint={Platform.OS === 'ios' ? 'systemThickMaterialDark' : 'dark'}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.pillBackground} pointerEvents="none" />
         <View style={styles.pillBorder} pointerEvents="none" />
+        <View style={styles.pillInnerBorder} pointerEvents="none" />
 
-        <View style={styles.tabRow}>
+        <View style={styles.tabRow} onLayout={(e) => setTabRowWidth(e.nativeEvent.layout.width)}>
+          <Animated.View style={[styles.indicator, indicatorStyle]} pointerEvents="none" />
           {visibleRoutes.map((route) => {
             const { options } = descriptors[route.key];
             const realIndex = state.routes.findIndex((r) => r.key === route.key);
@@ -63,6 +116,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
                 canPreventDefault: true,
               });
               if (!isFocused && !event.defaultPrevented) {
+                Haptics.selectionAsync().catch(() => undefined);
                 navigation.navigate(route.name, route.params);
               }
             };
@@ -75,10 +129,10 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
               <TabItem
                 key={route.key}
                 isFocused={isFocused}
-                label={label}
+                label={typeof label === 'string' ? label : ''}
                 onPress={onPress}
                 onLongPress={onLongPress}
-                options={options}
+                renderIcon={options.tabBarIcon}
               />
             );
           })}
@@ -88,31 +142,54 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   );
 }
 
-function TabItem({ isFocused, label, onPress, onLongPress, options }: any) {
-  const scale = useSharedValue(1);
-  const indicatorScale = useSharedValue(isFocused ? 1 : 0);
+interface TabItemProps {
+  isFocused: boolean;
+  label: string;
+  onPress: () => void;
+  onLongPress: () => void;
+  renderIcon?: (props: { focused: boolean; color: string; size: number }) => React.ReactNode;
+}
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+function TabItem({ isFocused, label, onPress, onLongPress, renderIcon }: TabItemProps) {
+  const pressScale = useSharedValue(1);
+  const focusProgress = useSharedValue(isFocused ? 1 : 0);
+
+  useEffect(() => {
+    focusProgress.value = withSpring(isFocused ? 1 : 0, FOCUS_SPRING);
+  }, [isFocused, focusProgress]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
   }));
 
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: indicatorScale.value }],
-    opacity: indicatorScale.value,
+  const iconWrapStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: 1 + focusProgress.value * 0.06 },
+      { translateY: -focusProgress.value * 1.5 },
+    ],
   }));
 
-  if (isFocused) {
-    indicatorScale.value = withSpring(1, { damping: 14, stiffness: 200 });
-  } else {
-    indicatorScale.value = withSpring(0, { damping: 14, stiffness: 200 });
-  }
+  const inactiveIconStyle = useAnimatedStyle(() => ({
+    opacity: 1 - focusProgress.value,
+  }));
+
+  const activeIconStyle = useAnimatedStyle(() => ({
+    opacity: focusProgress.value,
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(focusProgress.value, [0, 1], [Colors.text.tertiary, '#FFFFFF']),
+    opacity: 0.75 + focusProgress.value * 0.25,
+  }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.94, { damping: 10, stiffness: 300 });
+    pressScale.value = withSpring(0.92, PRESS_IN_SPRING);
   };
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 10, stiffness: 300 });
+    pressScale.value = withSpring(1, PRESS_OUT_SPRING);
   };
+
+  const iconSize = TabBarTokens.iconSize + 4;
 
   return (
     <Pressable
@@ -121,22 +198,32 @@ function TabItem({ isFocused, label, onPress, onLongPress, options }: any) {
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={styles.tabItem}>
-      <Animated.View style={[styles.indicator, indicatorStyle]} pointerEvents="none" />
-      <Animated.View style={[styles.tabContent, animatedStyle]}>
-        {options.tabBarIcon &&
-          options.tabBarIcon({
-            focused: isFocused,
-            color: isFocused ? '#fff' : Colors.text.tertiary,
-            size: TabBarTokens.iconSize + 4,
-          })}
-        <Text
-          style={[
-            styles.label,
-            { color: isFocused ? '#fff' : Colors.text.tertiary },
-          ]}
-          numberOfLines={1}>
-          {typeof label === 'string' ? label : ''}
-        </Text>
+      <Animated.View style={[styles.tabContent, containerStyle]}>
+        <Animated.View style={[styles.iconStack, iconWrapStyle]}>
+          {renderIcon ? (
+            <>
+              <Animated.View style={inactiveIconStyle}>
+                {renderIcon({
+                  focused: false,
+                  color: Colors.text.tertiary,
+                  size: iconSize,
+                })}
+              </Animated.View>
+              <Animated.View
+                style={[StyleSheet.absoluteFill, styles.iconCenter, activeIconStyle]}
+                pointerEvents="none">
+                {renderIcon({
+                  focused: true,
+                  color: '#FFFFFF',
+                  size: iconSize,
+                })}
+              </Animated.View>
+            </>
+          ) : null}
+        </Animated.View>
+        <Animated.Text style={[styles.label, labelStyle]} numberOfLines={1}>
+          {label}
+        </Animated.Text>
       </Animated.View>
     </Pressable>
   );
@@ -175,11 +262,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
+  pillInnerBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: Radius.tabBar,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
   tabRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
   tabItem: {
     flex: 1,
@@ -189,10 +281,9 @@ const styles = StyleSheet.create({
   },
   indicator: {
     position: 'absolute',
-    top: 4,
-    bottom: 4,
-    left: 4,
-    right: 4,
+    top: INDICATOR_INSET,
+    bottom: INDICATOR_INSET,
+    left: INDICATOR_INSET,
     borderRadius: Radius.tabActive,
     backgroundColor: Colors.primary,
   },
@@ -200,6 +291,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: TabBarTokens.itemGap,
+  },
+  iconStack: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
     fontSize: TabBarTokens.labelSize,

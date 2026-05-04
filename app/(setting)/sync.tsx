@@ -1,41 +1,78 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { PLATFORM_CONFIGS, PlatformType } from '../../libs/services/auth/types';
 import { authService } from '../../libs/services/auth/auth-service';
+import { isAuthRequiresFormError, AuthFormKind } from '../../libs/services/auth/auth-errors';
 import { multiPlatformSyncService } from '../../libs/services/sync/multi-platform-sync-service';
 import { AnimatedPressable } from '../../components/common/AnimatedPressable';
+import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
+
+interface SheetState {
+  visible: boolean;
+  platform: PlatformType | null;
+  kind: AuthFormKind | null;
+  requiresServerUrl: boolean;
+}
+
+const HIDDEN_SHEET: SheetState = {
+  visible: false,
+  platform: null,
+  kind: null,
+  requiresServerUrl: false,
+};
 
 export default function SyncSettingsScreen() {
-  const router = useRouter();
   const [connectedPlatforms, setConnectedPlatforms] = useState<PlatformType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [sheet, setSheet] = useState<SheetState>(HIDDEN_SHEET);
 
   useEffect(() => {
     loadPlatforms();
   }, []);
 
-  const loadPlatforms = () => {
+  const loadPlatforms = async () => {
+    await authService.initialize();
     setConnectedPlatforms(authService.getConnectedPlatforms());
   };
 
   const handleConnect = async (platform: PlatformType) => {
     setIsLoading(true);
     try {
-      if (PLATFORM_CONFIGS[platform].authType === 'password') {
-        Alert.alert('Not Implemented', 'Password auth UI not implemented yet');
-      } else if (PLATFORM_CONFIGS[platform].authType === 'apikey') {
-        Alert.alert('Not Implemented', 'API Key auth UI not implemented yet');
-      } else {
-        await authService.connectPlatform(platform);
-        loadPlatforms();
+      await authService.signIn(platform);
+      await loadPlatforms();
+    } catch (error) {
+      if (isAuthRequiresFormError(error)) {
+        setSheet({
+          visible: true,
+          platform,
+          kind: error.kind,
+          requiresServerUrl: error.requiresServerUrl,
+        });
+        return;
       }
-    } catch (error: any) {
-      Alert.alert('Connection Failed', error.message);
+      Alert.alert('Connection Failed', error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSheetSubmit = async (input: PlatformAuthInput) => {
+    if (!sheet.platform || !sheet.kind) return;
+    if (sheet.kind === 'password') {
+      if (!input.username || !input.password) {
+        throw new Error('Username and password are required');
+      }
+      await authService.connectWithPassword(sheet.platform, input.username, input.password);
+    } else {
+      if (!input.apiKey) {
+        throw new Error('API key is required');
+      }
+      await authService.connectWithApiKey(sheet.platform, input.apiKey, input.serverUrl);
+    }
+    setSheet(HIDDEN_SHEET);
+    await loadPlatforms();
   };
 
   const handleDisconnect = async (platform: PlatformType) => {
@@ -48,8 +85,8 @@ export default function SyncSettingsScreen() {
           text: 'Disconnect',
           style: 'destructive',
           onPress: async () => {
-            await authService.disconnectPlatform(platform);
-            loadPlatforms();
+            await authService.signOut(platform);
+            await loadPlatforms();
           },
         },
       ]
@@ -147,6 +184,7 @@ export default function SyncSettingsScreen() {
                           ? handleDisconnect(config.platform)
                           : handleConnect(config.platform)
                       }
+                      disabled={isLoading}
                       trackColor={{ false: '#e2e2e2', true: config.color }}
                     />
                   </View>
@@ -160,6 +198,16 @@ export default function SyncSettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <PlatformAuthSheet
+        visible={sheet.visible}
+        platform={sheet.platform}
+        platformName={sheet.platform ? PLATFORM_CONFIGS[sheet.platform].displayName : ''}
+        kind={sheet.kind}
+        requiresServerUrl={sheet.requiresServerUrl}
+        onClose={() => setSheet(HIDDEN_SHEET)}
+        onSubmit={handleSheetSubmit}
+      />
     </>
   );
 }

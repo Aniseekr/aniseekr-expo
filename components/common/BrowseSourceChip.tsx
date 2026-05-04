@@ -6,10 +6,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import {
-  PLATFORM_CONFIGS,
-  type PlatformType,
-} from '../../libs/services/auth/types';
+import { PLATFORM_CONFIGS, type PlatformType } from '../../libs/services/auth/types';
 import { dataSourceConfig } from '../../libs/services/data-source-config';
 import {
   dataSourceSwitchingCoordinator,
@@ -72,8 +69,7 @@ export function BrowseSourceChip({ onPress }: BrowseSourceChipProps) {
         pressed && { opacity: 0.8 },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`Browse source: ${config.displayName}`}
-    >
+      accessibilityLabel={`Browse source: ${config.displayName}`}>
       <View style={[styles.dot, { backgroundColor: config.color }]} />
       <Text style={styles.label} numberOfLines={1}>
         {config.displayName}

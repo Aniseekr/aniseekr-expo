@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
-import Animated, { useSharedValue, withSpring, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { withSpring, useAnimatedStyle } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 
@@ -27,26 +27,31 @@ export function EditProfileSheet({ visible, onClose, currentUser, onSave }: Edit
     setIsSaving(false);
   };
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!username.trim() || !email.includes('@')) {
-      setIsSaving(true);
-
-      setTimeout(() => {
-        if (onSave) onSave({ username: username.trim(), email: email.trim() });
-        setIsSaving(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        Alert.alert('Success', 'Profile updated successfully');
-      }, 1000);
-    } else {
       Alert.alert('Invalid Input', 'Please enter a valid username and email');
+      return;
     }
-  }, [username, email, onSave, setIsSaving]);
+
+    setIsSaving(true);
+    try {
+      await onSave?.({ username: username.trim(), email: email.trim() });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Save Failed', e instanceof Error ? e.message : 'Could not save profile');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [username, email, onSave]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [
       {
-        translateY: visible ? 0 : withSpring(0, { damping: 15, stiffness: 150 }),
+        translateY: visible
+          ? withSpring(0, { damping: 15, stiffness: 150 })
+          : withSpring(400, { damping: 15, stiffness: 150 }),
       },
     ],
   }));

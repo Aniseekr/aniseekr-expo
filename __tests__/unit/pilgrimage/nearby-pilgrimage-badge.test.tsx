@@ -22,10 +22,7 @@ import {
 } from '../../../components/pilgrimage/NearbyPilgrimageBadge';
 
 const COMPONENT_SOURCE = readFileSync(
-  join(
-    process.cwd(),
-    'components/pilgrimage/NearbyPilgrimageBadge.tsx'
-  ),
+  join(process.cwd(), 'components/pilgrimage/NearbyPilgrimageBadge.tsx'),
   'utf8'
 );
 
@@ -54,9 +51,7 @@ describe('NearbyPilgrimageBadge', () => {
     // Source contract: useState seeds with null, and the early return guard
     // returns null until data arrives. These two lines together prove the
     // "nothing until loaded" behaviour.
-    expect(COMPONENT_SOURCE).toMatch(
-      /useState<AnitabiBangumi \| null>\(null\)/
-    );
+    expect(COMPONENT_SOURCE).toMatch(/useState<AnitabiBangumi \| null>\(null\)/);
     expect(COMPONENT_SOURCE).toMatch(/if \(!data\) return null/);
   });
 

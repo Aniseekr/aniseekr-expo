@@ -1,7 +1,7 @@
-import { Image } from "expo-image";
-import { memo } from "react";
-import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { Image } from 'expo-image';
+import { memo } from 'react';
+import { Pressable, Text, View, StyleSheet, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 type Props = {
@@ -17,7 +17,7 @@ function GenreSquareCardComponent({ title, image, onPress }: Props) {
   return (
     <Pressable onPress={onPress} style={styles.card}>
       <View style={styles.imageContainer}>
-        {image && image.trim() !== "" ? (
+        {image && image.trim() !== '' ? (
           <Image
             source={{ uri: image }}
             style={styles.image}
@@ -28,16 +28,13 @@ function GenreSquareCardComponent({ title, image, onPress }: Props) {
         ) : (
           <View style={styles.placeholder}>
             {/* Subtle gradient or solid color, no icon to avoid "swirl" look */}
-            <LinearGradient
-                colors={['#27272a', '#18181b']}
-                style={StyleSheet.absoluteFill}
-            />
+            <LinearGradient colors={['#27272a', '#18181b']} style={StyleSheet.absoluteFill} />
           </View>
         )}
-        
+
         {/* Full overlay for better text contrast since text is centered */}
         <View style={styles.overlay} />
-        
+
         <View style={styles.content}>
           <Text style={styles.title}>{title}</Text>
         </View>
@@ -62,7 +59,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 4,
-      }
+      },
     }),
   },
   imageContainer: {

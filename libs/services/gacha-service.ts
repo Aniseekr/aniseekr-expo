@@ -9,8 +9,12 @@ try {
   const memoryStorage: Record<string, string> = {};
   AsyncStorage = {
     getItem: async (key: string) => memoryStorage[key] || null,
-    setItem: async (key: string, value: string) => { memoryStorage[key] = value; },
-    removeItem: async (key: string) => { delete memoryStorage[key]; },
+    setItem: async (key: string, value: string) => {
+      memoryStorage[key] = value;
+    },
+    removeItem: async (key: string) => {
+      delete memoryStorage[key];
+    },
   };
 }
 
@@ -38,7 +42,7 @@ const RARITY_PROBABILITIES: Record<CardRarity, number> = {
   SSR: 0.03,
   SR: 0.12,
   R: 0.35,
-  N: 0.50,
+  N: 0.5,
 };
 
 const RARITY_SHARD_VALUES: Record<CardRarity, number> = {
@@ -207,7 +211,10 @@ class GachaService {
       };
 
       // Check for duplicate
-      if (existingCardIds.has(card.characterId) || newCards.some((c) => c.characterId === card.characterId)) {
+      if (
+        existingCardIds.has(card.characterId) ||
+        newCards.some((c) => c.characterId === card.characterId)
+      ) {
         // It's a duplicate!
         card.isDuplicate = true;
         card.shardReward = RARITY_SHARD_VALUES[rarity];
@@ -233,7 +240,9 @@ class GachaService {
 
     await this.saveUserData();
 
-    console.log(`🎴 Gacha pull result: ${pulledCards.length} cards pulled (${newCards.length} new, ${pulledCards.length - newCards.length} duplicates)`);
+    console.log(
+      `🎴 Gacha pull result: ${pulledCards.length} cards pulled (${newCards.length} new, ${pulledCards.length - newCards.length} duplicates)`
+    );
     if (totalShardsEarned > 0) {
       console.log(`💎 Converted duplicates into ${totalShardsEarned} shards`);
     }
@@ -269,4 +278,3 @@ class GachaService {
 
 export const gachaService = GachaService.getInstance();
 export const PULL_COST_CONST = PULL_COST;
-

@@ -8,15 +8,7 @@
 //     AnnictDataSource so we can verify batching/dedup without depending on
 //     the AniList agent's GraphQL implementation.
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  spyOn,
-  mock,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, spyOn, mock, type Mock } from 'bun:test';
 import {
   AnnictDataSource,
   selectAnnictImage,
@@ -42,21 +34,20 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
  * Captures every fetch call and yields a programmable handler. Returns the
  * captured calls so tests can assert URL / headers / body.
  */
-function captureFetch(
-  handler: (call: FetchCall) => Response | Promise<Response>
-): {
+function captureFetch(handler: (call: FetchCall) => Response | Promise<Response>): {
   spy: Mock<typeof fetch>;
   calls: FetchCall[];
 } {
   const calls: FetchCall[] = [];
-  const spy = spyOn(globalThis, 'fetch').mockImplementation(
-    (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString();
-      const call = { url, init };
-      calls.push(call);
-      return handler(call);
-    }) as unknown as typeof fetch
-  );
+  const spy = spyOn(globalThis, 'fetch').mockImplementation((async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    const call = { url, init };
+    calls.push(call);
+    return handler(call);
+  }) as unknown as typeof fetch);
   return { spy, calls };
 }
 
@@ -138,9 +129,11 @@ describe('AnnictClient token cache (ANNICT-001..002)', () => {
 });
 
 describe('AnnictDataSource search & detail (ANNICT-003..004)', () => {
-  function buildClientWithToken(
-    handler: (call: FetchCall) => Response | Promise<Response>
-  ): { client: AnnictClient; calls: FetchCall[]; spy: Mock<typeof fetch> } {
+  function buildClientWithToken(handler: (call: FetchCall) => Response | Promise<Response>): {
+    client: AnnictClient;
+    calls: FetchCall[];
+    spy: Mock<typeof fetch>;
+  } {
     const { spy, calls } = captureFetch(handler);
     const client = new AnnictClient({
       staticToken: 'test-token',
@@ -199,9 +192,7 @@ describe('AnnictDataSource search & detail (ANNICT-003..004)', () => {
   });
 
   it('ANNICT-004 fetchAnimeDetail throws NOT_FOUND when works array is empty', async () => {
-    const { client, spy } = buildClientWithToken(() =>
-      jsonResponse({ works: [] })
-    );
+    const { client, spy } = buildClientWithToken(() => jsonResponse({ works: [] }));
     const ds = new AnnictDataSource({ client });
 
     let caught: unknown;
@@ -238,7 +229,8 @@ describe('AnnictDataSource image fallback (ANNICT-005..006)', () => {
     });
 
     const batchFetch = mock(
-      async (malIds: number[]) => new Map(malIds.map((id) => [id, `https://anilist.example/${id}.jpg`]))
+      async (malIds: number[]) =>
+        new Map(malIds.map((id) => [id, `https://anilist.example/${id}.jpg`]))
     );
     const ds = new AnnictDataSource({ client, batchFetchImages: batchFetch });
 
@@ -249,9 +241,7 @@ describe('AnnictDataSource image fallback (ANNICT-005..006)', () => {
     expect(batchFetch.mock.calls[0]?.[0]).toEqual([777]);
     // Resulting item carries the AniList-sourced cover.
     expect(items[0].coverImageURL).toBe('https://anilist.example/777.jpg');
-    expect(items[0].platformImages.annict?.large).toBe(
-      'https://anilist.example/777.jpg'
-    );
+    expect(items[0].platformImages.annict?.large).toBe('https://anilist.example/777.jpg');
     spy.mockRestore();
   });
 

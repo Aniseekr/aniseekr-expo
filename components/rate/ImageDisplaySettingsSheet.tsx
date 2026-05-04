@@ -1,0 +1,279 @@
+import { memo, useCallback } from 'react';
+import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
+import { Spacing, Typography } from '../../constants/DesignSystem';
+import { useTheme } from '../../context/ThemeContext';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+
+export type ImageContentMode = 'fill' | 'fit';
+export type RatingButtonsMode = 'three' | 'five';
+
+export interface RatingPreferences {
+  contentMode: ImageContentMode;
+  ratingMode: RatingButtonsMode;
+  showAIInsights: boolean;
+  trackingEnabled: boolean;
+  showOriginalTitle: boolean;
+}
+
+export const DEFAULT_RATING_PREFS: RatingPreferences = {
+  contentMode: 'fill',
+  ratingMode: 'three',
+  showAIInsights: true,
+  trackingEnabled: false,
+  showOriginalTitle: false,
+};
+
+interface ImageDisplaySettingsSheetProps {
+  visible: boolean;
+  preferences: RatingPreferences;
+  onClose: () => void;
+  onChange: (next: RatingPreferences) => void;
+}
+
+function ImageDisplaySettingsSheetComponent({
+  visible,
+  preferences,
+  onClose,
+  onChange,
+}: ImageDisplaySettingsSheetProps) {
+  const { theme } = useTheme();
+
+  const update = useCallback(
+    <K extends keyof RatingPreferences>(key: K, value: RatingPreferences[K]) => {
+      hapticsBridge.selection();
+      onChange({ ...preferences, [key]: value });
+    },
+    [preferences, onChange]
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Animated.View
+        entering={FadeIn.duration(160)}
+        exiting={FadeOut.duration(160)}
+        style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Animated.View
+          entering={FadeInUp.springify().damping(18)}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: theme.background.secondary,
+              borderColor: theme.glassBorder,
+            },
+          ]}>
+          <SafeAreaView edges={['bottom']}>
+            <View style={styles.handle} />
+            <View style={styles.headerRow}>
+              <Text style={[styles.title, { color: theme.text.primary }]}>Display Settings</Text>
+              <Pressable onPress={onClose} hitSlop={12}>
+                <MaterialIcons name="close" size={22} color={theme.text.secondary} />
+              </Pressable>
+            </View>
+
+            <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>Image fit</Text>
+            <View style={styles.segmented}>
+              {(['fill', 'fit'] as ImageContentMode[]).map((mode) => {
+                const active = preferences.contentMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => update('contentMode', mode)}
+                    style={({ pressed }) => [
+                      styles.segmentItem,
+                      {
+                        backgroundColor: active ? theme.accent : theme.background.tertiary,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}>
+                    <MaterialIcons
+                      name={mode === 'fill' ? 'crop-square' : 'crop-original'}
+                      size={18}
+                      color={active ? '#0E0A06' : theme.text.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        { color: active ? '#0E0A06' : theme.text.primary },
+                      ]}>
+                      {mode === 'fill' ? 'Fill' : 'Fit'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>
+              Rating buttons
+            </Text>
+            <View style={styles.segmented}>
+              {(['three', 'five'] as RatingButtonsMode[]).map((mode) => {
+                const active = preferences.ratingMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => update('ratingMode', mode)}
+                    style={({ pressed }) => [
+                      styles.segmentItem,
+                      {
+                        backgroundColor: active ? theme.accent : theme.background.tertiary,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        { color: active ? '#0E0A06' : theme.text.primary },
+                      ]}>
+                      {mode === 'three' ? '3 buttons' : '5 buttons'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <ToggleRow
+              icon="auto-awesome"
+              label="AI Insights"
+              description="Show AI-generated recommendations on each card"
+              value={preferences.showAIInsights}
+              onChange={(v) => update('showAIInsights', v)}
+            />
+            <ToggleRow
+              icon="bookmark"
+              label="Tracking shortcut"
+              description="Add anime to lists directly from the swipe deck"
+              value={preferences.trackingEnabled}
+              onChange={(v) => update('trackingEnabled', v)}
+            />
+            <ToggleRow
+              icon="translate"
+              label="Original titles"
+              description="Show romaji or Japanese titles instead of English"
+              value={preferences.showOriginalTitle}
+              onChange={(v) => update('showOriginalTitle', v)}
+            />
+          </SafeAreaView>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+function ToggleRow({
+  icon,
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View
+      style={[
+        styles.toggleRow,
+        { borderColor: theme.glassBorder, backgroundColor: theme.background.tertiary },
+      ]}>
+      <MaterialIcons name={icon} size={22} color={theme.accent} />
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.toggleLabel, { color: theme.text.primary }]}>{label}</Text>
+        <Text style={[styles.toggleDescription, { color: theme.text.secondary }]}>
+          {description}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={(v) => {
+          hapticsBridge.selection();
+          onChange(v);
+        }}
+        trackColor={{ false: theme.background.primary, true: theme.accent }}
+        thumbColor={value ? '#fff' : '#ddd'}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    paddingHorizontal: Spacing.md,
+    paddingTop: 8,
+    paddingBottom: Spacing.md,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginBottom: Spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  title: {
+    ...Typography.headlineSmall,
+  },
+  sectionLabel: {
+    ...Typography.captionSmall,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  segmented: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  segmentItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: 12,
+  },
+  segmentLabel: {
+    ...Typography.titleSmall,
+    fontWeight: '600',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  toggleLabel: {
+    ...Typography.titleMedium,
+  },
+  toggleDescription: {
+    ...Typography.bodySmall,
+    marginTop: 2,
+  },
+});
+
+export const ImageDisplaySettingsSheet = memo(ImageDisplaySettingsSheetComponent);

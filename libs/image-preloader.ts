@@ -15,8 +15,8 @@ class ImagePreloaderService {
    */
   preload(urls: string[]) {
     // Filter out already preloaded or queued items to avoid duplicates
-    const newUrls = urls.filter(url => !this.preloadedSet.has(url) && !this.queue.includes(url));
-    
+    const newUrls = urls.filter((url) => !this.preloadedSet.has(url) && !this.queue.includes(url));
+
     if (newUrls.length === 0) return;
 
     this.queue.push(...newUrls);
@@ -52,7 +52,7 @@ class ImagePreloaderService {
   private async prefetchSingle(url: string) {
     try {
       if (this.preloadedSet.has(url)) return;
-      
+
       await Image.prefetch(url);
       this.preloadedSet.add(url);
       // console.log(`[ImagePreloader] Prefetched: ${url}`);

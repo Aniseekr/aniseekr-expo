@@ -1,172 +1,201 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform, Alert, Image, TouchableOpacity } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import ImagePicker, { ImagePickerResponse, Asset, MediaType } from 'expo-image-picker';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Image } from 'expo-image';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { UserRepository } from '../../libs/repositories/user-repository';
 
 interface AvatarUploaderProps {
-  currentAvatarUrl?: string;
-  onAvatarUpload: (url: string) => void;
+  currentAvatarUrl?: string | null;
+  onChange?: (uri: string | null) => void;
 }
 
-export function AvatarUploader({ currentAvatarUrl, onAvatarUpload }: AvatarUploaderProps) {
-  const [isUploading, setIsUploading] = useState(false);
+const AVATAR_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}avatars/` : null;
 
-  const handlePickImage = useCallback(async () => {
-    if (isUploading) return;
+async function ensureAvatarDir(): Promise<string | null> {
+  if (!AVATAR_DIR) return null;
+  try {
+    const info = await FileSystem.getInfoAsync(AVATAR_DIR);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(AVATAR_DIR, { intermediates: true });
+    }
+  } catch {
+    // best-effort
+  }
+  return AVATAR_DIR;
+}
 
+export function AvatarUploader({ currentAvatarUrl, onChange }: AvatarUploaderProps) {
+  const [uri, setUri] = useState<string | null>(currentAvatarUrl ?? null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setUri(currentAvatarUrl ?? null);
+  }, [currentAvatarUrl]);
+
+  const requestPermission = useCallback(async (): Promise<boolean> => {
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (current.granted) return true;
+    if (current.canAskAgain) {
+      const next = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (next.granted) return true;
+    }
+    Alert.alert('Photo access needed', 'Allow photo library access to choose an avatar.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open settings', onPress: () => Linking.openSettings() },
+    ]);
+    return false;
+  }, []);
+
+  const handlePick = useCallback(async () => {
+    if (busy) return;
+    const granted = await requestPermission();
+    if (!granted) return;
+
+    setBusy(true);
     try {
-      setIsUploading(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.length) return;
 
-      let result: ImagePickerResponse;
-
-      if (Platform.OS === 'ios') {
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          selectionLimit: 1,
-          quality: 0.8,
-        });
-      } else {
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
-          quality: 0.8,
-          allowsEditing: true,
-          aspect: [4, 3],
-        });
-      }
-
-      if (result.canceled) {
-        setIsUploading(false);
+      const asset = result.assets[0];
+      const dir = await ensureAvatarDir();
+      if (!dir) {
+        Alert.alert('Storage unavailable', 'Could not access local storage.');
         return;
       }
+      const dest = `${dir}${Date.now()}.jpg`;
+      await FileSystem.copyAsync({ from: asset.uri, to: dest });
 
-      if (result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-
-        if (asset.fileSize > 5 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Please select an image smaller than 5MB');
-          setIsUploading(false);
-          return;
-        }
-
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-        const uploadResult = await handleUpload(asset);
-
-        setIsUploading(false);
-
-        if (uploadResult) {
-          onAvatarUpload(uploadResult);
-        }
+      // Clean up the previous file (if any) before swapping.
+      const previous = await UserRepository.getAvatarUri();
+      if (previous && previous !== dest) {
+        await FileSystem.deleteAsync(previous, { idempotent: true }).catch(() => undefined);
       }
-    } catch (error) {
-      setIsUploading(false);
-      console.error('Image picker error:', error);
-      Alert.alert('Error', 'Failed to pick image');
+
+      await UserRepository.setAvatarUri(dest);
+      hapticsBridge.success();
+      setUri(dest);
+      onChange?.(dest);
+    } catch (e) {
+      console.warn('[AvatarUploader] failed:', e);
+      hapticsBridge.error();
+      Alert.alert('Could not update avatar', 'Please try again.');
+    } finally {
+      setBusy(false);
     }
-  }, [isUploading, onAvatarUpload]);
+  }, [busy, requestPermission, onChange]);
 
-  const handleUpload = async (asset: Asset): Promise<string> => {
-    const formData = new FormData();
-    formData.append('avatar', {
-      uri: asset.uri,
-      type: asset.type || 'image/jpeg',
-      name: `avatar_${Date.now()}.jpg`,
-    });
-
-    const response = await fetch('https://api.example.com/upload', {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Upload failed');
+  const handleRemove = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await UserRepository.setAvatarUri(null);
+      hapticsBridge.warning();
+      setUri(null);
+      onChange?.(null);
+    } finally {
+      setBusy(false);
     }
-
-    const data = await response.json();
-    return data.url;
-  };
+  }, [busy, onChange]);
 
   return (
     <View style={styles.container}>
-      <View style={styles.currentAvatarContainer}>
-        <Text style={styles.label}>Current Avatar</Text>
-        {currentAvatarUrl && (
-          <Image source={{ uri: currentAvatarUrl }} style={styles.currentAvatar} />
+      <View style={styles.avatarFrame}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.avatar} contentFit="cover" />
+        ) : (
+          <View style={styles.placeholder}>
+            <Ionicons name="person" size={48} color={Colors.text.disabled} />
+          </View>
         )}
       </View>
 
-      <TouchableOpacity
-        style={[styles.uploadButton, isUploading && styles.uploadButtonDisabled]}
-        onPress={handlePickImage}
-        disabled={isUploading}
-        activeOpacity={0.7}>
-        <Text style={styles.uploadButtonText}>
-          {isUploading ? 'Uploading...' : 'Change Avatar'}
-        </Text>
-      </TouchableOpacity>
-
-      <Text style={styles.info}>Pick from camera or gallery</Text>
+      <View style={styles.actions}>
+        <Pressable
+          onPress={handlePick}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.uploadButton,
+            { opacity: busy ? 0.6 : pressed ? 0.85 : 1 },
+          ]}>
+          <Ionicons name="cloud-upload-outline" size={18} color="#0E0A06" />
+          <Text style={styles.uploadLabel}>{uri ? 'Change' : 'Upload'}</Text>
+        </Pressable>
+        {uri ? (
+          <Pressable
+            onPress={handleRemove}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.removeButton,
+              { opacity: busy ? 0.6 : pressed ? 0.85 : 1 },
+            ]}>
+            <Text style={styles.removeLabel}>Remove</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  avatarFrame: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: Colors.glass.borderHeavy,
+    backgroundColor: Colors.glass.dark,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholder: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    padding: 20,
-  },
-
-  currentAvatarContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'center',
   },
-
-  currentAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+  actions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    alignItems: 'center',
   },
-
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 8,
-  },
-
   uploadButton: {
-    backgroundColor: '#fbbf24',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 28,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
   },
-
-  uploadButtonDisabled: {
-    backgroundColor: 'rgba(251, 191, 36, 0.5)',
+  uploadLabel: {
+    ...Typography.titleSmall,
+    color: '#0E0A06',
+    fontWeight: '700',
   },
-
-  uploadButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+  removeButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
   },
-
-  info: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-    marginTop: 12,
+  removeLabel: {
+    ...Typography.titleSmall,
+    color: Colors.text.secondary,
   },
 });

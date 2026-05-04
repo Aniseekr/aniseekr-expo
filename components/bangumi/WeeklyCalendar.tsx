@@ -28,9 +28,7 @@ export function WeeklyCalendar({
     const isToday = isCurrentDay(day);
 
     return (
-      <View
-        key={day}
-        style={[styles.dayColumn, isToday && styles.dayColumnToday]}>
+      <View key={day} style={[styles.dayColumn, isToday && styles.dayColumnToday]}>
         <View style={styles.dayHeader}>
           <Text style={[styles.dayTitle, isToday && styles.dayTitleToday]}>
             {dayShortName(day)}
@@ -77,9 +75,7 @@ export function WeeklyCalendar({
         showsHorizontalScrollIndicator={false}
         style={styles.horizontalScroll}
         contentContainerStyle={styles.scrollContent}>
-        <View style={styles.daysContainer}>
-          {weekDays.map((day) => renderDayColumn(day))}
-        </View>
+        <View style={styles.daysContainer}>{weekDays.map((day) => renderDayColumn(day))}</View>
       </ScrollView>
     </View>
   );
