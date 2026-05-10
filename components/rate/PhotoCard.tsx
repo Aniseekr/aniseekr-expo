@@ -18,22 +18,33 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// 🟢 Recommended (Lighter, more responsive):
+// iOS reference uses SwiftUI .spring(response: 0.3, dampingFraction: 0.6).
+// Rigorous mapping: stiffness = (2π / response)² ≈ 438, damping = 2 * dampingFraction * sqrt(stiffness * mass) ≈ 25.
+// In practice reanimated v4 with mass 1 feels too snappy at 438 stiffness, so we soften
+// stiffness toward ~240–320 and keep mass 0.9 for parity with the SwiftUI feel.
 const LIVE_SPRING_CONFIG = {
-  damping: 15, // Lower resistance for smoother slide
-  stiffness: 150, // Slightly lower stiffness, less pulling feel
-  mass: 0.8, // Lower mass, faster inertia start
-  overshootClamping: false, // Allow slight bounce (more like real objects)
+  damping: 18,
+  stiffness: 240,
+  mass: 0.9,
+  overshootClamping: false,
   restDisplacementThreshold: 0.01,
   restSpeedThreshold: 2,
 };
 
-// Configuration for Reset - Needs to be stable, avoid wobble
+// Tighter snap for cancel-back / programmatic resets — minimal bounce.
 const RESET_SPRING_CONFIG = {
-  damping: 18,
-  stiffness: 180,
+  damping: 22,
+  stiffness: 320,
+  mass: 0.9,
+  overshootClamping: false,
+};
+
+// Used when the card is committed to fly off-screen — accelerates without visible overshoot.
+const EXIT_SPRING_CONFIG = {
+  damping: 26,
+  stiffness: 200,
   mass: 1,
-  overshootClamping: true, // No overshoot on reset to avoid visual noise
+  overshootClamping: true,
 };
 
 const SWIPE_THRESHOLD = 120;
@@ -110,39 +121,24 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(
       const targetX = direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
 
       // Move only "self" (translateX) to fling the card out
-      translateX.value = withSpring(
-        targetX,
-        {
-          velocity: velocityX,
-          damping: 20,
-          stiffness: 120,
-          overshootClamping: true,
-        },
-        () => scheduleOnRN(onSwipe, direction)
+      translateX.value = withSpring(targetX, { ...EXIT_SPRING_CONFIG, velocity: velocityX }, () =>
+        scheduleOnRN(onSwipe, direction)
       );
 
       // 🔥 FIX 3: Reset parent value at the same time (smoothly restore background card as top card flies out)
       // This is smoother than waiting for the next card to mount and prevents flickering
       if (activeTranslation) {
         // 🟢 Faster reset for "snappier" background effect
-        activeTranslation.value = withSpring(0, {
-          damping: 12,
-          stiffness: 280,
-          overshootClamping: true,
-        });
+        activeTranslation.value = withSpring(0, RESET_SPRING_CONFIG);
       }
 
       // Rotation should also follow physics
       rotate.value = withSpring(direction === 'right' ? 25 : -25, {
+        ...EXIT_SPRING_CONFIG,
         velocity: velocityX / 10,
-        damping: 20,
-        stiffness: 120,
       });
 
-      translateY.value = withSpring(-50, {
-        damping: 20,
-        stiffness: 120,
-      });
+      translateY.value = withSpring(-50, EXIT_SPRING_CONFIG);
     };
 
     const pan = useMemo(
@@ -231,7 +227,8 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(
         scale.value = Math.min(Math.max(0.9, event.scale), 2.2);
       })
       .onEnd(() => {
-        scale.value = withSpring(1, { damping: 12 });
+        // In-flight bounce back to neutral after pinch release
+        scale.value = withSpring(1, LIVE_SPRING_CONFIG);
       });
 
     const longPress = Gesture.LongPress()

@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import '../global.css';
-import { useEffect } from 'react';
-import { Tabs } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -11,12 +11,38 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { SubscriptionProvider } from '../context/SubscriptionContext';
 import { notificationService } from '../libs/services/notifications/notification-service';
 import { authService } from '../libs/services/auth/auth-service';
+import { isOnboardingComplete } from '../libs/services/onboarding-service';
 
 export default function RootLayout() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
   useEffect(() => {
     void authService.initialize();
     void notificationService.initialize();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const done = await isOnboardingComplete();
+      if (cancelled) return;
+      setOnboardingChecked(true);
+      if (!done && pathname !== '/onboarding') {
+        router.replace('/onboarding');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // pathname intentionally excluded — we only gate once on bootstrap; later
+    // nav back to /onboarding (e.g. via dev reset) is handled by the user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Avoid a flash of tabs before the gate decides where to send us.
+  void onboardingChecked;
 
   return (
     <SafeAreaProvider>
@@ -146,6 +172,10 @@ export default function RootLayout() {
             {/* Splash screen - hidden from tab bar */}
             <Tabs.Screen
               name="index"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="onboarding"
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />
           </Tabs>

@@ -176,6 +176,12 @@ export default function SettingsScreen() {
                 icon="finger-print-outline"
                 onPress={() => router.push('/(setting)/otaku-dna')}
               />
+              <View style={styles.separator} />
+              <SettingItem
+                label="Achievements"
+                icon="trophy-outline"
+                onPress={() => router.push('/(setting)/achievements')}
+              />
             </GlassCard>
           </View>
 

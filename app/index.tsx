@@ -3,6 +3,7 @@ import { View, StyleSheet, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { isOnboardingComplete } from '../libs/services/onboarding-service';
 
 export default function Index() {
   const router = useRouter();
@@ -42,9 +43,10 @@ export default function Index() {
       ])
     ).start();
 
-    // Navigate after animation
-    const timer = setTimeout(() => {
-      router.replace('/(rate)');
+    // Navigate after animation; route through onboarding on first launch.
+    const timer = setTimeout(async () => {
+      const done = await isOnboardingComplete();
+      router.replace(done ? '/(rate)' : '/onboarding');
     }, 2000);
 
     return () => clearTimeout(timer);
