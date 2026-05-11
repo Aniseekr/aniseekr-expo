@@ -1,13 +1,10 @@
 import {
   View,
-  FlatList,
+  ScrollView,
   RefreshControl,
-  Platform,
   Pressable,
   Share,
   StyleSheet,
-  TouchableOpacity,
-  Text,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
@@ -16,11 +13,14 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { captureRef } from 'react-native-view-shot';
 import { CollectionHeader } from '../components/collection/CollectionHeader';
-import { FolderList } from '../components/collection/FolderList';
+import { FolderGrid } from '../components/collection/FolderGrid';
 import { CollectionOverviewCard } from '../components/collection/CollectionOverviewCard';
+import {
+  CollectionRecentRail,
+  type RecentRailItem,
+} from '../components/collection/CollectionRecentRail';
 import { CollectionTips } from '../components/collection/CollectionTips';
 import { CollectionSearchModal } from '../components/collection/CollectionSearchModal';
-import { CollectionModeToggle } from '../components/collection/CollectionModeToggle';
 import { CollectionFloatingActionBar } from '../components/collection/CollectionFloatingActionBar';
 import { ShareImageRenderer } from '../components/collection/ShareImageRenderer';
 import { ShareListEditor } from '../components/collection/ShareListEditor';
@@ -33,8 +33,10 @@ import {
   saveCollectionSortMode,
   type CollectionSortMode,
 } from '../libs/services/collection-prefs';
-import { Colors, FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
+import { Radius, Spacing, Typography } from '../constants/DesignSystem';
 import { LocalDB } from '../libs/db';
+import { ThemedText } from '../components/themed';
+import { useTheme } from '../context/ThemeContext';
 import {
   buildShareTemplate,
   type ShareEntry,
@@ -47,12 +49,16 @@ import { UserRepository } from '../libs/repositories/user-repository';
 type SortMode = CollectionSortMode;
 type ScreenMode = 'collect' | 'share';
 
+const CATEGORIES = ['All', 'Watching', 'Completed', 'Plan', 'Dropped'];
+
 export default function CollectionScreen() {
   const { top } = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [collections, setCollections] = useState<CollectionFolder[]>([]);
+  const [recents, setRecents] = useState<RecentRailItem[]>([]);
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
   const [editingFolder, setEditingFolder] = useState<CollectionFolder | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -67,16 +73,6 @@ export default function CollectionScreen() {
   const hydratedRef = useRef(false);
   const router = useRouter();
 
-  const categories = ['All', 'Wishlist', 'Favorites', 'Watching', 'Completed', 'Dropped'];
-  const categoryIcons: Record<string, string> = {
-    All: 'bookmark',
-    Wishlist: 'heart',
-    Favorites: 'heart',
-    Watching: 'play-circle',
-    Completed: 'checkmark-circle',
-    Dropped: 'x-circle',
-  };
-
   const loadCollection = async () => {
     try {
       const data = await collectionService.getFolders();
@@ -86,9 +82,34 @@ export default function CollectionScreen() {
     }
   };
 
+  const loadRecents = useCallback(async () => {
+    try {
+      const db = await LocalDB.getDatabase();
+      const rows = await db.getAllAsync<{
+        anime_id: string;
+        title: string | null;
+        image_url: string | null;
+        updated_at: number | null;
+      }>(
+        'SELECT anime_id, title, image_url, updated_at FROM user_anime WHERE title IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 10'
+      );
+      setRecents(
+        rows.map((r) => ({
+          id: r.anime_id,
+          title: r.title || 'Untitled',
+          imageUrl: r.image_url || undefined,
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to load recents:', error);
+      setRecents([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadCollection();
-  }, []);
+    loadRecents();
+  }, [loadRecents]);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,12 +252,13 @@ export default function CollectionScreen() {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     collections.forEach((folder) => {
-      if (folder.name === 'All') counts['All'] = folder.animeCount;
-      if (folder.name === 'Favorites') counts['Favorites'] = folder.animeCount;
-      if (folder.name === 'Watching') counts['Watching'] = folder.animeCount;
-      if (folder.name === 'Completed') counts['Completed'] = folder.animeCount;
-      if (folder.name === 'Dropped') counts['Dropped'] = folder.animeCount;
-      if (folder.name === 'Plan to Watch') counts['Wishlist'] = folder.animeCount;
+      if (folder.id === 'system_all') counts['All'] = folder.animeCount;
+      if (folder.folderType === 'favorites') counts['Favorites'] = folder.animeCount;
+      if (folder.folderType === 'watching' && folder.id === 'system_watching')
+        counts['Watching'] = folder.animeCount;
+      if (folder.folderType === 'completed') counts['Completed'] = folder.animeCount;
+      if (folder.folderType === 'dropped') counts['Dropped'] = folder.animeCount;
+      if (folder.folderType === 'wishlist') counts['Plan'] = folder.animeCount;
     });
     return counts;
   }, [collections]);
@@ -244,62 +266,59 @@ export default function CollectionScreen() {
   const overviewStats = useMemo(
     () => [
       {
-        label: 'Total',
-        value: collections.reduce((acc, f) => acc + (f.animeCount || 0), 0),
-        icon: 'collections-bookmark' as const,
-        color: Colors.primary,
-      },
-      {
         label: 'Watching',
         value: categoryCounts.Watching ?? 0,
-        icon: 'play-circle-filled' as const,
-        color: Colors.success,
+        color: theme.accent,
       },
-      {
-        label: 'Done',
-        value: categoryCounts.Completed ?? 0,
-        icon: 'check-circle' as const,
-        color: Colors.info,
-      },
-      {
-        label: 'Wishlist',
-        value: categoryCounts.Wishlist ?? 0,
-        icon: 'favorite' as const,
-        color: Colors.error,
-      },
+      { label: 'Completed', value: categoryCounts.Completed ?? 0 },
+      { label: 'Plan', value: categoryCounts.Plan ?? 0 },
+      { label: 'Dropped', value: categoryCounts.Dropped ?? 0 },
     ],
-    [categoryCounts, collections]
+    [categoryCounts, theme.accent]
   );
 
-  const recentItems = useMemo(
+  const totalCount = categoryCounts.All ?? 0;
+
+  const userFolderCount = useMemo(
     () =>
-      [...collections]
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(0, 3)
-        .map((f) => ({ id: f.id, imageUrl: undefined as string | undefined })),
+      collections.filter(
+        (f) => !f.isSystemFolder || f.folderType === 'favorites'
+      ).length,
     [collections]
+  );
+
+  const handleEditFolder = useCallback(
+    (folder: CollectionFolder) => {
+      setEditingFolder(folder);
+      setCreateModalVisible(true);
+    },
+    []
   );
 
   const handleSort = useCallback((mode: SortMode) => {
     setSortMode(mode);
   }, []);
 
-  const filteredCollections = useMemo(() => {
-    let filtered = collections;
-
-    if (selectedCategory !== 'All') {
-      const targetTypeMap: Record<string, string> = {
-        Wishlist: 'wishlist',
-        Favorites: 'favorites',
-        Watching: 'watching',
-        Completed: 'completed',
-        Dropped: 'dropped',
-      };
+  const visibleFolders = useMemo(() => {
+    const targetTypeMap: Record<string, CollectionFolder['folderType']> = {
+      Watching: 'watching',
+      Completed: 'completed',
+      Dropped: 'dropped',
+      Plan: 'wishlist',
+    };
+    // Hide the synthetic 'system_all' folder — its count duplicates the
+    // overview card, so showing it as a tile is just noise.
+    const baseFolders = collections.filter((f) => f.id !== 'system_all');
+    let filtered: CollectionFolder[];
+    if (selectedCategory === 'All') {
+      // Show every folder (system + custom). System tiles let users jump
+      // straight to Watching/Completed/etc on a fresh install.
+      filtered = baseFolders;
+    } else {
       const targetType = targetTypeMap[selectedCategory];
-
-      if (targetType) {
-        filtered = collections.filter((f) => f.folderType === targetType);
-      }
+      filtered = targetType
+        ? baseFolders.filter((f) => f.folderType === targetType)
+        : baseFolders;
     }
 
     return [...filtered].sort((a, b) => {
@@ -313,153 +332,230 @@ export default function CollectionScreen() {
     });
   }, [collections, selectedCategory, sortMode]);
 
-  const handleEditFolder = useCallback(
-    (folder: { id: string; name: string; icon: string; isR18: boolean; isShared: boolean }) => {
-      const match = collections.find((f) => f.id === folder.id);
-      if (match) {
-        setEditingFolder(match);
-        setCreateModalVisible(true);
-      }
-    },
-    [collections]
-  );
-
-  const renderFolder = useCallback(
-    ({ item }: { item: CollectionFolder }) => (
-      <FolderList
-        folders={[item]}
-        folderPreviews={{}}
-        onFolderPress={(folder) => router.push(`/collection/${folder.id}?name=${folder.name}`)}
-        onEditFolder={handleEditFolder}
-      />
-    ),
-    [router, handleEditFolder]
-  );
-
-  const keyExtractor = useCallback((item: CollectionFolder) => item.id, []);
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📁</Text>
-      <Text style={styles.emptyText}>Your collection is empty</Text>
-      <Text style={styles.emptySubtext}>Start adding anime to build your collection</Text>
-    </View>
-  );
+  const folderCovers = useMemo(() => {
+    const map: { [id: string]: string | undefined } = {};
+    visibleFolders.forEach((f) => {
+      map[f.id] = f.coverUrl;
+    });
+    return map;
+  }, [visibleFolders]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadCollection().then(() => {
+    Promise.all([loadCollection(), loadRecents()]).finally(() => {
       setRefreshing(false);
     });
+  }, [loadRecents]);
+
+  const enterShareMode = useCallback(() => {
+    hapticsBridge.tap();
+    setScreenMode('share');
   }, []);
 
-  const renderSortButtons = () => {
-    const sortOptions: { label: string; value: SortMode }[] = [
+  const sortOptions: { label: string; value: SortMode }[] = useMemo(
+    () => [
       { label: 'Newest', value: 'newest' },
       { label: 'Oldest', value: 'oldest' },
-      { label: 'Rarity', value: 'rarity' },
-      { label: 'Popularity', value: 'popularity' },
       { label: 'Count', value: 'count' },
-      { label: 'ID', value: 'id' },
-    ];
-
-    return (
-      <View style={styles.sortContainer}>
-        {sortOptions.map((option) => {
-          const isActive = sortMode === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              onPress={() => handleSort(option.value)}
-              style={[styles.sortButton, isActive && styles.sortButtonActive]}>
-              <Text style={[styles.sortButtonText, isActive && styles.sortButtonTextActive]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    );
-  };
-
-  const flatListRef = useRef<FlatList>(null);
+      { label: 'Rarity', value: 'rarity' },
+    ],
+    []
+  );
 
   return (
-    <SafeAreaView style={[styles.safeArea, { paddingTop: top }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: theme.background.primary, paddingTop: top }]}>
       <LinearGradient
-        colors={Colors.gradients.background as [string, string, ...string[]]}
+        colors={[
+          theme.background.primary,
+          theme.background.secondary,
+          theme.background.primary,
+        ]}
         style={StyleSheet.absoluteFill}
       />
-      <View style={styles.glowOrange} pointerEvents="none" />
+      <View
+        style={[
+          styles.glowAccent,
+          { backgroundColor: `${theme.accent}26` },
+        ]}
+        pointerEvents="none"
+      />
       <View style={styles.container}>
         {screenMode === 'collect' ? (
           <CollectionHeader
-            categories={categories}
+            categories={CATEGORIES}
             selectedCategory={selectedCategory}
             categoryCounts={categoryCounts}
-            categoryIcons={categoryIcons}
+            totalAnime={totalCount}
+            folderCount={userFolderCount}
             onSelectCategory={setSelectedCategory}
             onAddFolder={() => setCreateModalVisible(true)}
+            onPressShare={enterShareMode}
             onPressSearch={() => setSearchOpen(true)}
           />
         ) : null}
 
-        <View style={styles.modeToggleRow}>
-          <CollectionModeToggle mode={screenMode} onChange={setScreenMode} />
-        </View>
-
-        <CollectionOverviewCard
-          stats={overviewStats}
-          recents={recentItems}
-          onViewAll={() => setSelectedCategory('All')}
-        />
-
-        <View style={styles.statsButtonRow}>
-          <Pressable
-            onPress={() => {
-              hapticsBridge.tap();
-              router.push('/collection/stats');
-            }}
-            style={({ pressed }) => [styles.statsButton, { opacity: pressed ? 0.85 : 1 }]}>
-            <MaterialIcons name="bar-chart" size={16} color={Colors.primary} />
-            <Text style={styles.statsButtonLabel}>Library stats</Text>
-            <MaterialIcons name="chevron-right" size={18} color={Colors.text.tertiary} />
-          </Pressable>
-        </View>
-
-        <CollectionTips
-          context={{
-            folderCount: collections.filter((f) => !f.isSystemFolder).length,
-            hasUnrated: false,
-          }}
-        />
-
-        {selectedCategory !== 'All' && renderSortButtons()}
-
-        <FlatList
-          ref={flatListRef}
-          data={filteredCollections}
-          renderItem={renderFolder}
-          keyExtractor={keyExtractor}
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              tintColor={Colors.text.primary}
+              tintColor={theme.text.primary}
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[Colors.primary]}
-              progressBackgroundColor={Colors.background.secondary}
             />
-          }
-          removeClippedSubviews={Platform.OS === 'android'}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={10}
-          scrollEventThrottle={16}
-        />
+          }>
+          <View style={styles.overviewWrap}>
+            <CollectionOverviewCard total={totalCount} stats={overviewStats} />
+          </View>
+
+          <View style={styles.statsButtonRow}>
+            <Pressable
+              onPress={() => {
+                hapticsBridge.tap();
+                router.push('/collection/stats');
+              }}
+              style={({ pressed }) => [
+                styles.statsButton,
+                {
+                  backgroundColor: theme.background.secondary,
+                  borderColor: theme.glassBorder,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}>
+              <MaterialIcons name="bar-chart" size={16} color={theme.accent} />
+              <ThemedText variant="titleSmall" weight="600" style={styles.statsButtonLabel}>
+                Library stats
+              </ThemedText>
+              <MaterialIcons name="chevron-right" size={18} color={theme.text.tertiary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.section}>
+            <CollectionTips
+              context={{
+                folderCount: collections.filter((f) => !f.isSystemFolder).length,
+                hasUnrated: false,
+              }}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ThemedText variant="titleMedium" weight="700">
+                My Folders
+              </ThemedText>
+              <Pressable
+                onPress={() => {
+                  hapticsBridge.tap();
+                  setCreateModalVisible(true);
+                }}
+                hitSlop={8}
+                style={styles.sectionHeaderRight}>
+                <ThemedText variant="captionSmall" tone="secondary">
+                  {visibleFolders.length}{' '}
+                  {visibleFolders.length === 1 ? 'folder' : 'folders'}
+                </ThemedText>
+                <MaterialIcons
+                  name="chevron-right"
+                  size={14}
+                  color={theme.text.tertiary}
+                />
+              </Pressable>
+            </View>
+
+            {selectedCategory !== 'All' ? (
+              <View style={styles.sortRow}>
+                {sortOptions.map((option) => {
+                  const isActive = sortMode === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => handleSort(option.value)}
+                      style={[
+                        styles.sortChip,
+                        {
+                          backgroundColor: isActive
+                            ? theme.accent
+                            : theme.background.tertiary,
+                          borderColor: isActive ? theme.accent : theme.glassBorder,
+                        },
+                      ]}>
+                      <ThemedText
+                        variant="captionSmall"
+                        weight={isActive ? '700' : '600'}
+                        style={{
+                          color: isActive ? theme.background.primary : theme.text.secondary,
+                        }}>
+                        {option.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {visibleFolders.length > 0 ? (
+              <FolderGrid
+                folders={visibleFolders}
+                covers={folderCovers}
+                onPressFolder={(folder) =>
+                  router.push(`/collection/${folder.id}?name=${folder.name}`)
+                }
+                onLongPressFolder={(folder) => {
+                  if (!folder.isSystemFolder) handleEditFolder(folder);
+                }}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <ThemedText variant="titleMedium" weight="700" align="center">
+                  {selectedCategory === 'All'
+                    ? 'No folders yet'
+                    : `No ${selectedCategory.toLowerCase()} folders`}
+                </ThemedText>
+                <ThemedText variant="bodySmall" tone="secondary" align="center">
+                  {selectedCategory === 'All'
+                    ? 'Create a folder to organize the anime you love.'
+                    : 'Anime with this status will appear here.'}
+                </ThemedText>
+                {selectedCategory === 'All' ? (
+                  <Pressable
+                    onPress={() => {
+                      hapticsBridge.tap();
+                      setCreateModalVisible(true);
+                    }}
+                    style={({ pressed }) => [
+                      styles.emptyAction,
+                      {
+                        backgroundColor: theme.accent,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}>
+                    <MaterialIcons
+                      name="create-new-folder"
+                      size={16}
+                      color={theme.background.primary}
+                    />
+                    <ThemedText
+                      variant="bodySmall"
+                      weight="700"
+                      style={{ color: theme.background.primary }}>
+                      New folder
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <CollectionRecentRail
+              items={recents}
+              onPressItem={(item) => router.push(`/(rate)/anime/${item.id}`)}
+              onPressSeeAll={() => router.push('/(rate)')}
+            />
+          </View>
+        </ScrollView>
 
         <CreateFolderModal
           visible={isCreateModalVisible}
@@ -503,7 +599,9 @@ export default function CollectionScreen() {
             />
             {shareError ? (
               <View pointerEvents="none" style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{shareError}</Text>
+                <ThemedText variant="bodySmall" weight="600" style={styles.errorBannerText}>
+                  {shareError}
+                </ThemedText>
               </View>
             ) : null}
             <ShareListEditor
@@ -532,20 +630,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  glowOrange: {
+  glowAccent: {
     position: 'absolute',
     top: -100,
     right: -80,
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: `${Colors.primary}26`,
     opacity: 0.5,
   },
+  scrollContent: {
+    paddingBottom: 140,
+    gap: 14,
+  },
+  overviewWrap: {
+    paddingHorizontal: Spacing.lg,
+  },
   statsButtonRow: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.xs,
-    paddingBottom: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
   },
   statsButton: {
     flexDirection: 'row',
@@ -553,84 +655,52 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    backgroundColor: Colors.glass.medium,
     borderRadius: Radius.chipLg,
     borderWidth: 1,
-    borderColor: Colors.glass.border,
   },
   statsButtonLabel: {
     flex: 1,
-    color: Colors.text.primary,
     ...Typography.titleSmall,
-    fontWeight: '600',
   },
-  listContent: {
-    paddingHorizontal: Spacing.screenPadding,
-    paddingBottom: 120,
+  section: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
   },
-  sortContainer: {
+  sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginHorizontal: Spacing.screenPadding,
-    marginBottom: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortRow: {
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
   },
-  sortButton: {
+  sortChip: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
-    borderRadius: Radius.chipLg,
-    backgroundColor: Colors.glass.light,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.glass.border,
-    marginBottom: Spacing.xs,
-  },
-  sortButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  sortButtonText: {
-    ...Typography.bodySmall,
-    fontFamily: FontFamily.text,
-    fontWeight: '600',
-    color: Colors.text.secondary,
-    textAlign: 'center',
-  },
-  sortButtonTextActive: {
-    color: '#000',
-    fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xs,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: Spacing.md,
-  },
-  emptyText: {
-    ...Typography.headlineSmall,
-    color: Colors.text.primary,
-    fontFamily: FontFamily.rounded,
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
-  },
-  emptySubtext: {
-    ...Typography.bodyLarge,
-    color: Colors.text.secondary,
-    fontFamily: FontFamily.text,
-    textAlign: 'center',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: Colors.glass.border,
-  },
-  modeToggleRow: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.xs,
-    paddingBottom: Spacing.sm,
+  emptyAction: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radius.chipLg,
   },
   offscreenRenderer: {
     position: 'absolute',
@@ -652,7 +722,5 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     color: '#fff',
-    ...Typography.bodySmall,
-    fontWeight: '600',
   },
 });

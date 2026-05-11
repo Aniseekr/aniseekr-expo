@@ -10,4 +10,5 @@ export interface CollectionFolder {
   animeCount: number;
   sharedBy: number;
   sortOrder?: number;
+  coverUrl?: string;
 }

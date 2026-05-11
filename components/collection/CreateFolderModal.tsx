@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
 import { collectionService } from '../../libs/services/collection/collection-service';
 import { AnimatedPressable } from '../common/AnimatedPressable';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme, type ThemePalette } from '../../context/ThemeContext';
+import { readableTextOn } from '../themed';
 
 export interface NewFolderData {
   name: string;
@@ -50,6 +52,8 @@ export function CreateFolderModal({
   onUpdate,
   editing,
 }: CreateFolderModalProps) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('folder');
   const [isShared, setIsShared] = useState(false);
@@ -120,7 +124,7 @@ export function CreateFolderModal({
           <View style={styles.header}>
             <Text style={styles.title}>{isEditMode ? 'Edit folder' : 'Create Folder'}</Text>
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#fff" />
+              <Ionicons name="close" size={24} color={theme.text.primary} />
             </TouchableOpacity>
           </View>
 
@@ -131,7 +135,7 @@ export function CreateFolderModal({
               value={name}
               onChangeText={setName}
               placeholder="Folder Name"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.text.tertiary}
             />
 
             <Text style={styles.label}>Icon</Text>
@@ -144,7 +148,7 @@ export function CreateFolderModal({
                   <Ionicons
                     name={i as any}
                     size={24}
-                    color={icon === i ? '#fff' : 'rgba(255,255,255,0.6)'}
+                    color={icon === i ? readableTextOn(theme.accent) : theme.text.secondary}
                   />
                 </TouchableOpacity>
               ))}
@@ -155,7 +159,8 @@ export function CreateFolderModal({
               <Switch
                 value={isShared}
                 onValueChange={setIsShared}
-                trackColor={{ false: '#333', true: '#3b82f6' }}
+                trackColor={{ false: theme.background.tertiary, true: theme.status.info }}
+                thumbColor={theme.text.primary}
               />
             </View>
 
@@ -164,7 +169,8 @@ export function CreateFolderModal({
               <Switch
                 value={isR18}
                 onValueChange={setIsR18}
-                trackColor={{ false: '#333', true: '#ef4444' }}
+                trackColor={{ false: theme.background.tertiary, true: theme.status.error }}
+                thumbColor={theme.text.primary}
               />
             </View>
 
@@ -183,81 +189,84 @@ export function CreateFolderModal({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#1E1E1E',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  form: {
-    gap: 16,
-  },
-  label: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 16,
-    color: '#fff',
-    fontSize: 16,
-  },
-  iconScroll: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  iconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  iconButtonSelected: {
-    backgroundColor: '#3b82f6',
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  createButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  createButtonDisabled: {
-    backgroundColor: '#333',
-  },
-  createButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+function makeStyles(theme: ThemePalette) {
+  const accentFg = readableTextOn(theme.accent);
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContainer: {
+      backgroundColor: theme.background.secondary,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+      paddingBottom: 40,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    title: {
+      color: theme.text.primary,
+      fontSize: 20,
+      fontWeight: '700',
+    },
+    form: {
+      gap: 16,
+    },
+    label: {
+      color: theme.text.secondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: theme.background.tertiary,
+      borderRadius: 12,
+      padding: 16,
+      color: theme.text.primary,
+      fontSize: 16,
+    },
+    iconScroll: {
+      flexDirection: 'row',
+      marginBottom: 16,
+    },
+    iconButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.background.tertiary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    iconButtonSelected: {
+      backgroundColor: theme.accent,
+    },
+    switchRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8,
+    },
+    createButton: {
+      backgroundColor: theme.accent,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    createButtonDisabled: {
+      backgroundColor: theme.background.tertiary,
+    },
+    createButtonText: {
+      color: accentFg,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+  });
+}

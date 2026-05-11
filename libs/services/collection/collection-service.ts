@@ -178,6 +178,15 @@ export class CollectionService {
           'SELECT COUNT(*) as count FROM collection_folder_items WHERE folder_id = ?',
           row.id
         );
+        const coverRes = await db.getFirstAsync<{ image_url: string | null }>(
+          `SELECT ua.image_url
+             FROM collection_folder_items cfi
+             JOIN user_anime ua ON ua.anime_id = cfi.anime_id
+            WHERE cfi.folder_id = ? AND ua.image_url IS NOT NULL
+            ORDER BY cfi.added_at DESC
+            LIMIT 1`,
+          row.id
+        );
 
         return {
           id: row.id,
@@ -190,6 +199,7 @@ export class CollectionService {
           createdAt: new Date(row.created_at),
           animeCount: countRes?.count || 0,
           sharedBy: 0,
+          coverUrl: coverRes?.image_url ?? undefined,
         };
       })
     );
@@ -197,16 +207,25 @@ export class CollectionService {
     const systemFolders = await Promise.all(
       SYSTEM_FOLDERS.map(async (folder) => {
         let count = 0;
+        let coverUrl: string | undefined;
         if (folder.folderType === 'favorites') {
           const res = await db.getFirstAsync<{ count: number }>(
             'SELECT COUNT(*) as count FROM favorites'
           );
           count = res?.count || 0;
+          const cover = await db.getFirstAsync<{ image: string | null }>(
+            'SELECT image FROM favorites WHERE image IS NOT NULL ORDER BY addedAt DESC LIMIT 1'
+          );
+          coverUrl = cover?.image ?? undefined;
         } else if (folder.id === 'system_all') {
           const res = await db.getFirstAsync<{ count: number }>(
             'SELECT COUNT(*) as count FROM user_anime'
           );
           count = res?.count || 0;
+          const cover = await db.getFirstAsync<{ image_url: string | null }>(
+            'SELECT image_url FROM user_anime WHERE image_url IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 1'
+          );
+          coverUrl = cover?.image_url ?? undefined;
         } else {
           const statusMap: Record<string, string> = {
             watching: 'watching',
@@ -221,6 +240,11 @@ export class CollectionService {
               status
             );
             count = res?.count || 0;
+            const cover = await db.getFirstAsync<{ image_url: string | null }>(
+              'SELECT image_url FROM user_anime WHERE status = ? AND image_url IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 1',
+              status
+            );
+            coverUrl = cover?.image_url ?? undefined;
           }
         }
 
@@ -229,6 +253,7 @@ export class CollectionService {
           createdAt: new Date(0),
           animeCount: count,
           sharedBy: 0,
+          coverUrl,
         } as CollectionFolder;
       })
     );
