@@ -22,6 +22,63 @@ try {
 }
 
 const STORAGE_KEY = '@aniseekr/theme';
+const CUSTOM_ACCENT_KEY = '@aniseekr/customAccent';
+const RECENT_ACCENTS_KEY = '@aniseekr/recentAccents';
+const MAX_RECENT_ACCENTS = 5;
+
+const HEX_RE = /^#([0-9a-fA-F]{6})$/;
+
+export function normalizeHex(input: string): string | null {
+  if (!input) return null;
+  let s = input.trim();
+  if (!s.startsWith('#')) s = `#${s}`;
+  if (s.length === 4) {
+    // expand #abc -> #aabbcc
+    s = `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
+  }
+  return HEX_RE.test(s) ? s.toUpperCase() : null;
+}
+
+function adjustHex(hex: string, percent: number): string {
+  const m = HEX_RE.exec(hex);
+  if (!m) return hex;
+  const v = parseInt(m[1], 16);
+  const r = (v >> 16) & 0xff;
+  const g = (v >> 8) & 0xff;
+  const b = v & 0xff;
+  const f = percent / 100;
+  const adj = (c: number) => (f >= 0 ? c + (255 - c) * f : c + c * f);
+  const toHex = (c: number) =>
+    Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0');
+  return `#${toHex(adj(r))}${toHex(adj(g))}${toHex(adj(b))}`.toUpperCase();
+}
+
+export interface AccentPreset {
+  name: string;
+  hex: string;
+}
+export const ACCENT_PRESETS: AccentPreset[] = [
+  { name: 'Orange', hex: '#FF9900' },
+  { name: 'Red', hex: '#FF3B30' },
+  { name: 'Gold', hex: '#FFD700' },
+  { name: 'Green', hex: '#32D74B' },
+  { name: 'Cyan', hex: '#00BCD4' },
+  { name: 'Blue', hex: '#007AFF' },
+  { name: 'Purple', hex: '#AF52DE' },
+  { name: 'Pink', hex: '#E8A0BF' },
+];
+
+export interface AccentGradient {
+  id: 'sunset' | 'ocean' | 'bloom';
+  name: string;
+  subtitle: string;
+  colors: [string, string];
+}
+export const ACCENT_GRADIENTS: AccentGradient[] = [
+  { id: 'sunset', name: 'Sunset', subtitle: 'Orange → Red', colors: ['#FF9900', '#FF3B30'] },
+  { id: 'ocean', name: 'Ocean', subtitle: 'Cyan → Blue', colors: ['#00BCD4', '#007AFF'] },
+  { id: 'bloom', name: 'Bloom', subtitle: 'Purple → Pink', colors: ['#AF52DE', '#E8A0BF'] },
+];
 
 export type ThemeId =
   | 'aniseeker'
@@ -228,21 +285,46 @@ interface ThemeContextValue {
   setTheme: (id: ThemeId) => Promise<void>;
   hydrated: boolean;
   themes: ThemePalette[];
+  customAccent: string | null;
+  setCustomAccent: (hex: string | null) => Promise<void>;
+  recentAccents: string[];
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeId, setThemeId] = useState<ThemeId>('aniseeker');
+  const [customAccent, setCustomAccentState] = useState<string | null>(null);
+  const [recentAccents, setRecentAccentsState] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(CUSTOM_ACCENT_KEY),
+      AsyncStorage.getItem(RECENT_ACCENTS_KEY),
+    ])
+      .then(([storedTheme, storedAccent, storedRecent]) => {
         if (!mounted) return;
-        if (stored && stored in THEMES) {
-          setThemeId(stored as ThemeId);
+        if (storedTheme && storedTheme in THEMES) setThemeId(storedTheme as ThemeId);
+        if (storedAccent) {
+          const norm = normalizeHex(storedAccent);
+          if (norm) setCustomAccentState(norm);
+        }
+        if (storedRecent) {
+          try {
+            const parsed = JSON.parse(storedRecent) as unknown;
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed
+                .map((v) => (typeof v === 'string' ? normalizeHex(v) : null))
+                .filter((v): v is string => !!v)
+                .slice(0, MAX_RECENT_ACCENTS);
+              setRecentAccentsState(cleaned);
+            }
+          } catch {
+            // ignore corrupt JSON
+          }
         }
       })
       .catch(() => {
@@ -266,15 +348,58 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setCustomAccent = useCallback(async (hex: string | null) => {
+    if (hex === null) {
+      setCustomAccentState(null);
+      try {
+        await AsyncStorage.setItem(CUSTOM_ACCENT_KEY, '');
+      } catch {
+        // best-effort
+      }
+      return;
+    }
+    const normalized = normalizeHex(hex);
+    if (!normalized) return;
+    setCustomAccentState(normalized);
+    let nextRecent: string[] = [];
+    setRecentAccentsState((prev) => {
+      nextRecent = [normalized, ...prev.filter((c) => c !== normalized)].slice(
+        0,
+        MAX_RECENT_ACCENTS
+      );
+      return nextRecent;
+    });
+    try {
+      await AsyncStorage.setItem(CUSTOM_ACCENT_KEY, normalized);
+      await AsyncStorage.setItem(RECENT_ACCENTS_KEY, JSON.stringify(nextRecent));
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  const resolvedTheme = useMemo<ThemePalette>(() => {
+    const base = THEMES[themeId];
+    if (!customAccent) return base;
+    return {
+      ...base,
+      accent: customAccent,
+      accentLight: adjustHex(customAccent, 25),
+      accentDark: adjustHex(customAccent, -25),
+    };
+  }, [themeId, customAccent]);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: THEMES[themeId],
+      theme: resolvedTheme,
       themeId,
       setTheme,
       hydrated,
       themes: THEME_LIST,
+      customAccent,
+      setCustomAccent,
+      recentAccents,
     }),
-    [themeId, setTheme, hydrated]
+    [resolvedTheme, themeId, setTheme, hydrated, customAccent, setCustomAccent, recentAccents]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -290,6 +415,9 @@ export function useTheme(): ThemeContextValue {
       setTheme: async () => {},
       hydrated: true,
       themes: THEME_LIST,
+      customAccent: null,
+      setCustomAccent: async () => {},
+      recentAccents: [],
     };
   }
   return ctx;

@@ -11,7 +11,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { GlassCard } from '../../components/common/GlassCard';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
@@ -107,15 +106,18 @@ export default function SettingsScreen() {
       <SafeAreaView style={[styles.safeArea, { paddingTop: top }]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+            <Ionicons name="arrow-back" size={22} color={Colors.text.primary} />
           </Pressable>
-          <Text style={styles.headerTitle}>Settings</Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.headerTitle}>Settings</Text>
+            <Text style={styles.headerSubtitle}>Your account & preferences</Text>
+          </View>
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {/* Premium hero */}
           {subscription.isPro ? (
-            <GlassCard variant="frosted" style={styles.premiumActiveCard}>
+            <View style={styles.premiumActiveCard}>
               <View style={styles.premiumActiveRow}>
                 <View style={styles.premiumActiveLeft}>
                   <Ionicons name="checkmark-circle" size={22} color={Colors.success} />
@@ -134,7 +136,7 @@ export default function SettingsScreen() {
                   <Text style={styles.manageButtonText}>Manage</Text>
                 </Pressable>
               </View>
-            </GlassCard>
+            </View>
           ) : (
             <Pressable
               onPress={() => setPaywallVisible(true)}
@@ -164,7 +166,7 @@ export default function SettingsScreen() {
           {/* Account */}
           <View>
             <Text style={styles.sectionTitle}>Account</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <SettingItem
                 label="Connected platforms"
                 icon="people-circle-outline"
@@ -182,13 +184,13 @@ export default function SettingsScreen() {
                 icon="trophy-outline"
                 onPress={() => router.push('/(setting)/achievements')}
               />
-            </GlassCard>
+            </View>
           </View>
 
           {/* Appearance */}
           <View>
             <Text style={styles.sectionTitle}>Appearance</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <SettingItem
                 label="Theme"
                 icon="color-palette-outline"
@@ -196,17 +198,23 @@ export default function SettingsScreen() {
               />
               <View style={styles.separator} />
               <SettingItem
+                label="Accent color"
+                icon="color-fill-outline"
+                onPress={() => router.push('/(setting)/accent-color')}
+              />
+              <View style={styles.separator} />
+              <SettingItem
                 label="Title language priority"
                 icon="language-outline"
                 onPress={() => router.push('/(setting)/language-priority')}
               />
-            </GlassCard>
+            </View>
           </View>
 
           {/* Sync & Data */}
           <View>
             <Text style={styles.sectionTitle}>Sync & Data</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <SettingItem
                 label="Browse source"
                 icon="cloud-outline"
@@ -233,7 +241,7 @@ export default function SettingsScreen() {
               <View style={styles.separator} />
               <View style={styles.switchRow}>
                 <View style={styles.rowLeft}>
-                  <Ionicons name="cellular-outline" size={22} color={Colors.text.primary} />
+                  <Ionicons name="cellular-outline" size={18} color={ICON_ACCENT} />
                   <Text style={styles.rowLabel}>Data saver</Text>
                 </View>
                 <Switch
@@ -243,17 +251,17 @@ export default function SettingsScreen() {
                   thumbColor={Colors.text.primary}
                 />
               </View>
-            </GlassCard>
+            </View>
           </View>
 
           {/* Content */}
           <View>
             <Text style={styles.sectionTitle}>Content</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <View style={styles.switchRow}>
                 <View style={styles.switchTextWrap}>
                   <View style={styles.rowLeft}>
-                    <Ionicons name="warning-outline" size={22} color={Colors.text.primary} />
+                    <Ionicons name="warning-outline" size={18} color={ICON_ACCENT} />
                     <Text style={styles.rowLabel}>Allow R18 content</Text>
                   </View>
                   <Text style={styles.rowDescription}>
@@ -267,21 +275,17 @@ export default function SettingsScreen() {
                   thumbColor={Colors.text.primary}
                 />
               </View>
-            </GlassCard>
+            </View>
           </View>
 
           {/* Bangumi options */}
           <View>
             <Text style={styles.sectionTitle}>Bangumi options</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <View style={styles.switchRow}>
                 <View style={styles.switchTextWrap}>
                   <View style={styles.rowLeft}>
-                    <Ionicons
-                      name="game-controller-outline"
-                      size={22}
-                      color={Colors.text.primary}
-                    />
+                    <Ionicons name="game-controller-outline" size={18} color={ICON_ACCENT} />
                     <Text style={styles.rowLabel}>Include games</Text>
                   </View>
                   <Text style={styles.rowDescription}>Show video games in Bangumi calendar</Text>
@@ -297,7 +301,7 @@ export default function SettingsScreen() {
               <View style={styles.switchRow}>
                 <View style={styles.switchTextWrap}>
                   <View style={styles.rowLeft}>
-                    <Ionicons name="star-outline" size={22} color={Colors.text.primary} />
+                    <Ionicons name="star-outline" size={18} color={ICON_ACCENT} />
                     <Text style={styles.rowLabel}>Show score prominently</Text>
                   </View>
                   <Text style={styles.rowDescription}>Display rating in card header</Text>
@@ -309,25 +313,25 @@ export default function SettingsScreen() {
                   thumbColor={Colors.text.primary}
                 />
               </View>
-            </GlassCard>
+            </View>
           </View>
 
           {/* Notifications */}
           <View>
             <Text style={styles.sectionTitle}>Notifications</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <SettingItem
                 label="Reminders"
                 icon="notifications-outline"
                 onPress={() => router.push('/(setting)/notifications')}
               />
-            </GlassCard>
+            </View>
           </View>
 
           {/* About */}
           <View>
             <Text style={styles.sectionTitle}>About</Text>
-            <GlassCard variant="frosted" style={styles.card}>
+            <View style={styles.card}>
               <SettingItem
                 label="Attribution"
                 icon="ribbon-outline"
@@ -345,7 +349,7 @@ export default function SettingsScreen() {
                 icon="document-text-outline"
                 onPress={() => router.push('/(setting)/terms')}
               />
-            </GlassCard>
+            </View>
           </View>
 
           <Text style={styles.versionText}>Aniseekr v1.0.0 (Expo)</Text>
@@ -356,11 +360,17 @@ export default function SettingsScreen() {
   );
 }
 
+const ICON_ACCENT = '#8DC5D8';
+const CARD_BG = '#252528';
+const CARD_BORDER = '#38383A';
+const ROW_LABEL_COLOR = '#FFFFFF';
+const ROW_META_COLOR = '#787878';
+
 function SettingItem({
   label,
   icon,
   value,
-  color = Colors.text.primary,
+  color,
   onPress,
 }: {
   label: string;
@@ -369,17 +379,19 @@ function SettingItem({
   color?: string;
   onPress: () => void;
 }) {
+  const iconColor = color ?? ICON_ACCENT;
+  const labelColor = color ?? ROW_LABEL_COLOR;
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.itemRow, pressed && { backgroundColor: Colors.glass.light }]}>
       <View style={styles.rowLeft}>
-        <Ionicons name={icon} size={22} color={color} />
-        <Text style={[styles.rowLabel, { color }]}>{label}</Text>
+        <Ionicons name={icon} size={18} color={iconColor} />
+        <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       </View>
       <View style={styles.rowRight}>
         {value && <Text style={styles.valueText}>{value}</Text>}
-        <Ionicons name="chevron-forward" size={18} color={Colors.text.disabled} />
+        <Ionicons name="chevron-forward" size={16} color={ROW_META_COLOR} />
       </View>
     </Pressable>
   );
@@ -394,66 +406,91 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.sm,
   },
   backButton: {
-    padding: Spacing.xs,
-    marginRight: Spacing.xs,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.glass.light,
     borderRadius: Radius.full,
   },
+  headerTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
   headerTitle: {
-    color: Colors.text.primary,
-    ...Typography.headlineSmall,
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '800',
+    fontFamily: Typography.headlineMedium?.fontFamily,
+  },
+  headerSubtitle: {
+    color: ROW_META_COLOR,
+    fontSize: 14,
+    fontWeight: '400',
   },
   scrollView: {
     flex: 1,
-    marginTop: Spacing.md,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: 100,
-    gap: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 120,
+    paddingTop: Spacing.xs,
+    gap: Spacing.lg,
   },
   sectionTitle: {
-    color: Colors.text.secondary,
-    ...Typography.caption,
+    color: ROW_META_COLOR,
+    fontSize: 12,
+    fontWeight: '600',
     textTransform: 'uppercase',
-    marginBottom: Spacing.sm,
-    marginLeft: Spacing.xxs,
+    letterSpacing: 0.6,
+    marginBottom: Spacing.xs,
+    marginLeft: 4,
   },
   card: {
-    padding: 0,
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
     overflow: 'hidden',
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.glass.border,
-    marginLeft: 54, // Icon width + spacing
+    backgroundColor: CARD_BORDER,
   },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 14,
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 14,
   },
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: 14,
+    flex: 1,
   },
   rowLabel: {
-    color: Colors.text.primary,
-    ...Typography.bodyLarge,
+    color: ROW_LABEL_COLOR,
+    fontSize: 14,
+    fontWeight: '600',
   },
   rowRight: {
     flexDirection: 'row',
@@ -461,8 +498,9 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   valueText: {
-    color: Colors.text.tertiary,
-    ...Typography.bodyMedium,
+    color: ROW_META_COLOR,
+    fontSize: 13,
+    fontWeight: '500',
   },
   versionText: {
     color: Colors.text.disabled,
@@ -471,10 +509,10 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   rowDescription: {
-    color: Colors.text.tertiary,
-    ...Typography.bodySmall,
+    color: ROW_META_COLOR,
+    fontSize: 12,
     marginTop: 2,
-    marginLeft: 30,
+    marginLeft: 32,
   },
   switchTextWrap: {
     flex: 1,
