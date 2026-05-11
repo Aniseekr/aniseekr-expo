@@ -70,7 +70,7 @@ export default function RootLayout() {
               options={{
                 title: 'Bangumi',
                 tabBarIcon: ({ color }) => (
-                  <MaterialIcons name="calendar-today" size={24} color={color} />
+                  <MaterialIcons name="date-range" size={24} color={color} />
                 ),
               }}
             />
@@ -79,7 +79,7 @@ export default function RootLayout() {
               options={{
                 title: 'Collection',
                 tabBarIcon: ({ color }) => (
-                  <MaterialIcons name="collections" size={24} color={color} />
+                  <MaterialIcons name="bookmark" size={24} color={color} />
                 ),
               }}
             />
@@ -87,7 +87,7 @@ export default function RootLayout() {
               name="pilgrimage/index"
               options={{
                 title: 'Pilgrimage',
-                tabBarIcon: ({ color }) => <MaterialIcons name="explore" size={24} color={color} />,
+                tabBarIcon: ({ color }) => <MaterialIcons name="place" size={24} color={color} />,
               }}
             />
             <Tabs.Screen
@@ -151,6 +151,30 @@ export default function RootLayout() {
             />
             <Tabs.Screen
               name="(setting)/sync-hub"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/achievements"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/accent-color"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/custom-color"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/theme-mode"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/theme-preview"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="(setting)/design-tokens"
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />
             <Tabs.Screen

@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,13 +9,11 @@ import {
   ACCENT_PRESETS,
   AccentGradient,
   AccentPreset,
-  normalizeHex,
   useTheme,
 } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 const BG_PRIMARY = '#0A0A0A';
-const SURFACE = '#1A1A1A';
 const SURFACE_ELEVATED = '#252528';
 const BORDER = '#2A2A2A';
 const TEXT_PRIMARY = '#FFFFFF';
@@ -37,7 +27,6 @@ export default function AccentColorScreen() {
   const { theme, customAccent, setCustomAccent, recentAccents } = useTheme();
   const initial = customAccent ?? theme.accent.toUpperCase();
   const [pending, setPending] = useState<string>(initial);
-  const [customModal, setCustomModal] = useState(false);
 
   useEffect(() => {
     setPending(customAccent ?? theme.accent.toUpperCase());
@@ -137,7 +126,7 @@ export default function AccentColorScreen() {
                   />
                 ))}
                 <Pressable
-                  onPress={() => setCustomModal(true)}
+                  onPress={() => router.push('/(setting)/custom-color')}
                   style={({ pressed }) => [
                     styles.addCustom,
                     pressed && { opacity: 0.7 },
@@ -163,16 +152,6 @@ export default function AccentColorScreen() {
           </Pressable>
         </View>
       </SafeAreaView>
-
-      <CustomColorModal
-        visible={customModal}
-        initialHex={pending}
-        onClose={() => setCustomModal(false)}
-        onConfirm={(hex) => {
-          setCustomModal(false);
-          handleSelect(hex);
-        }}
-      />
     </View>
   );
 }
@@ -257,76 +236,6 @@ function GradientCard({
         )}
       </LinearGradient>
     </Pressable>
-  );
-}
-
-function CustomColorModal({
-  visible,
-  initialHex,
-  onClose,
-  onConfirm,
-}: {
-  visible: boolean;
-  initialHex: string;
-  onClose: () => void;
-  onConfirm: (hex: string) => void;
-}) {
-  const [input, setInput] = useState(initialHex);
-  useEffect(() => {
-    if (visible) setInput(initialHex);
-  }, [visible, initialHex]);
-
-  const normalized = normalizeHex(input);
-  const preview = normalized ?? initialHex;
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalScrim} onPress={onClose}>
-        <Pressable
-          style={styles.modalCard}
-          onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.modalTitle}>Custom color</Text>
-          <Text style={styles.modalSubtitle}>Enter a 6-digit hex value.</Text>
-          <View style={[styles.previewBubble, { backgroundColor: preview }]} />
-          <View style={styles.inputRow}>
-            <Text style={styles.hashPrefix}>#</Text>
-            <TextInput
-              value={input.replace(/^#/, '')}
-              onChangeText={(t) => setInput(t.toUpperCase())}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={6}
-              placeholder="FF9900"
-              placeholderTextColor={TEXT_MUTED}
-              style={styles.hexInput}
-            />
-          </View>
-          <View style={styles.modalActions}>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.modalBtn,
-                styles.modalCancel,
-                pressed && { opacity: 0.7 },
-              ]}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              disabled={!normalized}
-              onPress={() => normalized && onConfirm(normalized)}
-              style={({ pressed }) => [
-                styles.modalBtn,
-                styles.modalConfirm,
-                { backgroundColor: normalized ?? '#444' },
-                !normalized && { opacity: 0.5 },
-                pressed && normalized ? { opacity: 0.85 } : null,
-              ]}>
-              <Text style={styles.modalConfirmText}>Use</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 
@@ -465,73 +374,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   applyText: { color: '#0A0A0A', fontSize: 16, fontWeight: '700' },
-  modalScrim: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: SURFACE,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
-    padding: 20,
-    gap: 12,
-    alignItems: 'center',
-  },
-  modalTitle: { color: TEXT_PRIMARY, fontSize: 17, fontWeight: '700' },
-  modalSubtitle: { color: TEXT_SECONDARY, fontSize: 13 },
-  previewBubble: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginVertical: 4,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: BG_PRIMARY,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 12,
-    width: '100%',
-  },
-  hashPrefix: { color: TEXT_SECONDARY, fontSize: 18, fontWeight: '700' },
-  hexInput: {
-    flex: 1,
-    color: TEXT_PRIMARY,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 2,
-    paddingVertical: 12,
-    paddingLeft: 6,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-    marginTop: 4,
-  },
-  modalBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCancel: {
-    backgroundColor: SURFACE_ELEVATED,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  modalCancelText: { color: TEXT_PRIMARY, fontSize: 15, fontWeight: '600' },
-  modalConfirm: {},
-  modalConfirmText: { color: '#0A0A0A', fontSize: 15, fontWeight: '700' },
 });

@@ -24,7 +24,18 @@ try {
 const STORAGE_KEY = '@aniseekr/theme';
 const CUSTOM_ACCENT_KEY = '@aniseekr/customAccent';
 const RECENT_ACCENTS_KEY = '@aniseekr/recentAccents';
-const MAX_RECENT_ACCENTS = 5;
+const THEME_MODE_KEY = '@aniseekr/themeMode';
+const TINT_INTENSITY_KEY = '@aniseekr/tintIntensity';
+const INCREASE_CONTRAST_KEY = '@aniseekr/increaseContrast';
+const MAX_RECENT_ACCENTS = 6;
+
+export type ThemeMode = 'light' | 'dark' | 'auto';
+export type TintIntensity = 'subtle' | 'balanced' | 'vivid';
+export const TINT_INTENSITY_VALUES: Record<TintIntensity, number> = {
+  subtle: 0.25,
+  balanced: 0.5,
+  vivid: 0.85,
+};
 
 const HEX_RE = /^#([0-9a-fA-F]{6})$/;
 
@@ -288,6 +299,12 @@ interface ThemeContextValue {
   customAccent: string | null;
   setCustomAccent: (hex: string | null) => Promise<void>;
   recentAccents: string[];
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => Promise<void>;
+  tintIntensity: TintIntensity;
+  setTintIntensity: (t: TintIntensity) => Promise<void>;
+  increaseContrast: boolean;
+  setIncreaseContrast: (v: boolean) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -296,6 +313,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeId, setThemeId] = useState<ThemeId>('aniseeker');
   const [customAccent, setCustomAccentState] = useState<string | null>(null);
   const [recentAccents, setRecentAccentsState] = useState<string[]>([]);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
+  const [tintIntensity, setTintIntensityState] = useState<TintIntensity>('balanced');
+  const [increaseContrast, setIncreaseContrastState] = useState<boolean>(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -304,8 +324,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.getItem(STORAGE_KEY),
       AsyncStorage.getItem(CUSTOM_ACCENT_KEY),
       AsyncStorage.getItem(RECENT_ACCENTS_KEY),
+      AsyncStorage.getItem(THEME_MODE_KEY),
+      AsyncStorage.getItem(TINT_INTENSITY_KEY),
+      AsyncStorage.getItem(INCREASE_CONTRAST_KEY),
     ])
-      .then(([storedTheme, storedAccent, storedRecent]) => {
+      .then(([storedTheme, storedAccent, storedRecent, storedMode, storedTint, storedContrast]) => {
         if (!mounted) return;
         if (storedTheme && storedTheme in THEMES) setThemeId(storedTheme as ThemeId);
         if (storedAccent) {
@@ -325,6 +348,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           } catch {
             // ignore corrupt JSON
           }
+        }
+        if (storedMode === 'light' || storedMode === 'dark' || storedMode === 'auto') {
+          setThemeModeState(storedMode);
+        }
+        if (storedTint === 'subtle' || storedTint === 'balanced' || storedTint === 'vivid') {
+          setTintIntensityState(storedTint);
+        }
+        if (storedContrast === 'true' || storedContrast === 'false') {
+          setIncreaseContrastState(storedContrast === 'true');
         }
       })
       .catch(() => {
@@ -377,16 +409,59 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const setThemeMode = useCallback(async (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    try {
+      await AsyncStorage.setItem(THEME_MODE_KEY, mode);
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  const setTintIntensity = useCallback(async (t: TintIntensity) => {
+    setTintIntensityState(t);
+    try {
+      await AsyncStorage.setItem(TINT_INTENSITY_KEY, t);
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  const setIncreaseContrast = useCallback(async (v: boolean) => {
+    setIncreaseContrastState(v);
+    try {
+      await AsyncStorage.setItem(INCREASE_CONTRAST_KEY, v ? 'true' : 'false');
+    } catch {
+      // best-effort
+    }
+  }, []);
+
   const resolvedTheme = useMemo<ThemePalette>(() => {
     const base = THEMES[themeId];
-    if (!customAccent) return base;
+    const tint = TINT_INTENSITY_VALUES[tintIntensity];
+    const next: ThemePalette = customAccent
+      ? {
+          ...base,
+          accent: customAccent,
+          accentLight: adjustHex(customAccent, 25),
+          accentDark: adjustHex(customAccent, -25),
+        }
+      : base;
+    if (!increaseContrast && tintIntensity === 'balanced') return next;
     return {
-      ...base,
-      accent: customAccent,
-      accentLight: adjustHex(customAccent, 25),
-      accentDark: adjustHex(customAccent, -25),
+      ...next,
+      // tintIntensity adjusts how strong accentLight reads vs the base accent
+      accentLight: adjustHex(next.accent, 10 + tint * 30),
+      // contrast brightens primary text borders
+      glassBorder: increaseContrast ? 'rgba(255,255,255,0.22)' : next.glassBorder,
+      text: increaseContrast
+        ? {
+            ...next.text,
+            secondary: next.text.primary,
+          }
+        : next.text,
     };
-  }, [themeId, customAccent]);
+  }, [themeId, customAccent, tintIntensity, increaseContrast]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
@@ -398,8 +473,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       customAccent,
       setCustomAccent,
       recentAccents,
+      themeMode,
+      setThemeMode,
+      tintIntensity,
+      setTintIntensity,
+      increaseContrast,
+      setIncreaseContrast,
     }),
-    [resolvedTheme, themeId, setTheme, hydrated, customAccent, setCustomAccent, recentAccents]
+    [
+      resolvedTheme,
+      themeId,
+      setTheme,
+      hydrated,
+      customAccent,
+      setCustomAccent,
+      recentAccents,
+      themeMode,
+      setThemeMode,
+      tintIntensity,
+      setTintIntensity,
+      increaseContrast,
+      setIncreaseContrast,
+    ]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -418,6 +513,12 @@ export function useTheme(): ThemeContextValue {
       customAccent: null,
       setCustomAccent: async () => {},
       recentAccents: [],
+      themeMode: 'dark',
+      setThemeMode: async () => {},
+      tintIntensity: 'balanced',
+      setTintIntensity: async () => {},
+      increaseContrast: false,
+      setIncreaseContrast: async () => {},
     };
   }
   return ctx;

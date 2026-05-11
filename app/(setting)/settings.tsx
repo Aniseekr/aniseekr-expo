@@ -142,9 +142,9 @@ export default function SettingsScreen() {
               onPress={() => setPaywallVisible(true)}
               style={({ pressed }) => [styles.premiumHeroWrap, pressed && { opacity: 0.92 }]}>
               <LinearGradient
-                colors={Colors.gradients.aurora}
+                colors={['#FF9900', '#CC5500']}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                end={{ x: 0, y: 1 }}
                 style={styles.premiumHero}>
                 <View style={styles.premiumHeroLeft}>
                   <View style={styles.premiumIconBubble}>
@@ -198,9 +198,27 @@ export default function SettingsScreen() {
               />
               <View style={styles.separator} />
               <SettingItem
+                label="Theme mode"
+                icon="contrast-outline"
+                onPress={() => router.push('/(setting)/theme-mode')}
+              />
+              <View style={styles.separator} />
+              <SettingItem
                 label="Accent color"
                 icon="color-fill-outline"
                 onPress={() => router.push('/(setting)/accent-color')}
+              />
+              <View style={styles.separator} />
+              <SettingItem
+                label="Live preview"
+                icon="eye-outline"
+                onPress={() => router.push('/(setting)/theme-preview')}
+              />
+              <View style={styles.separator} />
+              <SettingItem
+                label="Design tokens"
+                icon="grid-outline"
+                onPress={() => router.push('/(setting)/design-tokens')}
               />
               <View style={styles.separator} />
               <SettingItem
@@ -360,7 +378,7 @@ export default function SettingsScreen() {
   );
 }
 
-const ICON_ACCENT = '#8DC5D8';
+const ICON_ACCENT = Colors.primary;
 const CARD_BG = '#252528';
 const CARD_BORDER = '#38383A';
 const ROW_LABEL_COLOR = '#FFFFFF';
@@ -446,11 +464,11 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   sectionTitle: {
-    color: ROW_META_COLOR,
-    fontSize: 12,
+    color: Colors.primary,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 1,
     marginBottom: Spacing.xs,
     marginLeft: 4,
   },
