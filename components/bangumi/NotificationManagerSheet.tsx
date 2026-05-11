@@ -180,12 +180,13 @@ function NotificationManagerSheetComponent({ visible, onClose }: NotificationMan
                   style={({ pressed }) => [
                     styles.clearAllButton,
                     {
-                      borderColor: '#FF453A33',
+                      backgroundColor: theme.status.error + '12',
+                      borderColor: theme.status.error + '33',
                       opacity: pressed ? 0.7 : 1,
                     },
                   ]}>
-                  <MaterialIcons name="delete-sweep" size={18} color="#FF453A" />
-                  <Text style={styles.clearAllLabel}>Clear all</Text>
+                  <MaterialIcons name="delete-sweep" size={18} color={theme.status.error} />
+                  <Text style={[styles.clearAllLabel, { color: theme.status.error }]}>Clear all</Text>
                 </Pressable>
               </>
             )}
@@ -270,12 +271,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     marginTop: Spacing.sm,
-    backgroundColor: '#FF453A12',
   },
   clearAllLabel: {
     ...Typography.titleSmall,
     fontWeight: '700',
-    color: '#FF453A',
   },
 });
 

@@ -98,83 +98,7 @@ export default function RootLayout() {
               }}
             />
             <Tabs.Screen
-              name="(setting)/settings"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/sync"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/data-source"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/theme"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/cache"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/language-priority"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/attribution"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/privacy"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/terms"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/notifications"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/account"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/otaku-dna"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/import-wizard"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/sync-hub"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/achievements"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/accent-color"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/custom-color"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/theme-mode"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/theme-preview"
-              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
-            />
-            <Tabs.Screen
-              name="(setting)/design-tokens"
+              name="(setting)"
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />
             <Tabs.Screen
@@ -187,6 +111,10 @@ export default function RootLayout() {
             />
             <Tabs.Screen
               name="pilgrimage/[animeId]"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
+              name="pilgrimage/plan"
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />
             <Tabs.Screen
