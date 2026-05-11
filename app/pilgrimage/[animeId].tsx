@@ -35,6 +35,10 @@ import * as Haptics from 'expo-haptics';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
 import { anitabiService } from '../../libs/services/pilgrimage/anitabi-service';
+import {
+  listCaptures,
+  type PilgrimageCapture,
+} from '../../libs/services/pilgrimage/captures';
 import { locationService, type LatLng } from '../../libs/services/pilgrimage/location-service';
 import {
   LEAFLET_CSS,
@@ -449,22 +453,28 @@ function SpotRow({
 
 interface SpotSheetProps {
   spot: AnitabiPoint | null;
+  animeId: string;
   themeColor: string;
   distanceKm: number | null;
   visited: boolean;
+  hasCapture: boolean;
   onClose: () => void;
   onToggleVisited: (spot: AnitabiPoint) => void;
   onOpenMaps: (spot: AnitabiPoint) => void;
+  onFrameShot: (spot: AnitabiPoint) => void;
 }
 
 function SpotSheet({
   spot,
+  animeId: _animeId,
   themeColor,
   distanceKm,
   visited,
+  hasCapture,
   onClose,
   onToggleVisited,
   onOpenMaps,
+  onFrameShot,
 }: SpotSheetProps) {
   if (!spot) return null;
   const hasGeo = hasValidGeo(spot.geo);
@@ -558,6 +568,33 @@ function SpotSheet({
                 </Text>
               </Pressable>
             </View>
+
+            <Pressable
+              onPress={() => onFrameShot(spot)}
+              style={({ pressed }) => [
+                sheetStyles.frameShotBtn,
+                {
+                  backgroundColor: hasCapture ? `${themeColor}22` : Colors.glass.medium,
+                  borderColor: hasCapture ? themeColor : Colors.glass.border,
+                },
+                pressed && { opacity: 0.82 },
+              ]}>
+              <Ionicons
+                name={hasCapture ? 'camera' : 'camera-outline'}
+                size={18}
+                color={hasCapture ? themeColor : Colors.text.primary}
+              />
+              <Text
+                style={[
+                  sheetStyles.frameShotText,
+                  { color: hasCapture ? themeColor : Colors.text.primary },
+                ]}>
+                {hasCapture ? 'Reframe shot · 重新拍對比' : 'Frame shot · 拍對比照'}
+              </Text>
+              {hasCapture ? (
+                <View style={[sheetStyles.frameShotDot, { backgroundColor: themeColor }]} />
+              ) : null}
+            </Pressable>
           </SafeAreaView>
         </View>
       </View>
@@ -580,6 +617,17 @@ export default function PilgrimageDetailScreen() {
   const [browseSource, setBrowseSource] = useState<PlatformType>(dataSourceConfig.browseSource);
   const [activeSpot, setActiveSpot] = useState<AnitabiPoint | null>(null);
   const [clusterSpots, setClusterSpots] = useState<readonly AnitabiPoint[] | null>(null);
+  const [captures, setCaptures] = useState<Record<string, PilgrimageCapture>>({});
+
+  const refreshCaptures = useCallback(() => {
+    listCaptures()
+      .then((map) => setCaptures(map))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    refreshCaptures();
+  }, [refreshCaptures]);
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -757,6 +805,28 @@ export default function PilgrimageDetailScreen() {
 
   const activeSpotVisited = activeSpot ? visited[activeSpot.id] === true : false;
   const activeSpotDistance = activeSpot ? distanceFor(activeSpot) : null;
+  const activeSpotHasCapture = activeSpot ? !!captures[activeSpot.id] : false;
+
+  const handleFrameShot = useCallback(
+    (spot: AnitabiPoint) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      setActiveSpot(null);
+      router.push({
+        pathname: '/pilgrimage/compare/tips',
+        params: {
+          spotId: spot.id,
+          imageUrl: spot.image,
+          name: spot.cn || spot.name,
+          ep: String(spot.ep),
+          animeId: String(bangumiId),
+          themeColor,
+          spotLat: String(spot.geo?.[0] ?? 0),
+          spotLng: String(spot.geo?.[1] ?? 0),
+        },
+      });
+    },
+    [router, bangumiId, themeColor]
+  );
   const isEmpty = !loading && !error && (!anime || points.length === 0);
 
   return (
@@ -956,12 +1026,15 @@ export default function PilgrimageDetailScreen() {
 
         <SpotSheet
           spot={activeSpot}
+          animeId={String(bangumiId)}
           themeColor={themeColor}
           distanceKm={activeSpotDistance}
           visited={activeSpotVisited}
+          hasCapture={activeSpotHasCapture}
           onClose={() => setActiveSpot(null)}
           onToggleVisited={handleToggleVisited}
           onOpenMaps={handleOpenMaps}
+          onFrameShot={handleFrameShot}
         />
 
         <SpotClusterPicker
@@ -1569,6 +1642,26 @@ const sheetStyles = StyleSheet.create({
   actionBtnText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  frameShotBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    borderRadius: Radius.md,
+    marginTop: Spacing.sm,
+    borderWidth: 1,
+  },
+  frameShotText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  frameShotDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: 4,
   },
 });
 
