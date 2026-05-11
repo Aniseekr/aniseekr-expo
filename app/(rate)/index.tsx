@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GenreCarousel } from '../../components/rate/GenreCarousel';
-import { SeasonalCarousel } from '../../components/rate/SeasonalCarousel';
+import { SeasonalView } from '../../components/rate/seasonal/SeasonalView';
 import { AIRecommendationSheet } from '../../components/rate/AIRecommendationSheet';
 import { ModeSelector } from '../../components/rate/ModeSelector';
 import { ImageDisplaySettingsSheet } from '../../components/rate/ImageDisplaySettingsSheet';
@@ -32,8 +32,11 @@ import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featur
 import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
 import {
   DEFAULT_SWIPE_PREFS,
+  DEFAULT_USER_PREFS,
   loadUserPrefs,
   patchSwipePrefs,
+  patchUserPrefs,
+  type SeasonalLayout,
   type SwipePrefs,
 } from '../../libs/services/user-prefs';
 
@@ -52,6 +55,9 @@ export default function HomeRateScreen() {
   const [showAI, setShowAI] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
   const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(DEFAULT_SWIPE_PREFS);
+  const [seasonalLayout, setSeasonalLayout] = useState<SeasonalLayout>(
+    DEFAULT_USER_PREFS.seasonalLayout,
+  );
   const [trendPilgrimages, setTrendPilgrimages] = useState<AnitabiBangumi[]>([]);
   const [loadingTrendPilgrimages, setLoadingTrendPilgrimages] = useState(false);
 
@@ -59,7 +65,9 @@ export default function HomeRateScreen() {
   useEffect(() => {
     let cancelled = false;
     void loadUserPrefs().then((p) => {
-      if (!cancelled) setSwipePrefs(p.swipe);
+      if (cancelled) return;
+      setSwipePrefs(p.swipe);
+      setSeasonalLayout(p.seasonalLayout);
     });
     return () => {
       cancelled = true;
@@ -69,6 +77,11 @@ export default function HomeRateScreen() {
   const handleSwipePrefsChange = useCallback((next: SwipePrefs) => {
     setSwipePrefs(next);
     void patchSwipePrefs(next);
+  }, []);
+
+  const handleSeasonalLayoutChange = useCallback((next: SeasonalLayout) => {
+    setSeasonalLayout(next);
+    void patchUserPrefs({ seasonalLayout: next });
   }, []);
 
   // Lazy-load trending pilgrimages once when the user first opens Trend mode.
@@ -251,9 +264,11 @@ export default function HomeRateScreen() {
 
             {state.viewMode === 'tracking' ? (
               <View style={styles.trackingWrap}>
-                <SeasonalCarousel
+                <SeasonalView
                   data={state.seasonalAnime}
+                  layout={seasonalLayout}
                   onSelect={handleAnimeSelect}
+                  onLayoutChange={handleSeasonalLayoutChange}
                 />
               </View>
             ) : null}
