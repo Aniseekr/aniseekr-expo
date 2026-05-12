@@ -70,10 +70,10 @@ export class TrackingService {
 
     await db.runAsync(query, ...args);
 
-    if (animeDetails) {
+    if (animeDetails?.source) {
       const item: UniversalAnimeItem = {
         id: animeId,
-        platformIds: { [animeDetails.source || '']: animeDetails.id || animeId },
+        platformIds: { [animeDetails.source]: animeDetails.id || animeId },
         title: animeDetails.title || '',
         imageUrl: animeDetails.imageUrl || '',
         status: status || animeDetails.status || 'watching',
@@ -81,7 +81,7 @@ export class TrackingService {
         totalEpisodes,
         score: animeDetails.score,
         updatedAt: new Date(now),
-        source: animeDetails.source || ('unknown' as any),
+        source: animeDetails.source,
       };
 
       multiPlatformSyncService
@@ -125,16 +125,16 @@ export class TrackingService {
 
     await db.runAsync(query, ...args);
 
-    if (animeDetails) {
+    if (animeDetails?.source) {
       const item: UniversalAnimeItem = {
         id: animeId,
-        platformIds: { [animeDetails.source || '']: animeDetails.id || animeId },
+        platformIds: { [animeDetails.source]: animeDetails.id || animeId },
         title: animeDetails.title || '',
         imageUrl: animeDetails.imageUrl || '',
         status,
         progress: animeDetails.progress || 0,
         updatedAt: new Date(now),
-        source: animeDetails.source || ('unknown' as any),
+        source: animeDetails.source,
       };
 
       multiPlatformSyncService

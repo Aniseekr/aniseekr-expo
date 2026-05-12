@@ -52,8 +52,7 @@ export class CharacterService {
         page,
         limit,
       });
-      // Jikan API returns { data: [...], pagination: {...} }
-      return (response as any).data || [];
+      return response.data ?? [];
     } catch (error) {
       console.error('Error fetching top characters:', error);
       throw error;
@@ -68,8 +67,7 @@ export class CharacterService {
       const response = await JikanClient.get<JikanResponse<AnimeCharacter[]>>(
         `/anime/${animeId}/characters`
       );
-      const data = (response as any).data || [];
-      return data.map((item: AnimeCharacter) => item.character);
+      return (response.data ?? []).map((item) => item.character);
     } catch (error) {
       console.error(`Error fetching characters for anime ${animeId}:`, error);
       throw error;
@@ -82,7 +80,7 @@ export class CharacterService {
   async fetchCharacterDetails(id: number): Promise<Character> {
     try {
       const response = await JikanClient.get<JikanResponse<Character>>(`/characters/${id}`);
-      return (response as any).data;
+      return response.data;
     } catch (error) {
       console.error(`Error fetching character ${id}:`, error);
       throw error;
