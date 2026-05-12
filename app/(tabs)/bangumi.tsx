@@ -14,32 +14,33 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SeasonHeader } from '../components/bangumi/SeasonHeader';
-import { Anime } from '../components/rate/types';
-import { AnimeList, AnimeRowCard } from '../components/bangumi/AnimeList';
-import { FocusDayCarousel } from '../components/bangumi/FocusDayCarousel';
-import { TodayUpdatesSection } from '../components/bangumi/TodayUpdatesSection';
-import { SpecialContentSection } from '../components/bangumi/SpecialContentSection';
-import { YearPickerSheet } from '../components/bangumi/YearPickerSheet';
+import { SeasonHeader } from '../../components/bangumi/SeasonHeader';
+import { Anime } from '../../components/rate/types';
+import { AnimeList, AnimeRowCard } from '../../components/bangumi/AnimeList';
+import { FocusDayCarousel } from '../../components/bangumi/FocusDayCarousel';
+import { TodayUpdatesSection } from '../../components/bangumi/TodayUpdatesSection';
+import { SpecialContentSection } from '../../components/bangumi/SpecialContentSection';
+import { YearPickerSheet } from '../../components/bangumi/YearPickerSheet';
 import {
   BangumiSettingsSheet,
   BangumiTypeFilter,
   DEFAULT_BANGUMI_PREFS,
   BangumiPreferences,
-} from '../components/bangumi/BangumiSettingsSheet';
-import { NotificationManagerSheet } from '../components/bangumi/NotificationManagerSheet';
-import { shareSchedule } from '../components/bangumi/shareSchedule';
-import { ShareScheduleCard } from '../components/bangumi/ShareScheduleCard';
-import { AddTrackingSheet } from '../components/bangumi/AddTrackingSheet';
-import { AnimeRepository } from '../libs/repositories/anime-repository';
-import { dataSourceConfig } from '../libs/services/data-source-config';
-import { animeNotificationService } from '../modules/notifications/animeNotificationService';
-import { loadBangumiPrefs, saveBangumiPrefs } from '../libs/services/bangumi-prefs';
-import { loadUserPrefs, patchUserPrefs } from '../libs/services/user-prefs';
-import { trackingService } from '../libs/services/tracking/tracking-service';
-import { Colors, FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
-import { useTheme } from '../context/ThemeContext';
-import { hapticsBridge } from '../modules/haptics/hapticsBridge';
+} from '../../components/bangumi/BangumiSettingsSheet';
+import { NotificationManagerSheet } from '../../components/bangumi/NotificationManagerSheet';
+import { shareSchedule } from '../../components/bangumi/shareSchedule';
+import { ShareScheduleCard } from '../../components/bangumi/ShareScheduleCard';
+import { AddTrackingSheet } from '../../components/bangumi/AddTrackingSheet';
+import { BangumiActionSnackbar } from '../../components/bangumi/BangumiActionSnackbar';
+import { AnimeRepository } from '../../libs/repositories/anime-repository';
+import { dataSourceConfig } from '../../libs/services/data-source-config';
+import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
+import { loadBangumiPrefs, saveBangumiPrefs } from '../../libs/services/bangumi-prefs';
+import { loadUserPrefs, patchUserPrefs } from '../../libs/services/user-prefs';
+import { trackingService } from '../../libs/services/tracking/tracking-service';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { useTheme } from '../../context/ThemeContext';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 type FilterMode = 'all' | 'tracking';
 type Season = 'winter' | 'spring' | 'summer' | 'fall';
@@ -123,6 +124,13 @@ export default function BangumiScreen() {
   const [trackingTarget, setTrackingTarget] = useState<Anime | null>(null);
   const [adultContent, setAdultContent] = useState(false);
   const [trackedIds, setTrackedIds] = useState<Set<string>>(() => new Set());
+  const [snackbar, setSnackbar] = useState<{
+    key: number;
+    message: string;
+    icon: React.ComponentProps<typeof MaterialIcons>['name'];
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
   const hydratedRef = useRef(false);
   const shareCardRef = useRef<View>(null);
 
@@ -169,6 +177,67 @@ export default function BangumiScreen() {
     setAdultContent(value);
     void patchUserPrefs({ allowAdultContent: value });
   }, []);
+
+  const handleQuickAddWishlist = useCallback(async (anime: Anime) => {
+    try {
+      await trackingService.upsertTracking({
+        animeId: anime.id,
+        status: 'planned',
+        title: anime.title,
+        imageUrl: anime.image,
+        totalEpisodes: anime.episodes,
+      });
+      hapticsBridge.success();
+      setSnackbar({
+        key: Date.now(),
+        message: `Added "${anime.title}" to Wishlist`,
+        icon: 'bookmark-added',
+        actionLabel: 'Undo',
+        onAction: () => {
+          void trackingService.removeTracking(anime.id);
+        },
+      });
+    } catch (e) {
+      console.warn('[bangumi] quick wishlist failed', e);
+      hapticsBridge.warning();
+      setSnackbar({
+        key: Date.now(),
+        message: "Couldn't add to Wishlist",
+        icon: 'error-outline',
+      });
+    }
+  }, []);
+
+  const handleToggleReminder = useCallback(
+    async (anime: Anime, currentlyScheduled: boolean) => {
+      try {
+        if (currentlyScheduled) {
+          await animeNotificationService.cancelAnimeNotification(anime.id);
+          setSnackbar({
+            key: Date.now(),
+            message: `Reminder cancelled`,
+            icon: 'notifications-off',
+          });
+        } else {
+          const id = await animeNotificationService.scheduleAnimeNotification(anime);
+          setSnackbar({
+            key: Date.now(),
+            message: id
+              ? `Reminder set for "${anime.title}"`
+              : `Reminders unavailable in Expo Go`,
+            icon: id ? 'notifications-active' : 'info',
+          });
+        }
+        hapticsBridge.selection();
+      } catch (e) {
+        console.warn('[bangumi] reminder toggle failed', e);
+        hapticsBridge.warning();
+      }
+    },
+    []
+  );
+
+  const dismissSnackbar = useCallback(() => setSnackbar(null), []);
 
   const viewMode = prefs.viewMode;
   const filterMode = prefs.filterMode;
@@ -455,7 +524,11 @@ export default function BangumiScreen() {
                 progressBackgroundColor={Colors.background.secondary}
               />
             }>
-            <TodayUpdatesSection todayAnime={todayAnime} />
+            <TodayUpdatesSection
+              todayAnime={todayAnime}
+              onLongPressAnime={setTrackingTarget}
+              trackedIds={trackedIds}
+            />
             <View style={styles.calendarContainer}>
               <FocusDayCarousel
                 weekDays={weekDays}
@@ -465,6 +538,9 @@ export default function BangumiScreen() {
                 initialDay={todayDay}
                 scrollToTodayKey={scrollToTodayKey}
                 sourcePlatform={sourcePlatform}
+                onLongPressAnime={setTrackingTarget}
+                onQuickAdd={handleQuickAddWishlist}
+                trackedIds={trackedIds}
               />
             </View>
             {specialAnime.length > 0 ? (
@@ -490,7 +566,13 @@ export default function BangumiScreen() {
               />
             }>
             {/* Show a compact weekly calendar above the list as a navigator */}
-            {todayAnime.length > 0 ? <TodayUpdatesSection todayAnime={todayAnime} /> : null}
+            {todayAnime.length > 0 ? (
+              <TodayUpdatesSection
+                todayAnime={todayAnime}
+                onLongPressAnime={setTrackingTarget}
+                trackedIds={trackedIds}
+              />
+            ) : null}
             <AnimeList
               listViewData={listViewData}
               renderAnimeCard={(anime) => (
@@ -498,7 +580,10 @@ export default function BangumiScreen() {
                   key={anime.id}
                   anime={anime}
                   sourcePlatform={sourcePlatform}
+                  isTracked={trackedIds.has(anime.id)}
                   onAddTracking={setTrackingTarget}
+                  onQuickWishlist={handleQuickAddWishlist}
+                  onToggleReminder={handleToggleReminder}
                 />
               )}
             />
@@ -513,6 +598,15 @@ export default function BangumiScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
+      <BangumiActionSnackbar
+        key={snackbar?.key ?? 'none'}
+        visible={!!snackbar}
+        message={snackbar?.message ?? ''}
+        icon={snackbar?.icon}
+        actionLabel={snackbar?.actionLabel}
+        onAction={snackbar?.onAction}
+        onDismiss={dismissSnackbar}
+      />
       {pendingShare ? (
         <View pointerEvents="none" style={styles.shareCardWrapper}>
           <ShareScheduleCard

@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Share, StyleSheet, View } from 'react-native';
-import { useTheme } from '../../../context/ThemeContext';
-import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
+import { ThemedText } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
   loadUserAnimeRows,
   summarize,
   UserAnimeRow,
-} from '../../../libs/services/collection/stats-service';
+} from '../../../../libs/services/collection/stats-service';
 
 export default function TopPicksExhibit() {
   const { theme } = useTheme();

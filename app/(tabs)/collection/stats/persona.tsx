@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../../../context/ThemeContext';
-import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
   loadUserAnimeRows,
   summarize,
-} from '../../../libs/services/collection/stats-service';
-import { computePersona, PersonaResult } from '../../../libs/services/collection/persona';
+} from '../../../../libs/services/collection/stats-service';
+import { computePersona, PersonaResult } from '../../../../libs/services/collection/persona';
 
 export default function PersonaExhibit() {
   const { theme } = useTheme();

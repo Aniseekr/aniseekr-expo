@@ -132,7 +132,7 @@ export default function SearchScreen() {
       setRecent(next);
       persistRecent(next);
       Keyboard.dismiss();
-      router.push(`/(rate)/anime/${anime.id}`);
+      router.push(`/anime/${anime.id}`);
     },
     [recent, persistRecent, router]
   );

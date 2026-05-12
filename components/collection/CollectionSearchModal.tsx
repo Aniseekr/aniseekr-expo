@@ -284,7 +284,7 @@ export function CollectionSearchModal({ visible, onClose, folders }: CollectionS
       recordRecent(entry.title);
       Keyboard.dismiss();
       onClose();
-      router.push(`/(rate)/anime/${entry.id}`);
+      router.push(`/anime/${entry.id}`);
     },
     [onClose, recordRecent, router]
   );

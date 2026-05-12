@@ -61,7 +61,7 @@ function RecentlyViewedSectionComponent({
   const handlePress = (item: RecentItem) => {
     hapticsBridge.tap();
     if (onItemPress) onItemPress(item);
-    else router.push(`/(rate)/anime/${item.id}`);
+    else router.push(`/anime/${item.id}`);
   };
 
   return (

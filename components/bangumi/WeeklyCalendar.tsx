@@ -48,7 +48,7 @@ export function WeeklyCalendar({
             <View style={{ gap: Spacing.sm }}>
               {dayData.anime.map((anime) => (
                 <Pressable
-                  onPress={() => router.push(`/(rate)/anime/${anime.id}`)}
+                  onPress={() => router.push(`/anime/${anime.id}`)}
                   key={anime.id}
                   style={styles.animeCard}>
                   <Image

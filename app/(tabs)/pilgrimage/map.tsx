@@ -18,27 +18,27 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useTheme, type ThemePalette } from '../../context/ThemeContext';
-import { ThemedText } from '../../components/themed';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
-import { collectionPilgrimageService } from '../../libs/services/pilgrimage/collection-pilgrimage-service';
-import { locationService, type LatLng } from '../../libs/services/pilgrimage/location-service';
+import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
+import { ThemedText } from '../../../components/themed';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
+import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
+import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
 import {
   LEAFLET_CSS,
   LEAFLET_JS,
   LEAFLET_MARKERCLUSTER_CSS,
   LEAFLET_MARKERCLUSTER_JS,
-} from '../../libs/services/pilgrimage/leaflet-assets';
+} from '../../../libs/services/pilgrimage/leaflet-assets';
 import {
   MAP_BASE_BODY,
   MAP_BASE_CSS,
   MAP_BASE_JS,
   MAP_BASE_URL,
   TILE_URL,
-} from '../../libs/services/pilgrimage/leaflet-map';
-import { getNumberParam } from '../../libs/utils/route-params';
-import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
+} from '../../../libs/services/pilgrimage/leaflet-map';
+import { getNumberParam } from '../../../libs/utils/route-params';
+import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 
 interface HubMapMarker {
   bangumiId: number;

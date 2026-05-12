@@ -12,18 +12,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { collectionService } from '../../libs/services/collection/collection-service';
-import { trackingService } from '../../libs/services/tracking/tracking-service';
-import { LocalDB } from '../../libs/db';
-import { NearbyPilgrimageBadge } from '../../components/pilgrimage/NearbyPilgrimageBadge';
+import { collectionService } from '../../../libs/services/collection/collection-service';
+import { trackingService } from '../../../libs/services/tracking/tracking-service';
+import { LocalDB } from '../../../libs/db';
+import { NearbyPilgrimageBadge } from '../../../components/pilgrimage/NearbyPilgrimageBadge';
 import {
   AnimeProgressView,
   type AnimeProgress,
-} from '../../components/collection/AnimeProgressView';
-import { ThemedText } from '../../components/themed';
-import { useTheme } from '../../context/ThemeContext';
-import { Radius, Spacing } from '../../constants/DesignSystem';
-import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+} from '../../../components/collection/AnimeProgressView';
+import { ThemedText } from '../../../components/themed';
+import { useTheme } from '../../../context/ThemeContext';
+import { Radius, Spacing } from '../../../constants/DesignSystem';
+import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 
 interface FolderItem {
   id: string;
@@ -229,7 +229,7 @@ export default function FolderDetailScreen() {
       }}
       onLongPress={() => {
         hapticsBridge.longPress();
-        router.push(`/(rate)/anime/${item.id}`);
+        router.push(`/anime/${item.id}`);
       }}
       delayLongPress={350}>
       {item.image_url ? (

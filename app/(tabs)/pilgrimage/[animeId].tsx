@@ -38,42 +38,42 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
-import { Radius, Spacing } from '../../constants/DesignSystem';
-import { useTheme, type ThemePalette } from '../../context/ThemeContext';
-import { ThemedText, readableTextOn } from '../../components/themed';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { anitabiService } from '../../libs/services/pilgrimage/anitabi-service';
+import { Radius, Spacing } from '../../../constants/DesignSystem';
+import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
+import { ThemedText, readableTextOn } from '../../../components/themed';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { anitabiService } from '../../../libs/services/pilgrimage/anitabi-service';
 import {
   listCaptures,
   type PilgrimageCapture,
-} from '../../libs/services/pilgrimage/captures';
-import { locationService, type LatLng } from '../../libs/services/pilgrimage/location-service';
+} from '../../../libs/services/pilgrimage/captures';
+import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
 import {
   LEAFLET_CSS,
   LEAFLET_JS,
   LEAFLET_MARKERCLUSTER_CSS,
   LEAFLET_MARKERCLUSTER_JS,
-} from '../../libs/services/pilgrimage/leaflet-assets';
+} from '../../../libs/services/pilgrimage/leaflet-assets';
 import {
   MAP_BASE_BODY,
   MAP_BASE_CSS,
   MAP_BASE_JS,
   MAP_BASE_URL,
   TILE_URL,
-} from '../../libs/services/pilgrimage/leaflet-map';
+} from '../../../libs/services/pilgrimage/leaflet-map';
 import {
   loadVisitedSpots,
   saveVisitedSpots,
   type VisitedMap,
-} from '../../libs/services/pilgrimage/visited-prefs';
-import { dataSourceConfig, isSupportedBrowseSource } from '../../libs/services/data-source-config';
-import { PLATFORM_CONFIGS, type PlatformType } from '../../libs/services/auth/types';
-import { getNumberParam, getStringParam } from '../../libs/utils/route-params';
+} from '../../../libs/services/pilgrimage/visited-prefs';
+import { dataSourceConfig, isSupportedBrowseSource } from '../../../libs/services/data-source-config';
+import { PLATFORM_CONFIGS, type PlatformType } from '../../../libs/services/auth/types';
+import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
   AnitabiPointDetail,
-} from '../../libs/services/pilgrimage/types';
+} from '../../../libs/services/pilgrimage/types';
 
 type ViewMode = 'list' | 'map';
 type SpotFilter = 'all' | 'visited' | 'unvisited' | 'photos';

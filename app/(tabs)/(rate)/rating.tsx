@@ -2,32 +2,32 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps 
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { PhotoCard, PhotoCardRef } from '../../components/rate/PhotoCard';
-import { Photo } from '../../components/rate/types';
-import { AnimeRepository } from '../../libs/repositories/anime-repository';
-import { NativeAdCard, NativeAdCardRef } from '../../components/ads/NativeAdCard';
-import { isAdSlotEnabled } from '../../libs/services/ads/ad-config';
+import { PhotoCard, PhotoCardRef } from '../../../components/rate/PhotoCard';
+import { Photo } from '../../../components/rate/types';
+import { AnimeRepository } from '../../../libs/repositories/anime-repository';
+import { NativeAdCard, NativeAdCardRef } from '../../../components/ads/NativeAdCard';
+import { isAdSlotEnabled } from '../../../libs/services/ads/ad-config';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { RatingInfoOverlay } from '../../components/rate/RatingInfoOverlay';
-import { ModeSelector } from '../../components/rate/ModeSelector';
+import { RatingInfoOverlay } from '../../../components/rate/RatingInfoOverlay';
+import { ModeSelector } from '../../../components/rate/ModeSelector';
 import {
   RatingActionButtons,
   type RatingType,
-} from '../../components/rate/RatingActionButtons';
-import { ImageDisplaySettingsSheet } from '../../components/rate/ImageDisplaySettingsSheet';
-import { ImagePreloader } from '../../libs/image-preloader';
-import { trackingService } from '../../libs/services/tracking/tracking-service';
-import { LocalDB } from '../../libs/db';
+} from '../../../components/rate/RatingActionButtons';
+import { ImageDisplaySettingsSheet } from '../../../components/rate/ImageDisplaySettingsSheet';
+import { ImagePreloader } from '../../../libs/image-preloader';
+import { trackingService } from '../../../libs/services/tracking/tracking-service';
+import { LocalDB } from '../../../libs/db';
 import {
   DEFAULT_SWIPE_PREFS,
   loadUserPrefs,
   patchSwipePrefs,
   type SwipeMode,
   type SwipePrefs,
-} from '../../libs/services/user-prefs';
-import { useTheme } from '../../context/ThemeContext';
-import { readableTextOn } from '../../components/themed';
-import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+} from '../../../libs/services/user-prefs';
+import { useTheme } from '../../../context/ThemeContext';
+import { readableTextOn } from '../../../components/themed';
+import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -409,7 +409,7 @@ export default function RatingScreen() {
               accessibilityLabel="View anime details"
               onPress={() => {
                 if (currentPhoto) {
-                  router.push(`/(rate)/anime/${currentPhoto.id}`);
+                  router.push(`/anime/${currentPhoto.id}`);
                 }
               }}>
               <Ionicons name="eye" size={22} color="#fff" />
@@ -494,7 +494,7 @@ export default function RatingScreen() {
           <RatingInfoOverlay
             photo={currentPhoto}
             onClose={() => {}}
-            onMoreDetails={() => router.push(`/(rate)/anime/${currentPhoto.id}`)}
+            onMoreDetails={() => router.push(`/anime/${currentPhoto.id}`)}
           />
         )}
 

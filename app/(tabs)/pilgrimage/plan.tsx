@@ -21,15 +21,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Haptics from 'expo-haptics';
-import { Radius, Spacing } from '../../constants/DesignSystem';
-import { useTheme, type ThemePalette } from '../../context/ThemeContext';
-import { ThemedText, readableTextOn } from '../../components/themed';
-import { cityToColor } from '../../components/pilgrimage/PilgrimageMapView';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
-import { collectionPilgrimageService } from '../../libs/services/pilgrimage/collection-pilgrimage-service';
-import { loadVisitedSpots, type VisitedMap } from '../../libs/services/pilgrimage/visited-prefs';
-import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
+import { Radius, Spacing } from '../../../constants/DesignSystem';
+import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
+import { ThemedText, readableTextOn } from '../../../components/themed';
+import { cityToColor } from '../../../components/pilgrimage/PilgrimageMapView';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
+import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
+import { loadVisitedSpots, type VisitedMap } from '../../../libs/services/pilgrimage/visited-prefs';
+import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 
 type TripCandidate = {
   anime: AnitabiBangumi;

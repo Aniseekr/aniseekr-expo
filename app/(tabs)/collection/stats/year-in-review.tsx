@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '../../../context/ThemeContext';
-import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
-import { MonthlyHoursBar } from '../../../components/collection/stats/MonthlyHoursBar';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
+import { MonthlyHoursBar } from '../../../../components/collection/stats/MonthlyHoursBar';
 import {
   loadUserAnimeRows,
   longestStreakDays,
   monthlyHours,
   summarize,
   yearScope,
-} from '../../../libs/services/collection/stats-service';
+} from '../../../../libs/services/collection/stats-service';
 
 const HERO_FROM = '#FF6CAB';
 const HERO_TO = '#FF8E1E';

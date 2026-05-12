@@ -7,28 +7,28 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { router } from 'expo-router';
-import { PlatformSwitcher, PlatformInfo } from '../components/profile/PlatformSwitcher';
-import { EditDisplayNameSheet } from '../components/profile/EditDisplayNameSheet';
-import { ProfileShortcutsGrid } from '../components/profile/ProfileShortcutsGrid';
-import { PaywallSheet } from '../components/subscription/PaywallSheet';
-import { ThemedText, ThemedSurface, readableTextOn } from '../components/themed';
-import { UserRepository, UserProfile } from '../libs/repositories/user-repository';
-import { gachaService } from '../libs/services/gacha-service';
-import { authService } from '../libs/services/auth/auth-service';
-import { PLATFORM_CONFIGS, PlatformType } from '../libs/services/auth/types';
+import { PlatformSwitcher, PlatformInfo } from '../../components/profile/PlatformSwitcher';
+import { EditDisplayNameSheet } from '../../components/profile/EditDisplayNameSheet';
+import { ProfileShortcutsGrid } from '../../components/profile/ProfileShortcutsGrid';
+import { PaywallSheet } from '../../components/subscription/PaywallSheet';
+import { ThemedText, ThemedSurface, readableTextOn } from '../../components/themed';
+import { UserRepository, UserProfile } from '../../libs/repositories/user-repository';
+import { gachaService } from '../../libs/services/gacha-service';
+import { authService } from '../../libs/services/auth/auth-service';
+import { PLATFORM_CONFIGS, PlatformType } from '../../libs/services/auth/types';
 import {
   DEFAULT_USER_PREFS,
   loadUserPrefs,
   patchUserPrefs,
-} from '../libs/services/user-prefs';
+} from '../../libs/services/user-prefs';
 import {
   normalizeProfileShortcuts,
   type ShortcutId,
-} from '../libs/services/profile-shortcuts';
-import { useSubscription } from '../context/SubscriptionContext';
-import { useTheme } from '../context/ThemeContext';
-import { Radius, Spacing } from '../constants/DesignSystem';
-import { hapticsBridge } from '../modules/haptics/hapticsBridge';
+} from '../../libs/services/profile-shortcuts';
+import { useSubscription } from '../../context/SubscriptionContext';
+import { useTheme } from '../../context/ThemeContext';
+import { Radius, Spacing } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 const PLATFORM_INITIAL: Record<PlatformType, string> = {
   anilist: 'A',

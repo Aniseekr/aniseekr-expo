@@ -7,25 +7,25 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { AnimeRepository } from '../../../libs/repositories/anime-repository';
-import { LocalDB } from '../../../libs/db';
-import { Anime } from '../../../components/rate/types';
-import { GlassCard } from '../../../components/common/GlassCard';
+import { AnimeRepository } from '../../libs/repositories/anime-repository';
+import { LocalDB } from '../../libs/db';
+import { Anime } from '../../components/rate/types';
+import { GlassCard } from '../../components/common/GlassCard';
 import type {
   AnimeStreaming,
   AnimeRelation,
   AnimeStaff,
   AnimeTheme,
   PlatformRatingData,
-} from '../../../libs/services/data-sources/anime-data-source';
-import type { PlatformType } from '../../../libs/services/auth/types';
-import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
-import { AnimePilgrimageCard } from '../../../components/pilgrimage/AnimePilgrimageCard';
-import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
-import { AddToCollectionSheet } from '../../../components/collection/AddToCollectionSheet';
-import { trackingService } from '../../../libs/services/tracking/tracking-service';
-import { collectionService } from '../../../libs/services/collection/collection-service';
-import { loadUserPrefs, patchUserPrefs } from '../../../libs/services/user-prefs';
+} from '../../libs/services/data-sources/anime-data-source';
+import type { PlatformType } from '../../libs/services/auth/types';
+import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
+import { AnimePilgrimageCard } from '../../components/pilgrimage/AnimePilgrimageCard';
+import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
+import { AddToCollectionSheet } from '../../components/collection/AddToCollectionSheet';
+import { trackingService } from '../../libs/services/tracking/tracking-service';
+import { collectionService } from '../../libs/services/collection/collection-service';
+import { loadUserPrefs, patchUserPrefs } from '../../libs/services/user-prefs';
 
 type RatingEntry = { platform: PlatformType; data: PlatformRatingData };
 
@@ -531,7 +531,7 @@ function RelationsSection({ items }: { items: AnimeRelation[] }) {
   const open = (entry: AnimeRelation) => {
     if (!entry.id) return;
     Haptics.selectionAsync();
-    router.push(`/(rate)/anime/${entry.id}`);
+    router.push(`/anime/${entry.id}`);
   };
 
   return (

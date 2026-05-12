@@ -20,10 +20,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Radius, Spacing } from '../../../constants/DesignSystem';
-import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { ThemedText, readableTextOn } from '../../../components/themed';
+import { Radius, Spacing } from '../../../../constants/DesignSystem';
+import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
+import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
 
 type Template = 'polaroid' | 'classic' | 'minimal' | 'comic' | 'manga';
 

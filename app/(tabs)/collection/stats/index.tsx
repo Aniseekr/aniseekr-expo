@@ -1,28 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useTheme } from '../../../context/ThemeContext';
-import { Spacing } from '../../../constants/DesignSystem';
-import { ThemedText } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { ErrorStateView } from '../../../components/common/ErrorStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
-import { StatsHeroCard } from '../../../components/collection/stats/StatsHeroCard';
-import { StatusDonutCard } from '../../../components/collection/stats/StatusDonutCard';
-import { MonthlyHoursBar } from '../../../components/collection/stats/MonthlyHoursBar';
-import { AchievementsGrid } from '../../../components/collection/stats/AchievementsGrid';
-import { ExhibitCard } from '../../../components/collection/stats/ExhibitCard';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Spacing } from '../../../../constants/DesignSystem';
+import { ThemedText } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { ErrorStateView } from '../../../../components/common/ErrorStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
+import { StatsHeroCard } from '../../../../components/collection/stats/StatsHeroCard';
+import { StatusDonutCard } from '../../../../components/collection/stats/StatusDonutCard';
+import { MonthlyHoursBar } from '../../../../components/collection/stats/MonthlyHoursBar';
+import { AchievementsGrid } from '../../../../components/collection/stats/AchievementsGrid';
+import { ExhibitCard } from '../../../../components/collection/stats/ExhibitCard';
 import {
   loadUserAnimeRows,
   monthlyHours,
   summarize,
   StatsSummary,
-} from '../../../libs/services/collection/stats-service';
+} from '../../../../libs/services/collection/stats-service';
 import {
   achievementService,
   AchievementWithProgress,
-} from '../../../libs/services/achievements/achievement-service';
+} from '../../../../libs/services/achievements/achievement-service';
 
 const STATUS_COLORS = {
   watching: '#30D158',

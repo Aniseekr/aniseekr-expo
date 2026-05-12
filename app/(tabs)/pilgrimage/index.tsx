@@ -29,27 +29,27 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useTheme, type ThemePalette } from '../../context/ThemeContext';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
-import { collectionPilgrimageService } from '../../libs/services/pilgrimage/collection-pilgrimage-service';
-import { locationService, type LatLng } from '../../libs/services/pilgrimage/location-service';
-import { loadVisitedSpots, type VisitedMap } from '../../libs/services/pilgrimage/visited-prefs';
+import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
+import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
+import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
+import { loadVisitedSpots, type VisitedMap } from '../../../libs/services/pilgrimage/visited-prefs';
 import {
   LEAFLET_CSS,
   LEAFLET_JS,
   LEAFLET_MARKERCLUSTER_CSS,
   LEAFLET_MARKERCLUSTER_JS,
-} from '../../libs/services/pilgrimage/leaflet-assets';
+} from '../../../libs/services/pilgrimage/leaflet-assets';
 import {
   MAP_BASE_BODY,
   MAP_BASE_CSS,
   MAP_BASE_JS,
   MAP_BASE_URL,
   TILE_URL,
-} from '../../libs/services/pilgrimage/leaflet-map';
-import { ThemedText, readableTextOn } from '../../components/themed';
-import type { AnitabiBangumi, AnitabiPoint } from '../../libs/services/pilgrimage/types';
+} from '../../../libs/services/pilgrimage/leaflet-map';
+import { ThemedText, readableTextOn } from '../../../components/themed';
+import type { AnitabiBangumi, AnitabiPoint } from '../../../libs/services/pilgrimage/types';
 
 interface FeaturedSpot {
   spot: AnitabiPoint;

@@ -13,11 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { ThemedText } from '../../../components/themed';
-import { recordCapture } from '../../../libs/services/pilgrimage/captures';
-import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
+import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
+import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { ThemedText } from '../../../../components/themed';
+import { recordCapture } from '../../../../libs/services/pilgrimage/captures';
+import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 
 type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider';
 

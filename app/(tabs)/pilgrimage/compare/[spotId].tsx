@@ -19,9 +19,9 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { useTheme } from '../../../context/ThemeContext';
-import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { ThemedText } from '../../../components/themed';
+import { useTheme } from '../../../../context/ThemeContext';
+import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { ThemedText } from '../../../../components/themed';
 
 type SearchParams = {
   spotId: string;

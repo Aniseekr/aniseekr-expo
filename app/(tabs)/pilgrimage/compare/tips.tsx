@@ -12,10 +12,10 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCameraPermissions } from 'expo-camera';
-import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { useSceneAnalysis } from '../../../components/pilgrimage/SceneAnalyzer';
+import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
+import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { useSceneAnalysis } from '../../../../components/pilgrimage/SceneAnalyzer';
 import {
   inferAspectRatio,
   inferBestTime,
@@ -28,8 +28,8 @@ import {
   inferWarnings,
   inferWeather,
   type WarningItem,
-} from '../../../libs/services/pilgrimage/scene-analysis';
-import { getStringParam } from '../../../libs/utils/route-params';
+} from '../../../../libs/services/pilgrimage/scene-analysis';
+import { getStringParam } from '../../../../libs/utils/route-params';
 
 const WARN_ICONS: Record<WarningItem['icon'], React.ComponentProps<typeof Ionicons>['name']> = {
   sunny: 'sunny',

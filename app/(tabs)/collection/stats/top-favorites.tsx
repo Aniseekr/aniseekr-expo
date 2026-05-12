@@ -2,17 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useTheme } from '../../../context/ThemeContext';
-import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
   loadUserAnimeRows,
   summarize,
   UserAnimeRow,
-} from '../../../libs/services/collection/stats-service';
+} from '../../../../libs/services/collection/stats-service';
 
 const HERO_FROM = '#FF5C8A';
 const HERO_TO = '#7C5BFF';

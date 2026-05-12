@@ -30,7 +30,7 @@ function SpecialContentSectionComponent({
 
   const handlePress = (item: Anime) => {
     hapticsBridge.tap();
-    router.push(`/(rate)/anime/${item.id}`);
+    router.push(`/anime/${item.id}`);
   };
 
   return (

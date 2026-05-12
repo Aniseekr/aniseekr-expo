@@ -2,16 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useTheme } from '../../../context/ThemeContext';
-import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { ShimmerEffect } from '../../../components/common/ShimmerEffect';
-import { EmptyStateView } from '../../../components/common/EmptyStateView';
-import { StatsExhibitFrame } from '../../../components/collection/stats/StatsExhibitFrame';
+import { useTheme } from '../../../../context/ThemeContext';
+import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { EmptyStateView } from '../../../../components/common/EmptyStateView';
+import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
   achievementService,
   AchievementWithProgress,
-} from '../../../libs/services/achievements/achievement-service';
+} from '../../../../libs/services/achievements/achievement-service';
 
 const TROPHY_FROM = '#F2994A';
 const TROPHY_TO = '#F2C94C';

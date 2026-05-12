@@ -12,43 +12,43 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { captureRef } from 'react-native-view-shot';
-import { CollectionHeader } from '../components/collection/CollectionHeader';
-import { FolderGrid } from '../components/collection/FolderGrid';
-import { CollectionOverviewCard } from '../components/collection/CollectionOverviewCard';
+import { CollectionHeader } from '../../../components/collection/CollectionHeader';
+import { FolderGrid } from '../../../components/collection/FolderGrid';
+import { CollectionOverviewCard } from '../../../components/collection/CollectionOverviewCard';
 import {
   CollectionRecentRail,
   type RecentRailItem,
-} from '../components/collection/CollectionRecentRail';
+} from '../../../components/collection/CollectionRecentRail';
 import {
   CollectionAnimeGrid,
   type CollectionAnimeCardItem,
-} from '../components/collection/CollectionAnimeGrid';
-import { CollectionTips } from '../components/collection/CollectionTips';
-import { CollectionSearchModal } from '../components/collection/CollectionSearchModal';
-import { CollectionFloatingActionBar } from '../components/collection/CollectionFloatingActionBar';
-import { ShareImageRenderer } from '../components/collection/ShareImageRenderer';
-import { ShareListEditor } from '../components/collection/ShareListEditor';
-import { CollectionFolder } from '../types';
-import { collectionService } from '../libs/services/collection/collection-service';
-import { CreateFolderModal } from '../components/collection/CreateFolderModal';
-import { hapticsBridge } from '../modules/haptics/hapticsBridge';
+} from '../../../components/collection/CollectionAnimeGrid';
+import { CollectionTips } from '../../../components/collection/CollectionTips';
+import { CollectionSearchModal } from '../../../components/collection/CollectionSearchModal';
+import { CollectionFloatingActionBar } from '../../../components/collection/CollectionFloatingActionBar';
+import { ShareImageRenderer } from '../../../components/collection/ShareImageRenderer';
+import { ShareListEditor } from '../../../components/collection/ShareListEditor';
+import { CollectionFolder } from '../../../types';
+import { collectionService } from '../../../libs/services/collection/collection-service';
+import { CreateFolderModal } from '../../../components/collection/CreateFolderModal';
+import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import {
   loadCollectionSortMode,
   saveCollectionSortMode,
   type CollectionSortMode,
-} from '../libs/services/collection-prefs';
-import { Radius, Spacing, Typography } from '../constants/DesignSystem';
-import { LocalDB } from '../libs/db';
-import { ThemedText } from '../components/themed';
-import { useTheme } from '../context/ThemeContext';
+} from '../../../libs/services/collection-prefs';
+import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
+import { LocalDB } from '../../../libs/db';
+import { ThemedText } from '../../../components/themed';
+import { useTheme } from '../../../context/ThemeContext';
 import {
   buildShareTemplate,
   type ShareEntry,
   type ShareSourceItem,
   type ShareTemplate,
   type ShareTemplateBuild,
-} from '../libs/services/collection/share-templates';
-import { UserRepository } from '../libs/repositories/user-repository';
+} from '../../../libs/services/collection/share-templates';
+import { UserRepository } from '../../../libs/repositories/user-repository';
 
 type SortMode = CollectionSortMode;
 type ScreenMode = 'collect' | 'share';
@@ -655,7 +655,7 @@ export default function CollectionScreen() {
             {animeCards.length > 0 ? (
               <CollectionAnimeGrid
                 items={animeCards.slice(0, ANIME_PREVIEW_LIMIT)}
-                onPressItem={(item) => router.push(`/(rate)/anime/${item.id}`)}
+                onPressItem={(item) => router.push(`/anime/${item.id}`)}
               />
             ) : (
               <View style={styles.emptyAnimeState}>
@@ -674,7 +674,7 @@ export default function CollectionScreen() {
           <View style={styles.section}>
             <CollectionRecentRail
               items={recents}
-              onPressItem={(item) => router.push(`/(rate)/anime/${item.id}`)}
+              onPressItem={(item) => router.push(`/anime/${item.id}`)}
               onPressSeeAll={() => router.push('/(rate)')}
             />
           </View>

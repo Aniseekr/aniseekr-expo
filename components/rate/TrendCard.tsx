@@ -21,7 +21,7 @@ function TrendCardComponent({ anime, rank, onPress }: Props) {
       onPress();
     } else {
       router.push({
-        pathname: `/(rate)/anime/${anime.id}`,
+        pathname: `/anime/${anime.id}`,
       });
     }
   };

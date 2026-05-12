@@ -18,18 +18,18 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { GenreCarousel } from '../../components/rate/GenreCarousel';
-import { SeasonalView } from '../../components/rate/seasonal/SeasonalView';
-import { AIRecommendationSheet } from '../../components/rate/AIRecommendationSheet';
-import { ModeSelector } from '../../components/rate/ModeSelector';
-import { ImageDisplaySettingsSheet } from '../../components/rate/ImageDisplaySettingsSheet';
-import { useRateData } from '../../components/rate/useRateData';
-import { Anime, Genre, ViewMode } from '../../components/rate/types';
-import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
-import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
-import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
+import { GenreCarousel } from '../../../components/rate/GenreCarousel';
+import { SeasonalView } from '../../../components/rate/seasonal/SeasonalView';
+import { AIRecommendationSheet } from '../../../components/rate/AIRecommendationSheet';
+import { ModeSelector } from '../../../components/rate/ModeSelector';
+import { ImageDisplaySettingsSheet } from '../../../components/rate/ImageDisplaySettingsSheet';
+import { useRateData } from '../../../components/rate/useRateData';
+import { Anime, Genre, ViewMode } from '../../../components/rate/types';
+import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '../../../constants/DesignSystem';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
+import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 import {
   DEFAULT_SWIPE_PREFS,
   DEFAULT_USER_PREFS,
@@ -38,7 +38,7 @@ import {
   patchUserPrefs,
   type SeasonalLayout,
   type SwipePrefs,
-} from '../../libs/services/user-prefs';
+} from '../../../libs/services/user-prefs';
 
 const MODE_OPTIONS: readonly { value: ViewMode; label: string }[] = [
   { value: 'discovery', label: 'Discovery' },
@@ -131,7 +131,7 @@ export default function HomeRateScreen() {
 
   const handleAnimeSelect = useCallback(
     (anime: Anime) => {
-      router.push({ pathname: `/(rate)/anime/${anime.id}` });
+      router.push({ pathname: `/anime/${anime.id}` });
     },
     [router]
   );

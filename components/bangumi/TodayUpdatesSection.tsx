@@ -9,10 +9,13 @@ import { BlurView } from 'expo-blur';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../rate/types';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 interface TodayUpdatesSectionProps {
   todayAnime: Anime[];
   initiallyCollapsed?: boolean;
+  onLongPressAnime?: (anime: Anime) => void;
+  trackedIds?: Set<string>;
 }
 
 function formatAiringTime(airingAt?: number): string | null {
@@ -26,6 +29,8 @@ function formatAiringTime(airingAt?: number): string | null {
 function TodayUpdatesSectionComponent({
   todayAnime,
   initiallyCollapsed = false,
+  onLongPressAnime,
+  trackedIds,
 }: TodayUpdatesSectionProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
@@ -58,24 +63,41 @@ function TodayUpdatesSectionComponent({
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}>
-          {display.map((anime) => (
-            <Pressable
-              key={anime.id}
-              onPress={() => router.push(`/(rate)/anime/${anime.id}`)}
-              style={styles.card}>
-              <Image source={{ uri: anime.image }} style={styles.poster} resizeMode="cover" />
-              <View style={styles.cardText}>
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {anime.title}
-                </Text>
-                {anime.nextAiringEpisode ? (
-                  <Text style={styles.cardTime}>
-                    {formatAiringTime(anime.nextAiringEpisode.airingAt)}
+          {display.map((anime) => {
+            const isTracked = trackedIds?.has(anime.id) ?? false;
+            return (
+              <Pressable
+                key={anime.id}
+                onPress={() => router.push(`/anime/${anime.id}`)}
+                onLongPress={
+                  onLongPressAnime
+                    ? () => {
+                        hapticsBridge.longPress();
+                        onLongPressAnime(anime);
+                      }
+                    : undefined
+                }
+                delayLongPress={280}
+                style={styles.card}>
+                <Image source={{ uri: anime.image }} style={styles.poster} resizeMode="cover" />
+                <View style={styles.cardText}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {anime.title}
                   </Text>
+                  {anime.nextAiringEpisode ? (
+                    <Text style={styles.cardTime}>
+                      {formatAiringTime(anime.nextAiringEpisode.airingAt)}
+                    </Text>
+                  ) : null}
+                </View>
+                {isTracked ? (
+                  <View style={styles.trackedBadge}>
+                    <Ionicons name="checkmark" size={10} color={Colors.primary} />
+                  </View>
                 ) : null}
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       ) : null}
     </View>
@@ -152,6 +174,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
     fontFamily: FontFamily.rounded,
+  },
+  trackedBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 159, 10, 0.18)',
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
 });
 

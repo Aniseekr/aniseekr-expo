@@ -11,19 +11,19 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme, type ThemePalette } from '../../context/ThemeContext';
-import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
-import { ThemedText, readableTextOn } from '../../components/themed';
+import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
+import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
+import { ThemedText, readableTextOn } from '../../../components/themed';
 import {
   listCaptures,
   type PilgrimageCapture,
-} from '../../libs/services/pilgrimage/captures';
-import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
-import { FEATURED_PILGRIMAGE_ANIME } from '../../libs/services/pilgrimage/featured-anime';
+} from '../../../libs/services/pilgrimage/captures';
+import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
+import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
-} from '../../libs/services/pilgrimage/types';
+} from '../../../libs/services/pilgrimage/types';
 
 interface AlbumEntry {
   capture: PilgrimageCapture;

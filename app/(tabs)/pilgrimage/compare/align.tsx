@@ -10,12 +10,12 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Magnetometer } from 'expo-sensors';
-import { Radius, Spacing } from '../../../constants/DesignSystem';
-import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { ThemedText, readableTextOn } from '../../../components/themed';
-import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
-import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
+import { Radius, Spacing } from '../../../../constants/DesignSystem';
+import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
+import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
+import { locationService, type LatLng } from '../../../../libs/services/pilgrimage/location-service';
+import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 
 function bearingBetween(from: LatLng, to: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
