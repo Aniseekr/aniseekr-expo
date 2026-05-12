@@ -249,6 +249,12 @@ const DDL = `
       );
       CREATE INDEX IF NOT EXISTS idx_sched_notif_ref
         ON scheduled_notifications(kind, ref_id);
+
+      CREATE TABLE IF NOT EXISTS swipe_seen (
+        id TEXT PRIMARY KEY NOT NULL,
+        seen_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_swipe_seen_at ON swipe_seen(seen_at);
     `;
 
 export const LocalDB = {
@@ -298,6 +304,26 @@ export const LocalDB = {
       rating,
       Date.now()
     );
+  },
+
+  async markSwipeSeen(animeId: string): Promise<void> {
+    const db = await openDb();
+    await db.runAsync(
+      'INSERT OR REPLACE INTO swipe_seen (id, seen_at) VALUES (?, ?)',
+      animeId,
+      Date.now()
+    );
+  },
+
+  async getSwipeSeenIds(): Promise<Set<string>> {
+    const db = await openDb();
+    const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM swipe_seen');
+    return new Set((rows ?? []).map((r) => r.id));
+  },
+
+  async clearSwipeSeen(): Promise<void> {
+    const db = await openDb();
+    await db.runAsync('DELETE FROM swipe_seen');
   },
 
   async getStats(): Promise<UserStats> {

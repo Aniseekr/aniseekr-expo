@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -8,7 +8,6 @@ import { AnimeRepository } from '../../libs/repositories/anime-repository';
 import { NativeAdCard, NativeAdCardRef } from '../../components/ads/NativeAdCard';
 import { isAdSlotEnabled } from '../../libs/services/ads/ad-config';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { GlassCard } from '../../components/common/GlassCard';
 import { RatingInfoOverlay } from '../../components/rate/RatingInfoOverlay';
 import { ModeSelector } from '../../components/rate/ModeSelector';
 import {
@@ -44,6 +43,13 @@ const MAX_VISIBLE_CARDS = 3;
 const CARD_STACK_SPACING = 10;
 const CARD_SCALE_RATIO = 0.05;
 const AD_INTERVAL = 12;
+const PREFETCH_THRESHOLD = 5;
+const GENRE_PER_PAGE = 20;
+const SEASONAL_PER_PAGE = 50;
+
+// Card sizing — 1:7:1 ratio (one part side margin, seven parts card, one part
+// side margin) so the deck visually echoes the Discovery hero card.
+const CARD_HORIZONTAL_PADDING = SCREEN_WIDTH / 9;
 
 type DeckItem = { kind: 'photo'; photo: Photo } | { kind: 'ad'; id: string };
 
@@ -107,9 +113,15 @@ async function applyOutcome(photo: Photo, rating: RatingType): Promise<void> {
   }
 }
 
-const MODE_OPTIONS: readonly { value: SwipeMode; label: string }[] = [
-  { value: 'plan', label: 'Plan' },
-  { value: 'like', label: 'Like' },
+type ModeOption = {
+  value: SwipeMode;
+  label: string;
+  icon: ComponentProps<typeof Ionicons>['name'];
+};
+
+const MODE_OPTIONS: readonly ModeOption[] = [
+  { value: 'plan', label: 'Plan', icon: 'bookmark' },
+  { value: 'like', label: 'Like', icon: 'heart' },
 ];
 
 export default function RatingScreen() {
@@ -129,9 +141,17 @@ export default function RatingScreen() {
   const [deck, setDeck] = useState<DeckItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(DEFAULT_SWIPE_PREFS);
   const [showSettings, setShowSettings] = useState(false);
   const adsEnabled = isAdSlotEnabled('rate_native');
+
+  // IDs the user has already swiped past in any previous session. Mirrored from
+  // SQLite once on mount; new swipes are pushed into both the local ref and the
+  // DB so subsequent fetches can filter them out without an extra round-trip.
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   // Shared Value for the ACTIVE card's translation X
   const activeTranslationX = useSharedValue(0);
@@ -167,41 +187,125 @@ export default function RatingScreen() {
   }, []);
 
   useEffect(() => {
-    loadPhotos();
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await LocalDB.getSwipeSeenIds();
+        if (cancelled) return;
+        seenIdsRef.current = seen;
+      } catch (err) {
+        console.warn('[Rating] failed to hydrate seen ids', err);
+      } finally {
+        if (!cancelled) await loadPhotos();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [params.genreId, params.animeId]);
 
   const loadPhotos = async () => {
     setLoading(true);
     try {
       let animeList;
+      let nextHasMore = true;
       if (params.animeId) {
-        // [NEW] Load specific anime if requested
+        // Direct rating of a single anime — bypass the seen filter so the user
+        // can still re-rate an item they explicitly opened.
         const specificAnime = await AnimeRepository.getAnimeDetails(params.animeId);
         animeList = [specificAnime];
-        // Optional: fetch recommendations based on this anime to fill the stack?
-        // For now, just the one to rate.
+        nextHasMore = false;
       } else if (params.genreId) {
-        // Genre is a string name in AniList (e.g. "Action")
-        animeList = await AnimeRepository.getAnimeByGenre(params.genreId);
+        animeList = await AnimeRepository.getAnimeByGenre(params.genreId, 1);
+        nextHasMore = animeList.length >= GENRE_PER_PAGE;
       } else {
-        animeList = await AnimeRepository.getSeasonalAnime();
+        animeList = await AnimeRepository.getSeasonalAnime(undefined, undefined, 1);
+        nextHasMore = animeList.length >= SEASONAL_PER_PAGE;
       }
+      const seen = seenIdsRef.current;
+      const isAnimeIdPath = !!params.animeId;
       const mappedPhotos = animeList.map(AnimeRepository.mapAnimeToPhoto);
-      const validPhotos = mappedPhotos.filter((p) => !!p.url);
+      const validPhotos = mappedPhotos.filter(
+        (p) => !!p.url && (isAnimeIdPath || !seen.has(p.id))
+      );
       console.log(`Loaded ${validPhotos.length} photos out of ${mappedPhotos.length} total`);
       if (validPhotos.length > 0) {
         console.log('First photo URL:', validPhotos[0].url);
       }
       setPhotos(validPhotos);
       setDeck(buildDeck(validPhotos, adsEnabled));
-      setCurrentIndex(0); // Reset index when new photos are loaded
-      activeTranslationX.value = 0; // Reset shared value
+      setCurrentIndex(0);
+      setCurrentPage(1);
+      setHasMore(nextHasMore);
+      activeTranslationX.value = 0;
     } catch (error) {
       console.error('Failed to load photos:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadMorePhotos = useCallback(async () => {
+    if (loading || loadingMore || !hasMore) return;
+    if (params.animeId) return;
+
+    setLoadingMore(true);
+    const nextPage = currentPage + 1;
+    try {
+      let animeList;
+      let nextHasMore = true;
+      if (params.genreId) {
+        animeList = await AnimeRepository.getAnimeByGenre(params.genreId, nextPage);
+        nextHasMore = animeList.length >= GENRE_PER_PAGE;
+      } else {
+        animeList = await AnimeRepository.getSeasonalAnime(undefined, undefined, nextPage);
+        nextHasMore = animeList.length >= SEASONAL_PER_PAGE;
+      }
+
+      const existingIds = new Set(photos.map((p) => p.id));
+      const seen = seenIdsRef.current;
+      const newPhotos = animeList
+        .map(AnimeRepository.mapAnimeToPhoto)
+        .filter((p) => !!p.url && !existingIds.has(p.id) && !seen.has(p.id));
+
+      if (newPhotos.length === 0) {
+        // Page returned but every item was already seen / duplicate. Bump the
+        // page counter so the prefetch effect can pull the next page on its
+        // own re-run — without this we'd appear stuck on "all caught up" even
+        // though more unseen pages exist.
+        setCurrentPage(nextPage);
+        if (!nextHasMore) setHasMore(false);
+        return;
+      }
+
+      setPhotos((prev) => [...prev, ...newPhotos]);
+      setDeck((prev) => [...prev, ...buildDeck(newPhotos, adsEnabled)]);
+      setCurrentPage(nextPage);
+      setHasMore(nextHasMore);
+    } catch (err) {
+      console.warn('Failed to load more photos:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    adsEnabled,
+    currentPage,
+    hasMore,
+    loading,
+    loadingMore,
+    params.animeId,
+    params.genreId,
+    photos,
+  ]);
+
+  useEffect(() => {
+    if (loading || loadingMore || !hasMore) return;
+    if (deck.length === 0) return;
+    const remaining = deck.length - currentIndex;
+    if (remaining <= PREFETCH_THRESHOLD) {
+      void loadMorePhotos();
+    }
+  }, [currentIndex, deck.length, hasMore, loading, loadingMore, loadMorePhotos]);
 
   const visibleCardIndices = useMemo(() => {
     const maxIndex = Math.min(currentIndex + MAX_VISIBLE_CARDS, deck.length);
@@ -228,18 +332,27 @@ export default function RatingScreen() {
         const rating: RatingType =
           pending ?? deriveRatingFromDirection(direction, swipePrefs.mode);
         void applyOutcome(item.photo, rating);
+        // Persist that we've shown this card, regardless of action. The next
+        // session's deck filters by this set so the user resumes where they
+        // left off instead of re-seeing the same items.
+        seenIdsRef.current.add(item.photo.id);
+        void LocalDB.markSwipeSeen(item.photo.id);
       }
       pendingRatingRef.current = null;
 
-      // flingOut in PhotoCard already resets activeTranslationX; the new top
-      // card will start from its own zero translation.
-      if (currentIndex < deck.length - 1) {
-        setCurrentIndex((prev) => prev + 1);
-      } else {
+      const isLastCard = currentIndex >= deck.length - 1;
+      if (isLastCard && params.animeId) {
+        // Single-anime rating flow: nothing else queued, exit back to caller.
         router.back();
+        return;
       }
+      // For genre / seasonal: advance past the last card and let the render
+      // surface the "loading more" / "all done" state. The prefetch effect
+      // pulls page N+1 well before we hit the end, so this is mostly a safety
+      // net for slow networks.
+      setCurrentIndex((prev) => prev + 1);
     },
-    [currentIndex, deck, router, swipePrefs.mode]
+    [currentIndex, deck, params.animeId, router, swipePrefs.mode]
   );
 
   // Bottom-button taps: stash the desired rating then animate the card out in
@@ -261,15 +374,6 @@ export default function RatingScreen() {
 
   const currentItem = deck[currentIndex];
   const currentPhoto = currentItem?.kind === 'photo' ? currentItem.photo : undefined;
-  const photoProgress = useMemo(() => {
-    if (deck.length === 0) return { current: 0, total: 0 };
-    const total = photos.length;
-    let current = 0;
-    for (let i = 0; i <= currentIndex && i < deck.length; i++) {
-      if (deck[i].kind === 'photo') current += 1;
-    }
-    return { current, total };
-  }, [deck, currentIndex, photos.length]);
 
   return (
     <SafeAreaView style={[styles.container, { paddingTop: 0 }]} edges={['left', 'right']}>
@@ -277,18 +381,9 @@ export default function RatingScreen() {
       <View style={[styles.headerContainer, { paddingTop: top + 10 }]}>
         {/* Top Bar */}
         <View style={styles.topBar}>
-          <Pressable onPress={handleClose} style={styles.closeButton}>
+          <Pressable onPress={handleClose} style={styles.closeButton} accessibilityLabel="Close">
             <Ionicons name="close" size={24} color="#fff" />
           </Pressable>
-
-          <GlassCard
-            className="flex-row items-center gap-2 rounded-full px-3 py-1.5"
-            intensity={20}>
-            <Text style={styles.counterText}>
-              {loading ? '...' : `${photoProgress.current} / ${photoProgress.total}`}
-            </Text>
-            <Ionicons name="swap-horizontal" size={14} color="#fff" />
-          </GlassCard>
 
           <View style={styles.headerActions}>
             <Pressable
@@ -300,9 +395,9 @@ export default function RatingScreen() {
               }}>
               <Ionicons name="options-outline" size={20} color="#fff" />
             </Pressable>
-            {/* Detail View Shortcut */}
             <Pressable
               style={styles.actionButton}
+              accessibilityLabel="View anime details"
               onPress={() => {
                 if (currentPhoto) {
                   router.push(`/(rate)/anime/${currentPhoto.id}`);
@@ -319,12 +414,8 @@ export default function RatingScreen() {
             options={MODE_OPTIONS}
             value={swipePrefs.mode}
             onChange={handleModeChange}
+            accentColor={theme.accent}
           />
-          <Text style={styles.modeHint}>
-            {swipePrefs.mode === 'plan'
-              ? 'Swipe right to add to Plan to Watch'
-              : 'Swipe right to add to Favorites'}
-          </Text>
         </View>
       </View>
 
@@ -343,6 +434,21 @@ export default function RatingScreen() {
               <Text style={styles.goBackButtonText}>Go Back</Text>
             </Pressable>
           </View>
+        ) : currentIndex >= deck.length ? (
+          hasMore || loadingMore ? (
+            <View style={styles.loadingContainer}>
+              <Ionicons name="planet" size={48} color="#666" />
+              <Text style={styles.loadingText}>Loading more…</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="checkmark-done-circle-outline" size={64} color="#666" />
+              <Text style={styles.emptyText}>You're all caught up</Text>
+              <Pressable onPress={handleClose} style={styles.goBackButton}>
+                <Text style={styles.goBackButtonText}>Go Back</Text>
+              </Pressable>
+            </View>
+          )
         ) : (
           <View style={styles.cardStack}>
             {visibleCardIndices
@@ -383,29 +489,31 @@ export default function RatingScreen() {
           />
         )}
 
-        {swipePrefs.mode === 'plan' ? (
-          <View style={styles.actionButtonsRow}>
-            <Pressable
-              onPress={() => triggerSwipe('left')}
-              style={styles.skipButton}
-              accessibilityLabel="Skip">
-              <Ionicons name="close" size={28} color="#000" />
-            </Pressable>
+        {currentPhoto ? (
+          swipePrefs.mode === 'plan' ? (
+            <View style={styles.actionButtonsRow}>
+              <Pressable
+                onPress={() => triggerSwipe('left')}
+                style={styles.skipButton}
+                accessibilityLabel="Skip">
+                <Ionicons name="close" size={28} color="#000" />
+              </Pressable>
 
-            <Pressable
-              onPress={() => handleRateFromButton('tracking')}
-              style={[styles.planButton, { backgroundColor: theme.accent }]}
-              accessibilityLabel="Add to Plan to Watch">
-              <Ionicons name="calendar" size={32} color={readableTextOn(theme.accent)} />
-            </Pressable>
-          </View>
-        ) : (
-          <RatingActionButtons
-            style={styles.likeModeButtons}
-            mode={swipePrefs.ratingButtons === 'five' ? 'fiveButtons' : 'threeButtons'}
-            onRate={handleRateFromButton}
-          />
-        )}
+              <Pressable
+                onPress={() => handleRateFromButton('tracking')}
+                style={[styles.planButton, { backgroundColor: theme.accent }]}
+                accessibilityLabel="Add to Plan to Watch">
+                <Ionicons name="calendar" size={32} color={readableTextOn(theme.accent)} />
+              </Pressable>
+            </View>
+          ) : (
+            <RatingActionButtons
+              style={styles.likeModeButtons}
+              mode={swipePrefs.ratingButtons === 'five' ? 'fiveButtons' : 'threeButtons'}
+              onRate={handleRateFromButton}
+            />
+          )
+        ) : null}
       </View>
 
       <ImageDisplaySettingsSheet
@@ -548,11 +656,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  counterText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -567,16 +670,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modeSelectorRow: {
-    paddingTop: 10,
-    paddingBottom: 6,
-    gap: 6,
-  },
-  modeHint: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 2,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   cardStackContainer: {
     flex: 1,
@@ -628,9 +723,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '100%',
     height: '100%',
-    paddingHorizontal: 16,
-    paddingTop: 120, // Space for header
-    paddingBottom: 200, // Space for bottom overlay
+    paddingHorizontal: CARD_HORIZONTAL_PADDING,
+    paddingTop: 110, // Space for header + mode selector
+    paddingBottom: 180, // Space for bottom overlay + action buttons
   },
   overlayContainer: {
     position: 'absolute',
