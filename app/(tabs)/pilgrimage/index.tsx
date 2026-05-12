@@ -579,7 +579,10 @@ export default function PilgrimageHubScreen() {
 
   const handleSearch = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
-    router.push('/search');
+    // context=pilgrimage tells /search to route picked results to
+    // /pilgrimage/[bangumiId] instead of /anime/[id] so the user stays
+    // inside the pilgrimage flow.
+    router.push({ pathname: '/search', params: { context: 'pilgrimage' } });
   }, [router]);
 
   const handleOpenAlbum = useCallback(() => {

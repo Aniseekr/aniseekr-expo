@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -24,6 +24,8 @@ import { ErrorStateView } from '../components/common/ErrorStateView';
 import { Colors, Radius, Spacing, Typography } from '../constants/DesignSystem';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 import { isStringArray, safeJsonParse } from '../libs/utils/safe-json';
+import { pilgrimageRepository } from '../libs/services/pilgrimage/pilgrimage-repository';
+import { dataSourceConfig } from '../libs/services/data-source-config';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -67,6 +69,11 @@ const SORTS: readonly { key: SortKey; label: string }[] = [
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // `context=pilgrimage` is set by the pilgrimage hub so we route picks to
+  // /pilgrimage/[bangumiId] instead of /anime/[id]. Any other value falls
+  // through to the default global-search behaviour.
+  const params = useLocalSearchParams<{ context?: string }>();
+  const isPilgrimageMode = params.context === 'pilgrimage';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,6 +82,8 @@ export default function SearchScreen() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('relevance');
   const [sortOpen, setSortOpen] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -126,15 +135,43 @@ export default function SearchScreen() {
   }, [query, runSearch]);
 
   const handleSelect = useCallback(
-    (anime: Anime) => {
+    async (anime: Anime) => {
       hapticsBridge.tap();
       const next = [anime.title, ...recent.filter((r) => r !== anime.title)].slice(0, MAX_RECENT);
       setRecent(next);
       persistRecent(next);
       Keyboard.dismiss();
+
+      if (isPilgrimageMode) {
+        // Translate the browse-source id (usually AniList) → Bangumi subject
+        // id before routing to the pilgrimage detail. If we can't resolve a
+        // bangumi id at all there is no pilgrimage page to land on, so warn
+        // the user inline instead of opening a dead screen.
+        setResolveError(null);
+        setResolvingId(anime.id);
+        try {
+          const bangumiId = await pilgrimageRepository.resolveBangumiId({
+            sourcePlatform: dataSourceConfig.browseSource,
+            id: anime.id,
+          });
+          if (bangumiId === null) {
+            hapticsBridge.warning();
+            setResolveError(`No pilgrimage mapping for "${anime.title}".`);
+            return;
+          }
+          router.push(`/pilgrimage/${bangumiId}`);
+        } catch (e) {
+          hapticsBridge.warning();
+          setResolveError(e instanceof Error ? e.message : 'Could not resolve this title.');
+        } finally {
+          setResolvingId(null);
+        }
+        return;
+      }
+
       router.push(`/anime/${anime.id}`);
     },
-    [recent, persistRecent, router]
+    [recent, persistRecent, router, isPilgrimageMode]
   );
 
   const handleRecentTap = useCallback((term: string) => {
@@ -214,10 +251,18 @@ export default function SearchScreen() {
           </Pressable>
 
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={16} color={Colors.text.secondary} />
+            <Ionicons
+              name={isPilgrimageMode ? 'location' : 'search'}
+              size={16}
+              color={isPilgrimageMode ? Colors.primary : Colors.text.secondary}
+            />
             <TextInput
               autoFocus
-              placeholder="Search anime, characters, studios…"
+              placeholder={
+                isPilgrimageMode
+                  ? 'Search anime for pilgrimage…'
+                  : 'Search anime, characters, studios…'
+              }
               placeholderTextColor={Colors.text.tertiary}
               value={query}
               onChangeText={setQuery}
@@ -240,6 +285,22 @@ export default function SearchScreen() {
             ) : null}
           </View>
         </View>
+
+        {isPilgrimageMode && resolveError ? (
+          <View style={styles.resolveBanner}>
+            <Ionicons name="information-circle" size={14} color={Colors.text.primary} />
+            <Text style={styles.resolveBannerText} numberOfLines={2}>
+              {resolveError}
+            </Text>
+            <Pressable
+              onPress={() => setResolveError(null)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss">
+              <Ionicons name="close" size={14} color={Colors.text.secondary} />
+            </Pressable>
+          </View>
+        ) : null}
 
         {query.length > 0 ? (
           <View style={styles.filterChipsWrap}>
@@ -406,7 +467,13 @@ export default function SearchScreen() {
                 ) : null}
               </View>
             }
-            renderItem={({ item }) => <ResultCard anime={item} onPress={() => handleSelect(item)} />}
+            renderItem={({ item }) => (
+              <ResultCard
+                anime={item}
+                pending={resolvingId === item.id}
+                onPress={() => handleSelect(item)}
+              />
+            )}
             ListFooterComponent={
               loading ? (
                 <View style={styles.footerLoader}>
@@ -423,18 +490,24 @@ export default function SearchScreen() {
 
 interface ResultCardProps {
   anime: Anime;
+  pending?: boolean;
   onPress: () => void;
 }
 
-function ResultCard({ anime, onPress }: ResultCardProps) {
+function ResultCard({ anime, pending, onPress }: ResultCardProps) {
   const score = typeof anime.score === 'number' ? formatScore(anime.score) : null;
   const tags = anime.tags?.slice(0, 3) ?? [];
   return (
     <Pressable
       onPress={onPress}
+      disabled={pending}
       accessibilityRole="button"
       accessibilityLabel={anime.title}
-      style={({ pressed }) => [styles.resultCard, pressed && { opacity: 0.85 }]}>
+      style={({ pressed }) => [
+        styles.resultCard,
+        pressed && { opacity: 0.85 },
+        pending && { opacity: 0.6 },
+      ]}>
       <Image source={{ uri: anime.image }} style={styles.thumb} contentFit="cover" transition={150} />
       <View style={styles.resultBody}>
         <Text style={styles.resultTitle} numberOfLines={2}>
@@ -531,6 +604,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  resolveBanner: {
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,159,10,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,159,10,0.45)',
+  },
+  resolveBannerText: {
+    flex: 1,
+    color: Colors.text.primary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   filterChipsWrap: {
     paddingBottom: Spacing.sm,
