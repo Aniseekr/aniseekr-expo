@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
@@ -72,9 +72,13 @@ export default function CompareCaptureScreen() {
   const rotation = useSharedValue(0);
   const baseRotation = useSharedValue(0);
 
+  // Tips screen pre-checks permission before navigating here, so we shouldn't
+  // normally land in a denied state. If we do (deep link, settings flip),
+  // surface a clear settings affordance instead of the implicit auto-call —
+  // iOS silently ignores requestPermission once canAskAgain is false.
   useEffect(() => {
     if (!permission) return;
-    if (!permission.granted) {
+    if (!permission.granted && permission.canAskAgain) {
       requestPermission().catch(() => undefined);
     }
   }, [permission, requestPermission]);
@@ -253,14 +257,19 @@ export default function CompareCaptureScreen() {
             <Pressable
               onPress={() => {
                 hapticsBridge.tap();
-                void requestPermission();
+                if (permission.canAskAgain) {
+                  void requestPermission();
+                } else {
+                  // iOS won't re-prompt — only Settings can flip it back on.
+                  Linking.openSettings().catch(() => undefined);
+                }
               }}
               style={({ pressed }) => [
                 styles.permBtn,
                 { backgroundColor: themeColor, opacity: pressed ? 0.85 : 1 },
               ]}>
               <ThemedText variant="titleSmall" weight="700" style={{ color: '#000' }}>
-                Grant access
+                {permission.canAskAgain ? 'Grant access' : '前往設定 · Open Settings'}
               </ThemedText>
             </Pressable>
             <Pressable onPress={() => router.back()} hitSlop={12}>

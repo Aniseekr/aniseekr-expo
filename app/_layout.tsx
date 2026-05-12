@@ -118,6 +118,10 @@ export default function RootLayout() {
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />
             <Tabs.Screen
+              name="pilgrimage/map"
+              options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
+            />
+            <Tabs.Screen
               name="pilgrimage/album"
               options={{ href: null, tabBarStyle: { display: 'none' }, headerShown: false }}
             />

@@ -5,12 +5,13 @@
 // Composition Tips card (numbered tips with 56×56 rule-of-thirds illustration)
 // → Things to Avoid red warn box → Bottom CTA (orange 開啟相機對齊).
 
-import { Fragment, useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useCameraPermissions } from 'expo-camera';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../components/themed';
@@ -87,13 +88,60 @@ export default function PhotoTipsScreen() {
   const warnings = analysis ? inferWarnings(analysis) : null;
   const palette = analysis?.palette ?? [];
 
-  const handleStart = useCallback(() => {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [requesting, setRequesting] = useState(false);
+
+  const handleStart = useCallback(async () => {
+    // Pre-check camera permission here so the user sees the iOS/Android
+    // dialog from an explicit gesture (firing it inside the camera screen's
+    // useEffect on mount sometimes silently fails on iOS, which is exactly
+    // the "no permission" symptom users report).
+    if (requesting) return;
+    let current = permission;
+    if (!current) {
+      // First call ever — useCameraPermissions hasn't settled yet. Trigger
+      // requestPermission directly; it returns a fresh status object.
+      try {
+        setRequesting(true);
+        current = await requestPermission();
+      } finally {
+        setRequesting(false);
+      }
+    } else if (!current.granted && current.canAskAgain) {
+      try {
+        setRequesting(true);
+        current = await requestPermission();
+      } finally {
+        setRequesting(false);
+      }
+    }
+
+    if (!current?.granted) {
+      // Permanently denied (or user said no). Offer Settings deep-link
+      // instead of navigating into a broken camera screen.
+      hapticsBridge.warning();
+      Alert.alert(
+        '需要相機權限',
+        '請到設定 → AniSeekr → 相機開啟存取，才能拍攝聖地對比照。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '前往設定',
+            onPress: () => {
+              Linking.openSettings().catch(() => undefined);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     hapticsBridge.success();
     router.replace({
       pathname: '/pilgrimage/compare/[spotId]',
       params: { ...params },
     });
-  }, [router, params]);
+  }, [router, params, permission, requestPermission, requesting]);
 
   const handleHelp = useCallback(() => {
     hapticsBridge.tap();

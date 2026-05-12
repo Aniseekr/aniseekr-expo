@@ -828,6 +828,17 @@ export default function PilgrimageDetailScreen() {
     };
   }, []);
 
+  // Prefer Bangumi's high-res poster (anime.bgm.tv) over Anitabi's tiny h160
+  // thumbnail. Anitabi's CDN serves bangumi covers only at h160 — `?plan=h720`
+  // 404s — so we previously rendered a black hero. Bangumi's /image redirect
+  // returns the full-quality cover for any subject id we know.
+  const posterUri = useMemo(() => {
+    if (typeof bangumiId === 'number' && bangumiId > 0) {
+      return `https://api.bgm.tv/v0/subjects/${bangumiId}/image?type=large`;
+    }
+    return anime?.cover ?? '';
+  }, [bangumiId, anime?.cover]);
+
   const stats = useMemo(() => {
     const spotCount = anime?.pointsLength ?? points.length;
     const visitedCount = points.reduce((acc, p) => (visited[p.id] ? acc + 1 : acc), 0);
@@ -1101,7 +1112,7 @@ export default function PilgrimageDetailScreen() {
             <View style={styles.heroWrap}>
               <Animated.View style={[styles.heroImageWrap, heroAnimatedStyle]}>
                 <Image
-                  source={{ uri: (anime?.cover ?? '').replace('?plan=h160', '?plan=h720') }}
+                  source={posterUri ? { uri: posterUri } : null}
                   style={styles.heroImage}
                   contentFit="cover"
                   transition={250}
