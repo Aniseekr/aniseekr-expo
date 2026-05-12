@@ -65,6 +65,13 @@
         {
           "faceIDPermission": "AniSeekr uses Face ID to confirm before showing adult content."
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
       ]
     ],
     "orientation": "portrait",
@@ -100,6 +107,9 @@
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "WRITE_EXTERNAL_STORAGE"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACTIVITY_RECOGNITION"
       ]
     },
     "extra": {
