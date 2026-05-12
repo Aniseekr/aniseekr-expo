@@ -231,14 +231,14 @@ ${MAP_BASE_BODY}
   var initialCenter = L.latLng(initial.center.lat, initial.center.lng);
   var initialZoom = initial.center.zoom;
   var lastBounds = null;
-  var markerCoords = [];
-  // Tapping the recentre button should answer "what's near me?". If we have
-  // a user fix we frame them with the closest few anime; otherwise we fall
-  // back to fitting all markers, then to flying home (Tokyo Station).
+  // Tapping the recentre button: if we have a user fix, zoom tight to it
+  // (~2 km on screen) so the user sees a walkable patch around their pin,
+  // not the whole country. Anime markers inside that patch render naturally.
+  // No user fix → fall back to flying home (Tokyo Station).
   window.__bindMap(map, function recenter() {
-    if (initial.user && markerCoords.length > 0) {
-      var did = window.__fitNearby(map, initial.user, markerCoords, {
-        k: 5, maxZoom: 11,
+    if (initial.user) {
+      var did = window.__fitNearby(map, initial.user, null, {
+        zoom: 14,
         home: { lat: initial.center.lat, lng: initial.center.lng, zoom: initial.center.zoom },
       });
       if (did) return;
@@ -256,7 +256,6 @@ ${MAP_BASE_BODY}
   window.__updateMarkers = function(markers) {
     clusterLayer.clearLayers();
     var bounds = [];
-    var coords = [];
     var batch = [];
     for (var i = 0; i < markers.length; i++) {
       (function(m){
@@ -270,7 +269,6 @@ ${MAP_BASE_BODY}
         marker.on('click', function() { window.__post({ type: 'animePress', id: m.bangumiId }); });
         batch.push(marker);
         bounds.push([m.lat, m.lng]);
-        coords.push([m.lat, m.lng]);
       })(markers[i]);
     }
     if (typeof clusterLayer.addLayers === 'function') clusterLayer.addLayers(batch);
@@ -279,7 +277,6 @@ ${MAP_BASE_BODY}
     if (bounds.length > 0) {
       try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
     }
-    markerCoords = coords;
     if (!didFit && bounds.length > 1) {
       try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 9, animate: false }); didFit = true; } catch (e) {}
     } else if (!didFit && bounds.length === 1) {

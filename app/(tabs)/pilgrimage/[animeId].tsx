@@ -187,15 +187,14 @@ ${MAP_BASE_BODY}
   var initialCenter = L.latLng(initial.center.lat, initial.center.lng);
   var initialZoom = initial.center.zoom;
   var lastBounds = null;
-  var markerCoords = [];
 
   window.__bindMap(map, function recenter() {
-    // On the detail screen, "near me" means near *the user* among this
-    // anime's spots — fits user + closest few spots so the visited pin and
-    // the next nearest unvisited stop both render in a single tap.
-    if (initial.user && markerCoords.length > 0) {
-      var did = window.__fitNearby(map, initial.user, markerCoords, {
-        k: 5, maxZoom: 15,
+    // Spot-detail screen: zoom tight to user (~1.5 km diagonal at zoom 15)
+    // so the next walkable spot is reachable from the framing instead of
+    // burying the user pin inside a wide overview.
+    if (initial.user) {
+      var did = window.__fitNearby(map, initial.user, null, {
+        zoom: 15,
         home: { lat: initial.center.lat, lng: initial.center.lng, zoom: initial.center.zoom },
       });
       if (did) return;
@@ -214,7 +213,6 @@ ${MAP_BASE_BODY}
     markerLayer.clearLayers();
     var batch = [];
     var bounds = [];
-    var coords = [];
     for (var i = 0; i < markers.length; i++) {
       (function(m){
         var cls = 'spot-marker' + (m.visited ? ' visited' : '');
@@ -228,7 +226,6 @@ ${MAP_BASE_BODY}
         marker.on('click', function() { window.__post({ type: 'spotPress', id: m.id }); });
         batch.push(marker);
         bounds.push([m.lat, m.lng]);
-        coords.push([m.lat, m.lng]);
       })(markers[i]);
     }
     if (typeof markerLayer.addLayers === 'function') markerLayer.addLayers(batch);
@@ -237,7 +234,6 @@ ${MAP_BASE_BODY}
     if (bounds.length > 0) {
       try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
     }
-    markerCoords = coords;
     if (!didFit && bounds.length > 1) {
       try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15, animate: false }); didFit = true; } catch (e) {}
     } else if (!didFit && bounds.length === 1) {

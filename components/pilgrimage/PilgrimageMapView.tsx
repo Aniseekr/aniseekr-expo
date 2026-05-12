@@ -242,17 +242,15 @@ ${MAP_BASE_BODY}
 
   var initialZoom = initial.center.zoom;
   var initialCenter = L.latLng(initial.center.lat, initial.center.lng);
-  var markerCoords = [];
   window.__bindMap(map, function recenter() {
-    if (initial.user && markerCoords.length > 0) {
-      var did = window.__fitNearby(map, initial.user, markerCoords, {
-        k: 5, maxZoom: ${USER_ZOOM},
+    if (initial.user) {
+      var did = window.__fitNearby(map, initial.user, null, {
+        zoom: 14,
         home: { lat: initial.center.lat, lng: initial.center.lng, zoom: initial.center.zoom },
       });
       if (did) return;
     }
-    if (initial.user) map.flyTo([initial.user.lat, initial.user.lng], ${USER_ZOOM}, { duration: 0.4 });
-    else map.flyTo(initialCenter, initialZoom, { duration: 0.4 });
+    map.flyTo(initialCenter, initialZoom, { duration: 0.4 });
   });
 
   var markerLayer = window.__makeClusterGroup({ ringColor: initial.themeAccent, disableAt: 10 });
@@ -263,7 +261,6 @@ ${MAP_BASE_BODY}
     markerLayer.clearLayers();
     var batch = [];
     var bounds = [];
-    var coords = [];
     for (var i = 0; i < markers.length; i++) {
       var m = markers[i];
       var ring = m.inCollection ? '#30D158' : m.ringColor;
@@ -286,12 +283,10 @@ ${MAP_BASE_BODY}
       marker.bindPopup(popup, { closeButton: false, offset: [0, -18] });
       batch.push(marker);
       bounds.push([m.lat, m.lng]);
-      coords.push([m.lat, m.lng]);
     }
     if (typeof markerLayer.addLayers === 'function') markerLayer.addLayers(batch);
     else for (var j = 0; j < batch.length; j++) markerLayer.addLayer(batch[j]);
 
-    markerCoords = coords;
     if (refit && bounds.length > 0) {
       try { map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 12, duration: 0.45 }); } catch (e) {}
     } else if (bounds.length > 1 && lastMarkerCount === 0 && !initial.user) {

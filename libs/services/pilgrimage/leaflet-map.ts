@@ -416,65 +416,42 @@ export const MAP_BASE_JS = `
   };
 
   /**
-   * Frame the user pin together with the closest \`k\` markers so a single tap
-   * on the recentre button answers the obvious question "what's near me?"
-   * instead of just dropping a pin and leaving the rest of the map cropped
-   * out. Falls back to flying to the user (or to the supplied home center)
-   * when no markers are available.
+   * Fly to the user's pin at a tight, walking-scale zoom so the recentre
+   * button answers "where am I, what's right around me?" — not "show me
+   * every anime point on the planet". Any marker that happens to sit inside
+   * the resulting viewport renders naturally; nothing is dragged in from
+   * far away.
+   *
+   * The \`coords\` argument is kept for back-compat but no longer used: an
+   * earlier version bounds-fit user + closest k markers, which pulled the
+   * camera all the way out to include a marker in Tokyo when the user was
+   * standing in Taipei. Users (correctly) hated that.
    *
    * Inputs:
    *   map          — leaflet map instance
-   *   user         — { lat, lng } | null  (user location, may be missing)
-   *   coords       — Array<[lat, lng]>    (every rendered marker)
-   *   opts         — { k?: number, maxZoom?: number, home?: {lat,lng,zoom}, duration?: number }
+   *   user         — { lat, lng } | null
+   *   _coords      — kept for back-compat, ignored
+   *   opts         — { zoom?: number, home?: {lat,lng,zoom}, duration?: number }
+   *                  Default zoom is 14 which shows roughly a 2 km wide patch
+   *                  on a phone (~3 km diagonal); plenty of context without
+   *                  losing the "I'm right here" framing.
    *
-   * Returns:
-   *   true if it flew somewhere meaningful, false otherwise.
+   * Returns true if it moved the camera anywhere meaningful, false if both
+   * user and home were missing.
    */
-  window.__fitNearby = function(map, user, coords, opts) {
+  window.__fitNearby = function(map, user, _coords, opts) {
     opts = opts || {};
-    var k = typeof opts.k === 'number' ? opts.k : 5;
-    var maxZoom = typeof opts.maxZoom === 'number' ? opts.maxZoom : 11;
+    var zoom = typeof opts.zoom === 'number' ? opts.zoom : 14;
     var duration = typeof opts.duration === 'number' ? opts.duration : 0.45;
     var home = opts.home || null;
 
-    function flyHome() {
-      if (home && typeof home.lat === 'number' && typeof home.lng === 'number') {
-        try { map.flyTo([home.lat, home.lng], home.zoom || maxZoom, { duration: duration }); return true; } catch (e) {}
-      }
-      return false;
+    if (user && typeof user.lat === 'number' && typeof user.lng === 'number') {
+      try { map.flyTo([user.lat, user.lng], zoom, { duration: duration }); return true; } catch (e) {}
     }
-
-    if (!user || typeof user.lat !== 'number' || typeof user.lng !== 'number') {
-      return flyHome();
+    if (home && typeof home.lat === 'number' && typeof home.lng === 'number') {
+      try { map.flyTo([home.lat, home.lng], home.zoom || zoom, { duration: duration }); return true; } catch (e) {}
     }
-
-    var ulat = user.lat, ulng = user.lng;
-    if (!coords || coords.length === 0) {
-      try { map.flyTo([ulat, ulng], maxZoom, { duration: duration }); return true; } catch (e) {}
-      return flyHome();
-    }
-
-    // Score by squared planar distance — accurate enough for picking the
-    // nearest few markers at country scale, and avoids the cost/imports of
-    // a real haversine when we just want a partial top-k sort.
-    var scored = [];
-    for (var i = 0; i < coords.length; i++) {
-      var c = coords[i];
-      if (!c || c.length < 2) continue;
-      var dlat = c[0] - ulat;
-      var dlng = c[1] - ulng;
-      scored.push({ c: c, d: dlat * dlat + dlng * dlng });
-    }
-    scored.sort(function(a, b){ return a.d - b.d; });
-    var picked = scored.slice(0, Math.max(1, k)).map(function(s){ return s.c; });
-    var bounds = picked.concat([[ulat, ulng]]);
-    try {
-      map.flyToBounds(bounds, { padding: [60, 60], maxZoom: maxZoom, duration: duration });
-      return true;
-    } catch (e) {}
-    try { map.flyTo([ulat, ulng], maxZoom, { duration: duration }); return true; } catch (e) {}
-    return flyHome();
+    return false;
   };
 
   /**
