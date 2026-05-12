@@ -36,8 +36,8 @@ function CollectionHeaderComponent({
 }: CollectionHeaderProps) {
   const { theme } = useTheme();
   const onAccent = readableTextOn(theme.accent);
-  const hasSubtitle = totalAnime !== undefined || folderCount !== undefined;
-  const subtitleParts = [
+  const hasMeta = totalAnime !== undefined || folderCount !== undefined;
+  const metaParts = [
     totalAnime !== undefined ? `${totalAnime} anime` : null,
     folderCount !== undefined
       ? `${folderCount} ${folderCount === 1 ? 'folder' : 'folders'}`
@@ -48,12 +48,15 @@ function CollectionHeaderComponent({
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <View style={styles.titleBlock}>
-          <ThemedText variant="headlineLarge" weight="700" style={styles.title}>
+          <ThemedText variant="headlineLarge" weight="800" style={styles.title}>
             Collection
           </ThemedText>
-          {hasSubtitle ? (
-            <ThemedText variant="captionSmall" tone="secondary" style={styles.subtitle}>
-              {subtitleParts.join(' · ')}
+          <ThemedText variant="bodySmall" tone="secondary" style={styles.subtitle}>
+            Your saved anime library
+          </ThemedText>
+          {hasMeta ? (
+            <ThemedText variant="captionSmall" tone="tertiary" style={styles.metaLine}>
+              {metaParts.join(' · ')}
             </ThemedText>
           ) : null}
         </View>
@@ -97,9 +100,9 @@ function CollectionHeaderComponent({
         {categories.map((category) => {
           const count = categoryCounts[category] || 0;
           const isSelected = selectedCategory === category;
-          const bg = isSelected ? theme.text.primary : theme.background.tertiary;
-          const border = isSelected ? theme.text.primary : theme.glassBorder;
-          const labelColor = isSelected ? theme.background.primary : theme.text.secondary;
+          const bg = isSelected ? theme.accent : theme.background.secondary;
+          const border = isSelected ? theme.accent : theme.glassBorder;
+          const labelColor = isSelected ? onAccent : theme.text.secondary;
           return (
             <Pressable
               key={category}
@@ -154,6 +157,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
+    letterSpacing: 0.1,
+  },
+  metaLine: {
+    marginTop: 2,
     letterSpacing: 0.1,
   },
   actionsRow: {

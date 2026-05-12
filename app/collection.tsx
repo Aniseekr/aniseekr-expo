@@ -19,6 +19,10 @@ import {
   CollectionRecentRail,
   type RecentRailItem,
 } from '../components/collection/CollectionRecentRail';
+import {
+  CollectionAnimeGrid,
+  type CollectionAnimeCardItem,
+} from '../components/collection/CollectionAnimeGrid';
 import { CollectionTips } from '../components/collection/CollectionTips';
 import { CollectionSearchModal } from '../components/collection/CollectionSearchModal';
 import { CollectionFloatingActionBar } from '../components/collection/CollectionFloatingActionBar';
@@ -49,7 +53,16 @@ import { UserRepository } from '../libs/repositories/user-repository';
 type SortMode = CollectionSortMode;
 type ScreenMode = 'collect' | 'share';
 
-const CATEGORIES = ['All', 'Watching', 'Completed', 'Plan', 'Dropped'];
+const CATEGORIES = ['All', 'Watching', 'Planned', 'Done'];
+
+// Map UI label → DB status. Multiple labels can map to the same canonical value;
+// 'All' is handled separately by skipping the WHERE clause.
+const CATEGORY_TO_STATUS: Record<string, string | null> = {
+  All: null,
+  Watching: 'watching',
+  Planned: 'planned',
+  Done: 'completed',
+};
 
 export default function CollectionScreen() {
   const { top } = useSafeAreaInsets();
@@ -59,6 +72,7 @@ export default function CollectionScreen() {
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [collections, setCollections] = useState<CollectionFolder[]>([]);
   const [recents, setRecents] = useState<RecentRailItem[]>([]);
+  const [animeCards, setAnimeCards] = useState<CollectionAnimeCardItem[]>([]);
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
   const [editingFolder, setEditingFolder] = useState<CollectionFolder | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -81,6 +95,45 @@ export default function CollectionScreen() {
       console.error('Failed to load collection:', error);
     }
   };
+
+  const loadAnimeCards = useCallback(async (category: string) => {
+    try {
+      const db = await LocalDB.getDatabase();
+      const status = CATEGORY_TO_STATUS[category];
+      const rows = await db.getAllAsync<{
+        anime_id: string;
+        title: string | null;
+        image_url: string | null;
+        progress: number | null;
+        total_episodes: number | null;
+        status: string;
+      }>(
+        status
+          ? `SELECT anime_id, title, image_url, progress, total_episodes, status
+               FROM user_anime
+              WHERE title IS NOT NULL AND status = ?
+              ORDER BY COALESCE(updated_at, 0) DESC`
+          : `SELECT anime_id, title, image_url, progress, total_episodes, status
+               FROM user_anime
+              WHERE title IS NOT NULL
+              ORDER BY COALESCE(updated_at, 0) DESC`,
+        ...(status ? [status] : [])
+      );
+      setAnimeCards(
+        rows.map((r) => ({
+          id: r.anime_id,
+          title: r.title || 'Untitled',
+          imageUrl: r.image_url,
+          progress: r.progress ?? 0,
+          totalEpisodes: r.total_episodes ?? null,
+          status: r.status,
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to load anime cards:', error);
+      setAnimeCards([]);
+    }
+  }, []);
 
   const loadRecents = useCallback(async () => {
     try {
@@ -110,6 +163,10 @@ export default function CollectionScreen() {
     loadCollection();
     loadRecents();
   }, [loadRecents]);
+
+  useEffect(() => {
+    loadAnimeCards(selectedCategory);
+  }, [loadAnimeCards, selectedCategory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -256,9 +313,9 @@ export default function CollectionScreen() {
       if (folder.folderType === 'favorites') counts['Favorites'] = folder.animeCount;
       if (folder.folderType === 'watching' && folder.id === 'system_watching')
         counts['Watching'] = folder.animeCount;
-      if (folder.folderType === 'completed') counts['Completed'] = folder.animeCount;
+      if (folder.folderType === 'completed') counts['Done'] = folder.animeCount;
       if (folder.folderType === 'dropped') counts['Dropped'] = folder.animeCount;
-      if (folder.folderType === 'wishlist') counts['Plan'] = folder.animeCount;
+      if (folder.folderType === 'wishlist') counts['Planned'] = folder.animeCount;
     });
     return counts;
   }, [collections]);
@@ -270,8 +327,8 @@ export default function CollectionScreen() {
         value: categoryCounts.Watching ?? 0,
         color: theme.accent,
       },
-      { label: 'Completed', value: categoryCounts.Completed ?? 0 },
-      { label: 'Plan', value: categoryCounts.Plan ?? 0 },
+      { label: 'Done', value: categoryCounts.Done ?? 0 },
+      { label: 'Planned', value: categoryCounts.Planned ?? 0 },
       { label: 'Dropped', value: categoryCounts.Dropped ?? 0 },
     ],
     [categoryCounts, theme.accent]
@@ -302,9 +359,9 @@ export default function CollectionScreen() {
   const visibleFolders = useMemo(() => {
     const targetTypeMap: Record<string, CollectionFolder['folderType']> = {
       Watching: 'watching',
-      Completed: 'completed',
+      Done: 'completed',
       Dropped: 'dropped',
-      Plan: 'wishlist',
+      Planned: 'wishlist',
     };
     // Hide the synthetic 'system_all' folder — its count duplicates the
     // overview card, so showing it as a tile is just noise.
@@ -342,10 +399,14 @@ export default function CollectionScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([loadCollection(), loadRecents()]).finally(() => {
+    Promise.all([
+      loadCollection(),
+      loadRecents(),
+      loadAnimeCards(selectedCategory),
+    ]).finally(() => {
       setRefreshing(false);
     });
-  }, [loadRecents]);
+  }, [loadAnimeCards, loadRecents, selectedCategory]);
 
   const enterShareMode = useCallback(() => {
     hapticsBridge.tap();
@@ -405,6 +466,26 @@ export default function CollectionScreen() {
               onRefresh={onRefresh}
             />
           }>
+          <View style={styles.section}>
+            {animeCards.length > 0 ? (
+              <CollectionAnimeGrid
+                items={animeCards}
+                onPressItem={(item) => router.push(`/(rate)/anime/${item.id}`)}
+              />
+            ) : (
+              <View style={styles.emptyAnimeState}>
+                <ThemedText variant="titleMedium" weight="700" align="center">
+                  No anime here yet
+                </ThemedText>
+                <ThemedText variant="bodySmall" tone="secondary" align="center">
+                  {selectedCategory === 'All'
+                    ? 'Rate or import anime to start building your library.'
+                    : `Nothing marked as ${selectedCategory.toLowerCase()} yet.`}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+
           <View style={styles.overviewWrap}>
             <CollectionOverviewCard total={totalCount} stats={overviewStats} />
           </View>
@@ -691,6 +772,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  emptyAnimeState: {
+    alignItems: 'center',
+    paddingVertical: 32,
     gap: Spacing.xs,
   },
   emptyAction: {
