@@ -27,6 +27,22 @@ import {
   DEFAULT_PREFERENCES,
   NotificationPreferences,
 } from '../../libs/services/notifications/notification-service';
+import { isObject, safeJsonParse } from '../../libs/utils/safe-json';
+
+function pickValidPreferences(value: unknown): Partial<NotificationPreferences> | null {
+  if (!isObject(value)) return null;
+  const out: Partial<NotificationPreferences> = {};
+  if (typeof value.episodeReminders === 'boolean') out.episodeReminders = value.episodeReminders;
+  if (typeof value.weeklyDigest === 'boolean') out.weeklyDigest = value.weeklyDigest;
+  if (typeof value.movieDrops === 'boolean') out.movieDrops = value.movieDrops;
+  if (typeof value.achievementAlerts === 'boolean') out.achievementAlerts = value.achievementAlerts;
+  if (typeof value.leadTimeMinutes === 'number' && Number.isFinite(value.leadTimeMinutes)) {
+    out.leadTimeMinutes = value.leadTimeMinutes;
+  }
+  return out;
+}
+
+const isObjectGuard = (value: unknown): value is Record<string, unknown> => isObject(value);
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -156,13 +172,9 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(PREFS_KEY).then((raw) => {
-      if (raw) {
-        try {
-          setPrefs({ ...DEFAULT_PREFERENCES, ...JSON.parse(raw) });
-        } catch {
-          // ignore — fall back to defaults
-        }
-      }
+      const parsed = safeJsonParse(raw, isObjectGuard);
+      const valid = parsed ? pickValidPreferences(parsed) : null;
+      if (valid) setPrefs({ ...DEFAULT_PREFERENCES, ...valid });
     });
   }, []);
 

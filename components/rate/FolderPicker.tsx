@@ -18,6 +18,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { collectionService } from '../../libs/services/collection/collection-service';
 import { CollectionFolder } from '../../types';
+import { asIoniconsName } from '../../libs/utils/icon-types';
 
 const ICON_OPTIONS = [
   'folder',
@@ -260,7 +261,7 @@ function FolderPickerComponent({
                           },
                         ]}>
                         <View style={[styles.folderIcon, { backgroundColor: theme.accent + '24' }]}>
-                          <Ionicons name={folder.icon as any} size={20} color={theme.accent} />
+                          <Ionicons name={asIoniconsName(folder.icon)} size={20} color={theme.accent} />
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.folderName, { color: theme.text.primary }]}>

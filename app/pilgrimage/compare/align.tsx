@@ -15,17 +15,7 @@ import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../components/themed';
 import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
-
-type SearchParams = {
-  spotId: string;
-  imageUrl: string;
-  name: string;
-  ep: string;
-  animeId: string;
-  themeColor: string;
-  spotLat: string;
-  spotLng: string;
-};
+import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
 
 function bearingBetween(from: LatLng, to: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -49,15 +39,17 @@ export default function GpsAlignScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const params = useLocalSearchParams<SearchParams>();
+  const params = useLocalSearchParams();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
-  const accent = params.themeColor || theme.accent;
+  const accent = getStringParam(params, 'themeColor') || theme.accent;
   const accentFg = readableTextOn(accent);
-  const sceneName = params.name || 'Scene';
-  const targetLat = Number(params.spotLat) || 0;
-  const targetLng = Number(params.spotLng) || 0;
-  const hasTarget = targetLat !== 0 || targetLng !== 0;
+  const sceneName = getStringParam(params, 'name') || 'Scene';
+  const ep = getStringParam(params, 'ep');
+  const imageUrl = getStringParam(params, 'imageUrl');
+  const targetLat = getNumberParam(params, 'spotLat');
+  const targetLng = getNumberParam(params, 'spotLng');
+  const hasTarget = targetLat !== null && targetLng !== null;
 
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
@@ -94,20 +86,20 @@ export default function GpsAlignScreen() {
   }, []);
 
   const distance = useMemo(() => {
-    if (!userLocation || !hasTarget) return null;
+    if (!userLocation || targetLat === null || targetLng === null) return null;
     return locationService.getDistanceKm(userLocation, {
       latitude: targetLat,
       longitude: targetLng,
     });
-  }, [userLocation, targetLat, targetLng, hasTarget]);
+  }, [userLocation, targetLat, targetLng]);
 
   const targetBearing = useMemo(() => {
-    if (!userLocation || !hasTarget) return null;
+    if (!userLocation || targetLat === null || targetLng === null) return null;
     return bearingBetween(userLocation, {
       latitude: targetLat,
       longitude: targetLng,
     });
-  }, [userLocation, targetLat, targetLng, hasTarget]);
+  }, [userLocation, targetLat, targetLng]);
 
   const headingDelta = useMemo(() => {
     if (heading == null || targetBearing == null) return null;
@@ -162,26 +154,30 @@ export default function GpsAlignScreen() {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.targetCard}>
-            <Image
-              source={{ uri: params.imageUrl }}
-              style={styles.targetThumb}
-              contentFit="cover"
-              transition={140}
-            />
+            {imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.targetThumb}
+                contentFit="cover"
+                transition={140}
+              />
+            ) : (
+              <View style={styles.targetThumb} />
+            )}
             <View style={styles.targetBody}>
               <View style={[styles.targetPill, { backgroundColor: `${accent}33` }]}>
                 <ThemedText
                   variant="captionSmall"
                   weight="700"
                   style={{ color: accent }}>
-                  {params.ep ? `EP ${params.ep}` : 'TARGET'}
+                  {ep ? `EP ${ep}` : 'TARGET'}
                 </ThemedText>
               </View>
               <ThemedText variant="titleMedium" weight="700" numberOfLines={2}>
                 {sceneName}
               </ThemedText>
               <ThemedText variant="captionSmall" tone="secondary">
-                {hasTarget
+                {targetLat !== null && targetLng !== null
                   ? `${targetLat.toFixed(4)}, ${targetLng.toFixed(4)}`
                   : 'No GPS data for this spot'}
               </ThemedText>

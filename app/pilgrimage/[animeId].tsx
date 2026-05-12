@@ -68,6 +68,7 @@ import {
 } from '../../libs/services/pilgrimage/visited-prefs';
 import { dataSourceConfig, isSupportedBrowseSource } from '../../libs/services/data-source-config';
 import { PLATFORM_CONFIGS, type PlatformType } from '../../libs/services/auth/types';
+import { getNumberParam, getStringParam } from '../../libs/utils/route-params';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
@@ -702,11 +703,12 @@ function RoundHeaderButton({ icon, onPress, accessibilityLabel, tint, theme }: R
 }
 
 export default function PilgrimageDetailScreen() {
-  const { animeId } = useLocalSearchParams<{ animeId: string }>();
+  const params = useLocalSearchParams();
+  const animeId = getStringParam(params, 'animeId');
+  const bangumiId = getNumberParam(params, 'animeId');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const bangumiId = Number(animeId);
 
   const [anime, setAnime] = useState<AnitabiBangumi | null>(null);
   const [points, setPoints] = useState<readonly AnitabiPoint[]>([]);
@@ -744,17 +746,18 @@ export default function PilgrimageDetailScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!Number.isFinite(bangumiId) || bangumiId <= 0) {
+    if (bangumiId === null || bangumiId <= 0) {
       setError('Invalid anime id');
       setLoading(false);
       return;
     }
+    const validBangumiId = bangumiId;
 
     setLoading(true);
     setError(null);
 
     pilgrimageRepository
-      .getSpotsByBangumiId(bangumiId)
+      .getSpotsByBangumiId(validBangumiId)
       .then(async (lite) => {
         if (cancelled) return;
         if (!lite) {
@@ -766,7 +769,7 @@ export default function PilgrimageDetailScreen() {
         setAnime(lite);
         setPoints(lite.litePoints ?? []);
         try {
-          const detailed: AnitabiPointDetail[] = await anitabiService.getDetailedPoints(bangumiId);
+          const detailed: AnitabiPointDetail[] = await anitabiService.getDetailedPoints(validBangumiId);
           if (!cancelled && detailed.length > 0) {
             setPoints(detailed);
           }
@@ -909,6 +912,7 @@ export default function PilgrimageDetailScreen() {
   }, [router]);
 
   const handleOpenAlbum = useCallback(() => {
+    if (bangumiId === null) return;
     Haptics.selectionAsync().catch(() => undefined);
     router.push({ pathname: '/pilgrimage/album', params: { animeId: String(bangumiId) } });
   }, [router, bangumiId]);
@@ -986,6 +990,8 @@ export default function PilgrimageDetailScreen() {
     (spot: AnitabiPoint) => {
       Haptics.selectionAsync().catch(() => undefined);
       setActiveSpot(null);
+      const lat = hasValidGeo(spot.geo) ? String(spot.geo[0]) : undefined;
+      const lng = hasValidGeo(spot.geo) ? String(spot.geo[1]) : undefined;
       router.push({
         pathname: '/pilgrimage/compare/tips',
         params: {
@@ -993,10 +999,10 @@ export default function PilgrimageDetailScreen() {
           imageUrl: spot.image,
           name: spot.cn || spot.name,
           ep: String(spot.ep),
-          animeId: String(bangumiId),
+          animeId: bangumiId !== null ? String(bangumiId) : '',
           themeColor,
-          spotLat: String(spot.geo?.[0] ?? 0),
-          spotLng: String(spot.geo?.[1] ?? 0),
+          ...(lat ? { spotLat: lat } : {}),
+          ...(lng ? { spotLng: lng } : {}),
         },
       });
     },
@@ -1356,7 +1362,7 @@ export default function PilgrimageDetailScreen() {
 
         <SpotSheet
           spot={activeSpot}
-          animeId={String(bangumiId)}
+          animeId={animeId ?? ''}
           themeColor={themeColor}
           themeColorFg={themeColorFg}
           distanceKm={activeSpotDistance}

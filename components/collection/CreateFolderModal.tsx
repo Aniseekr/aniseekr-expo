@@ -14,6 +14,7 @@ import { AnimatedPressable } from '../common/AnimatedPressable';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { readableTextOn } from '../themed';
+import type { IoniconsName } from '../../libs/utils/icon-types';
 
 export interface NewFolderData {
   name: string;
@@ -42,7 +43,7 @@ const ICONS = [
   'planet',
   'tv',
   'game-controller',
-];
+] as const satisfies readonly IoniconsName[];
 
 export function CreateFolderModal({
   visible,
@@ -146,7 +147,7 @@ export function CreateFolderModal({
                   style={[styles.iconButton, icon === i ? styles.iconButtonSelected : null]}
                   onPress={() => setIcon(i)}>
                   <Ionicons
-                    name={i as any}
+                    name={i}
                     size={24}
                     color={icon === i ? readableTextOn(theme.accent) : theme.text.secondary}
                   />

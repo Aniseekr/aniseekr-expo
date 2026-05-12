@@ -1,10 +1,11 @@
 import { memo } from 'react';
 import { Pressable, Text, View, Platform, StyleSheet } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import type { MaterialIconsName } from '../../libs/utils/icon-types';
 
 type Option = {
   key: string;
-  icon: string;
+  icon: MaterialIconsName;
   label: string;
   color: string;
 };
@@ -37,7 +38,7 @@ function TrackingSelectorComponent({ value, onChange }: Props) {
                 selected && { borderColor: option.color },
               ]}>
               <MaterialIcons
-                name={option.icon as any}
+                name={option.icon}
                 size={18}
                 color={selected ? option.color : 'rgba(255, 255, 255, 0.6)'}
               />

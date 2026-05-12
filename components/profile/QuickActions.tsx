@@ -3,22 +3,30 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import type {
+  FontAwesome5Name,
+  IoniconsName,
+  MaterialIconsName,
+} from '../../libs/utils/icon-types';
 
-interface QuickActionButtonProps {
-  icon: any;
-  iconSet: 'Ionicons' | 'MaterialIcons' | 'FontAwesome5';
-  title: string;
-  color: string;
-  onPress: () => void;
-}
+type QuickActionButtonProps = (
+  | { iconSet: 'Ionicons'; icon: IoniconsName }
+  | { iconSet: 'MaterialIcons'; icon: MaterialIconsName }
+  | { iconSet: 'FontAwesome5'; icon: FontAwesome5Name }
+) & { title: string; color: string; onPress: () => void };
 
-function QuickActionButton({ icon, iconSet, title, color, onPress }: QuickActionButtonProps) {
-  const IconComponent =
-    iconSet === 'Ionicons' ? Ionicons : iconSet === 'MaterialIcons' ? MaterialIcons : FontAwesome5;
+function QuickActionButton(props: QuickActionButtonProps) {
+  const { title, color, onPress } = props;
   return (
     <Pressable onPress={onPress} style={styles.actionButton}>
       <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
-        <IconComponent name={icon} size={28} color={color} />
+        {props.iconSet === 'Ionicons' ? (
+          <Ionicons name={props.icon} size={28} color={color} />
+        ) : props.iconSet === 'MaterialIcons' ? (
+          <MaterialIcons name={props.icon} size={28} color={color} />
+        ) : (
+          <FontAwesome5 name={props.icon} size={28} color={color} />
+        )}
       </View>
       <Text style={styles.actionLabel}>{title}</Text>
     </Pressable>

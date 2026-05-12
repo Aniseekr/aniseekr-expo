@@ -23,6 +23,7 @@ import { EmptyStateView } from '../components/common/EmptyStateView';
 import { ErrorStateView } from '../components/common/ErrorStateView';
 import { Colors, Radius, Spacing, Typography } from '../constants/DesignSystem';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
+import { isStringArray, safeJsonParse } from '../libs/utils/safe-json';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -79,14 +80,8 @@ export default function SearchScreen() {
   useEffect(() => {
     AsyncStorage.getItem(RECENT_KEY)
       .then((v) => {
-        if (v) {
-          try {
-            const parsed = JSON.parse(v);
-            if (Array.isArray(parsed)) setRecent(parsed.slice(0, MAX_RECENT));
-          } catch {
-            // ignore parse error
-          }
-        }
+        const parsed = safeJsonParse(v, isStringArray);
+        if (parsed) setRecent(parsed.slice(0, MAX_RECENT));
       })
       .catch(() => {});
   }, []);

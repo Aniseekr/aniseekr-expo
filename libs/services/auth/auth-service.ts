@@ -3,6 +3,42 @@ import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import { PLATFORM_CONFIGS, PlatformType, TokenData, User, PlatformCredentials } from './types';
 import { AuthRequiresFormError } from './auth-errors';
+import { isObject, safeJsonParse } from '../../utils/safe-json';
+
+interface PersistedCredentialEntry {
+  platform: PlatformType;
+  userId?: string;
+  username?: string;
+  avatarUrl?: string;
+  serverUrl?: string;
+  connectedAt: string;
+  lastSyncAt?: string;
+}
+
+const PLATFORM_KEYS = Object.keys(PLATFORM_CONFIGS) as PlatformType[];
+
+const isPlatformType = (value: unknown): value is PlatformType =>
+  typeof value === 'string' && (PLATFORM_KEYS as string[]).includes(value);
+
+const isPersistedCredentialEntry = (value: unknown): value is PersistedCredentialEntry =>
+  isObject(value) &&
+  isPlatformType(value.platform) &&
+  typeof value.connectedAt === 'string';
+
+const isPersistedCredentialList = (value: unknown): value is PersistedCredentialEntry[] =>
+  Array.isArray(value) && value.every(isPersistedCredentialEntry);
+
+const isUser = (value: unknown): value is User =>
+  isObject(value) &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  typeof value.email === 'string' &&
+  Array.isArray(value.connectedPlatforms);
+
+const isTokenData = (value: unknown): value is TokenData =>
+  isObject(value) &&
+  typeof value.accessToken === 'string' &&
+  typeof value.tokenType === 'string';
 
 const REFRESH_SKEW_MS = 60_000;
 
@@ -340,13 +376,13 @@ export class AuthService {
 
   private async loadStoredUser(): Promise<void> {
     const userData = await SecureStore.getItemAsync(USER_KEY);
-    if (userData) {
-      try {
-        this.currentUser = JSON.parse(userData);
-      } catch (e) {
-        console.error('Failed to parse stored user data', e);
-        await SecureStore.deleteItemAsync(USER_KEY);
-      }
+    if (!userData) return;
+    const parsed = safeJsonParse(userData, isUser);
+    if (parsed) {
+      this.currentUser = parsed;
+    } else {
+      console.error('Failed to parse stored user data; clearing');
+      await SecureStore.deleteItemAsync(USER_KEY);
     }
   }
 
@@ -386,29 +422,30 @@ export class AuthService {
     const credsData = await SecureStore.getItemAsync(CREDENTIALS_KEY);
     if (!credsData) return;
 
-    try {
-      const credsList = JSON.parse(credsData);
-      for (const item of credsList) {
-        const tokenData = await SecureStore.getItemAsync(`${TOKEN_PREFIX}${item.platform}`);
-        if (tokenData) {
-          try {
-            this.credentials.set(item.platform, {
-              platform: item.platform,
-              token: JSON.parse(tokenData),
-              userId: item.userId,
-              username: item.username,
-              avatarUrl: item.avatarUrl,
-              serverUrl: item.serverUrl,
-              connectedAt: new Date(item.connectedAt),
-              lastSyncAt: item.lastSyncAt ? new Date(item.lastSyncAt) : undefined,
-            });
-          } catch (e) {
-            console.error(`Failed to parse token for ${item.platform}`, e);
-          }
-        }
+    const credsList = safeJsonParse(credsData, isPersistedCredentialList);
+    if (!credsList) {
+      console.error('Failed to parse credentials list; clearing');
+      await SecureStore.deleteItemAsync(CREDENTIALS_KEY);
+      return;
+    }
+
+    for (const item of credsList) {
+      const tokenRaw = await SecureStore.getItemAsync(`${TOKEN_PREFIX}${item.platform}`);
+      const token = safeJsonParse(tokenRaw, isTokenData);
+      if (!token) {
+        if (tokenRaw) console.error(`Failed to parse token for ${item.platform}`);
+        continue;
       }
-    } catch (e) {
-      console.error('Failed to parse credentials list', e);
+      this.credentials.set(item.platform, {
+        platform: item.platform,
+        token,
+        userId: item.userId,
+        username: item.username,
+        avatarUrl: item.avatarUrl,
+        serverUrl: item.serverUrl,
+        connectedAt: new Date(item.connectedAt),
+        lastSyncAt: item.lastSyncAt ? new Date(item.lastSyncAt) : undefined,
+      });
     }
   }
 }

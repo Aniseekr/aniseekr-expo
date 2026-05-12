@@ -17,36 +17,24 @@ import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../components/themed';
 import { recordCapture } from '../../../libs/services/pilgrimage/captures';
+import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
 
 type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider';
-
-type SearchParams = {
-  spotId: string;
-  imageUrl: string;
-  shotUri: string;
-  shotWidth: string;
-  shotHeight: string;
-  name: string;
-  ep: string;
-  animeId: string;
-  themeColor: string;
-  heading: string;
-};
 
 export default function ComparePreviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const params = useLocalSearchParams<SearchParams>();
+  const params = useLocalSearchParams();
 
-  const spotId = params.spotId ?? '';
-  const imageUrl = params.imageUrl ?? '';
-  const shotUri = params.shotUri ?? '';
-  const sceneName = params.name ?? 'Scene';
-  const ep = params.ep;
-  const animeId = params.animeId;
-  const themeColor = params.themeColor || theme.accent;
-  const heading = params.heading ? Number(params.heading) : null;
+  const spotId = getStringParam(params, 'spotId') ?? '';
+  const imageUrl = getStringParam(params, 'imageUrl') ?? '';
+  const shotUri = getStringParam(params, 'shotUri') ?? '';
+  const sceneName = getStringParam(params, 'name') ?? 'Scene';
+  const ep = getStringParam(params, 'ep');
+  const animeId = getStringParam(params, 'animeId');
+  const themeColor = getStringParam(params, 'themeColor') || theme.accent;
+  const heading = getNumberParam(params, 'heading');
 
   const [mode, setMode] = useState<Mode>('stacked');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);

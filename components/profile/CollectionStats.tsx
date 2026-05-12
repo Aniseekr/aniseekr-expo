@@ -3,22 +3,29 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import type {
+  FontAwesome5Name,
+  IoniconsName,
+  MaterialIconsName,
+} from '../../libs/utils/icon-types';
 
-interface AccountStatCardProps {
-  title: string;
-  value: string;
-  icon: any;
-  iconSet: 'Ionicons' | 'MaterialIcons' | 'FontAwesome5';
-  color: string;
-}
+type AccountStatCardProps =
+  | { iconSet: 'Ionicons'; icon: IoniconsName; title: string; value: string; color: string }
+  | { iconSet: 'MaterialIcons'; icon: MaterialIconsName; title: string; value: string; color: string }
+  | { iconSet: 'FontAwesome5'; icon: FontAwesome5Name; title: string; value: string; color: string };
 
-function AccountStatCard({ title, value, icon, iconSet, color }: AccountStatCardProps) {
-  const IconComponent =
-    iconSet === 'Ionicons' ? Ionicons : iconSet === 'MaterialIcons' ? MaterialIcons : FontAwesome5;
+function AccountStatCard(props: AccountStatCardProps) {
+  const { title, value, color } = props;
   return (
     <View style={styles.statCard}>
       <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
-        <IconComponent name={icon} size={28} color={color} />
+        {props.iconSet === 'Ionicons' ? (
+          <Ionicons name={props.icon} size={28} color={color} />
+        ) : props.iconSet === 'MaterialIcons' ? (
+          <MaterialIcons name={props.icon} size={28} color={color} />
+        ) : (
+          <FontAwesome5 name={props.icon} size={28} color={color} />
+        )}
       </View>
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.title}>{title}</Text>

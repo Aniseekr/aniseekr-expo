@@ -5,6 +5,7 @@ import { Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { SettingsScreenLayout } from '../../components/setting/SettingsScreenLayout';
+import { safeJsonParse } from '../../libs/utils/safe-json';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -38,6 +39,9 @@ const LANGUAGES: Record<LanguageId, { name: string; icon: string }> = {
 
 const DEFAULT_ORDER: LanguageId[] = ['english', 'romaji', 'japanese', 'chinese'];
 
+const isLanguageOrder = (value: unknown): value is LanguageId[] =>
+  Array.isArray(value) && value.every((id): id is LanguageId => typeof id === 'string' && id in LANGUAGES);
+
 export default function LanguagePriorityScreen() {
   const { theme } = useTheme();
   const [order, setOrder] = useState<LanguageId[]>(DEFAULT_ORDER);
@@ -45,13 +49,8 @@ export default function LanguagePriorityScreen() {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((raw) => {
-        if (!raw) return;
-        try {
-          const parsed = JSON.parse(raw) as LanguageId[];
-          if (Array.isArray(parsed) && parsed.every((id) => id in LANGUAGES)) {
-            setOrder(parsed);
-          }
-        } catch {}
+        const parsed = safeJsonParse(raw, isLanguageOrder);
+        if (parsed) setOrder(parsed);
       })
       .catch(() => {});
   }, []);
