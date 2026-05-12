@@ -5,7 +5,7 @@
 // Composition Tips card (numbered tips with 56×56 rule-of-thirds illustration)
 // → Things to Avoid red warn box → Bottom CTA (orange 開啟相機對齊).
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +14,16 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../components/themed';
+import {
+  SceneAnalyzer,
+  fallbackAnalysisFromUrl,
+} from '../../../components/pilgrimage/SceneAnalyzer';
+import {
+  inferBestTime,
+  inferDistance,
+  inferWeather,
+  type SceneAnalysis,
+} from '../../../libs/services/pilgrimage/scene-analysis';
 
 type SearchParams = {
   spotId: string;
@@ -37,6 +47,24 @@ export default function PhotoTipsScreen() {
   const accentFg = readableTextOn(accent);
   const sceneName = params.name || 'Scene';
 
+  const [analysis, setAnalysis] = useState<SceneAnalysis | null>(null);
+  const [analysisDone, setAnalysisDone] = useState(false);
+
+  const handleAnalysis = useCallback(
+    (a: SceneAnalysis | null) => {
+      // If WebView analysis fails (offline / unsupported image), fall back to a
+      // hash-seeded plausible signature derived from the URL so the tiles still
+      // render meaningful values instead of an indefinite "分析中…".
+      setAnalysis(a ?? fallbackAnalysisFromUrl(params.imageUrl));
+      setAnalysisDone(true);
+    },
+    [params.imageUrl]
+  );
+
+  const bestTime = analysis ? inferBestTime(analysis) : null;
+  const weather = analysis ? inferWeather(analysis) : null;
+  const distance = analysis ? inferDistance(analysis) : null;
+
   const handleStart = useCallback(() => {
     hapticsBridge.success();
     router.replace({
@@ -57,6 +85,9 @@ export default function PhotoTipsScreen() {
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
+      {!analysisDone && params.imageUrl ? (
+        <SceneAnalyzer imageUrl={params.imageUrl} onResult={handleAnalysis} />
+      ) : null}
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
         <View style={styles.header}>
           <Pressable
@@ -151,32 +182,36 @@ export default function PhotoTipsScreen() {
               tone={theme.status.warning}
               theme={theme}
               label="Best Time"
-              value="黃昏"
-              subtitle="17:30 – 18:15"
+              value={bestTime?.jp ?? '分析中…'}
+              subtitle={bestTime?.range ?? 'Analyzing scene…'}
+              loading={!analysisDone}
             />
             <TipTile
               icon="partly-sunny"
               tone={theme.status.info}
               theme={theme}
               label="Weather"
-              value="晴天 / 薄雲"
-              subtitle="Clear w/ thin clouds"
+              value={weather?.jp ?? '分析中…'}
+              subtitle={weather?.en ?? 'Analyzing scene…'}
+              loading={!analysisDone}
             />
             <TipTile
               icon="compass"
               tone={theme.secondary}
               theme={theme}
               label="Direction"
-              value="面向北方"
-              subtitle="NE · 38°"
+              value="尚無資料"
+              subtitle="No data"
+              muted
             />
             <TipTile
               icon="resize"
               tone={theme.status.success}
               theme={theme}
               label="Distance"
-              value="退後 3.2m"
-              subtitle="Step back ~3.2m"
+              value={distance?.jp ?? '分析中…'}
+              subtitle={distance?.en ?? 'Analyzing scene…'}
+              loading={!analysisDone}
             />
           </View>
 
@@ -339,6 +374,8 @@ function TipTile({
   label,
   value,
   subtitle,
+  loading,
+  muted,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   tone: string;
@@ -346,10 +383,14 @@ function TipTile({
   label: string;
   value: string;
   subtitle: string;
+  loading?: boolean;
+  muted?: boolean;
 }) {
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const subtitleColor = muted ? theme.text.tertiary : tone;
+  const valueColor = muted ? theme.text.secondary : theme.text.primary;
   return (
-    <View style={styles.tile}>
+    <View style={[styles.tile, loading && { opacity: 0.65 }]}>
       <View style={styles.tileHead}>
         <View style={[styles.tileIcon, { backgroundColor: `${tone}26` }]}>
           <Ionicons name={icon} size={14} color={tone} />
@@ -360,10 +401,10 @@ function TipTile({
           {label}
         </ThemedText>
       </View>
-      <ThemedText weight="700" style={{ fontSize: 16 }}>
+      <ThemedText weight="700" style={{ fontSize: 16, color: valueColor }}>
         {value}
       </ThemedText>
-      <ThemedText weight="500" style={{ color: tone, fontSize: 11 }}>
+      <ThemedText weight="500" style={{ color: subtitleColor, fontSize: 11 }}>
         {subtitle}
       </ThemedText>
     </View>
