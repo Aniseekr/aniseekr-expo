@@ -55,6 +55,19 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
     return null;
   }
 
+  // Hide whenever the focused tab has drilled into a nested non-index route
+  // (e.g. (rate)/rating, (rate)/anime/[id]). Nested screens may forget to call
+  // parent.setOptions to hide the bar, and racey setOptions inside useEffect
+  // sometimes leaves the bar visible for a frame.
+  const activeRoute = state.routes[state.index] as { state?: { index?: number; routes?: { name: string }[] } };
+  const nested = activeRoute?.state;
+  if (nested && typeof nested.index === 'number' && nested.routes) {
+    const nestedActive = nested.routes[nested.index];
+    if (nestedActive && nestedActive.name !== 'index') {
+      return null;
+    }
+  }
+
   return (
     <View style={[styles.container, { bottom: bottomMargin }]} pointerEvents="box-none">
       <View style={styles.pill}>
