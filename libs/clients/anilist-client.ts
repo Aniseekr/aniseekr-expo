@@ -89,12 +89,13 @@ export interface AniListAnime {
 
 interface AniListPage<T> {
   Page: {
-    pageInfo: {
-      total: number;
-      perPage: number;
-      currentPage: number;
-      lastPage: number;
-      hasNextPage: boolean;
+    // Only present when the GraphQL query asks for it (e.g. getSeasonalAnimePage).
+    pageInfo?: {
+      total?: number;
+      perPage?: number;
+      currentPage?: number;
+      lastPage?: number;
+      hasNextPage?: boolean;
     };
     media: T[];
   };
@@ -316,9 +317,26 @@ export class AniListClient {
     page = 1,
     perPage = 20
   ): Promise<AniListAnime[]> {
+    const { media } = await AniListClient.getSeasonalAnimePage(season, year, page, perPage);
+    return media;
+  }
+
+  /**
+   * Same query as `getSeasonalAnime` but also returns `pageInfo` so callers can
+   * paginate. Used by `AnimeRepository.getSeasonalAnime` to fetch the full
+   * seasonal list (the single-page variant only returned 20 items, which made
+   * the bangumi schedule miss most of the season).
+   */
+  static async getSeasonalAnimePage(
+    season: string,
+    year: number,
+    page = 1,
+    perPage = 50
+  ): Promise<{ media: AniListAnime[]; hasNextPage: boolean }> {
     const query = `
       query ($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {
         Page(page: $page, perPage: $perPage) {
+          pageInfo { hasNextPage }
           media(season: $season, seasonYear: $seasonYear, type: ANIME, sort: [POPULARITY_DESC]) {
             ...mediaFields
             description
@@ -334,7 +352,10 @@ export class AniListClient {
       season: season.toUpperCase(),
       seasonYear: year,
     });
-    return data.Page.media;
+    return {
+      media: data.Page.media,
+      hasNextPage: data.Page.pageInfo?.hasNextPage ?? false,
+    };
   }
 
   static async searchAnime(search: string, page = 1, perPage = 20): Promise<AniListAnime[]> {

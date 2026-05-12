@@ -168,29 +168,41 @@ export default function BangumiScreen() {
     [setPrefs]
   );
 
+  const fetchSeason = useCallback(
+    async (forceRefresh: boolean) => {
+      setIsLoading(true);
+      try {
+        const fetched = await AnimeRepository.getSeasonalAnime(
+          selectedSeason.toUpperCase(),
+          selectedYear,
+          1,
+          { perPage: 50, maxItems: 200, forceRefresh }
+        );
+        setRawAnime(fetched);
+        setSourcePlatform(dataSourceConfig.browseSource);
+        setError(null);
+      } catch (e) {
+        console.error('Failed to fetch bangumi', e);
+        setError("Couldn't load this season. Pull to retry.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [selectedSeason, selectedYear]
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setIsLoading(true);
     try {
-      const fetched = await AnimeRepository.getSeasonalAnime(
-        selectedSeason.toUpperCase(),
-        selectedYear
-      );
-      setRawAnime(fetched);
-      setSourcePlatform(dataSourceConfig.browseSource);
-      setError(null);
-    } catch (e) {
-      console.error('Failed to fetch bangumi', e);
-      setError("Couldn't load this season. Pull to retry.");
+      await fetchSeason(true);
     } finally {
       setRefreshing(false);
-      setIsLoading(false);
     }
-  }, [selectedSeason, selectedYear]);
+  }, [fetchSeason]);
 
   useEffect(() => {
     if (!hydrated) return;
-    onRefresh();
+    fetchSeason(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSeason, selectedYear, hydrated]);
 

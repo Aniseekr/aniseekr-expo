@@ -574,7 +574,12 @@ export class AnimeRepository {
     return data.map(mapAniListToAnime);
   }
 
-  static async getSeasonalAnime(season?: string, year?: number, page = 1): Promise<Anime[]> {
+  static async getSeasonalAnime(
+    season?: string,
+    year?: number,
+    page = 1,
+    options: { perPage?: number; maxItems?: number; forceRefresh?: boolean } = {}
+  ): Promise<Anime[]> {
     const date = new Date();
     const currentMonth = date.getMonth();
     const currentYear = date.getFullYear();
@@ -588,12 +593,32 @@ export class AnimeRepository {
     }
 
     const targetYear = year ?? currentYear;
-    const cacheKey = `seasonal_${targetSeason}_${targetYear}_${page}`;
+    const perPage = Math.max(1, Math.min(options.perPage ?? 50, 50));
+    const maxItems = Math.max(perPage, options.maxItems ?? perPage);
+    const forceRefresh = options.forceRefresh === true;
+    // perPage + maxItems are part of the cache key so different callers
+    // (bangumi screen vs. rating hook) don't trample each other's payloads.
+    const cacheKey = `seasonal_${targetSeason}_${targetYear}_${page}_p${perPage}_m${maxItems}`;
 
-    const cached = await CacheService.get<AniListAnime[]>(cacheKey);
-    if (cached) return cached.map(mapAniListDetailToAnime);
+    if (!forceRefresh) {
+      const cached = await CacheService.get<AniListAnime[]>(cacheKey);
+      if (cached) return cached.map(mapAniListDetailToAnime);
+    }
 
-    const data = await AniListClient.getSeasonalAnime(targetSeason, targetYear, page);
+    const collected: AniListAnime[] = [];
+    let currentPage = page;
+    while (collected.length < maxItems) {
+      const { media, hasNextPage } = await AniListClient.getSeasonalAnimePage(
+        targetSeason,
+        targetYear,
+        currentPage,
+        perPage
+      );
+      collected.push(...media);
+      if (!hasNextPage || media.length === 0) break;
+      currentPage += 1;
+    }
+    const data = collected.slice(0, maxItems);
     await CacheService.set(cacheKey, data, LEGACY_LIST_CACHE_TTL_MS);
     return data.map(mapAniListDetailToAnime);
   }
