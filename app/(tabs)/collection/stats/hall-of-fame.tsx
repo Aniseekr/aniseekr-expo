@@ -4,8 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../../components/themed';
-import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { ThemedText, readableTextOn, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
@@ -63,8 +62,7 @@ export default function HallOfFameExhibit() {
   if (loading) {
     return (
       <StatsExhibitFrame title="Hall of Fame">
-        <ShimmerEffect width="100%" height={280} borderRadius={Radius.cardLg} />
-        <ShimmerEffect width="100%" height={120} borderRadius={Radius.card} />
+        <Skeleton.ListRow count={8} avatarShape="square" />
       </StatsExhibitFrame>
     );
   }

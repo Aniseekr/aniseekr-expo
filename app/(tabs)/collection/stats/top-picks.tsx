@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, Share, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
-import { ThemedText } from '../../../../components/themed';
-import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { ThemedText, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
@@ -50,9 +49,7 @@ export default function TopPicksExhibit() {
   if (loading) {
     return (
       <StatsExhibitFrame title="Top 10 Picks">
-        <ShimmerEffect width="100%" height={120} borderRadius={Radius.cardLg} />
-        <ShimmerEffect width="100%" height={120} borderRadius={Radius.card} />
-        <ShimmerEffect width="100%" height={120} borderRadius={Radius.card} />
+        <Skeleton.PosterGrid count={6} columns={2} aspectRatio={1.5} />
       </StatsExhibitFrame>
     );
   }

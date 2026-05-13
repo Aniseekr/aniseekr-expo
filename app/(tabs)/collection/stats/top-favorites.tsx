@@ -4,8 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../../components/themed';
-import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { ThemedText, readableTextOn, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import {
@@ -71,7 +70,7 @@ export default function TopFavoritesExhibit() {
   if (loading) {
     return (
       <StatsExhibitFrame title="My Top Favorites">
-        <ShimmerEffect width="100%" height={400} borderRadius={Radius.cardLg} />
+        <Skeleton.PosterGrid count={6} columns={2} aspectRatio={1.5} />
       </StatsExhibitFrame>
     );
   }

@@ -3,8 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Spacing } from '../../../../constants/DesignSystem';
-import { ThemedText } from '../../../../components/themed';
-import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { ThemedText, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { ErrorStateView } from '../../../../components/common/ErrorStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
@@ -151,9 +150,7 @@ export default function CollectionStatsScreen() {
   if (loading) {
     return (
       <StatsExhibitFrame title="Statistics">
-        <ShimmerEffect width="100%" height={160} borderRadius={20} />
-        <ShimmerEffect width="100%" height={180} borderRadius={16} />
-        <ShimmerEffect width="100%" height={180} borderRadius={16} />
+        <Skeleton.StatsDashboard />
       </StatsExhibitFrame>
     );
   }

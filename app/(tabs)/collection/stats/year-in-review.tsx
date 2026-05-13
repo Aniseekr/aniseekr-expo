@@ -3,8 +3,7 @@ import { Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem';
-import { ThemedText, readableTextOn } from '../../../../components/themed';
-import { ShimmerEffect } from '../../../../components/common/ShimmerEffect';
+import { ThemedText, readableTextOn, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import { MonthlyHoursBar } from '../../../../components/collection/stats/MonthlyHoursBar';
@@ -80,8 +79,7 @@ export default function YearInReviewExhibit() {
   if (loading) {
     return (
       <StatsExhibitFrame title="Year in Review">
-        <ShimmerEffect width="100%" height={220} borderRadius={Radius.cardLg} />
-        <ShimmerEffect width="100%" height={140} borderRadius={Radius.card} />
+        <Skeleton.StatsDashboard />
       </StatsExhibitFrame>
     );
   }
