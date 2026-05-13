@@ -115,11 +115,21 @@ ${MAP_BASE_BODY}
 
   // See index.tsx for the rationale behind the post-mount user pin update.
   var userMarker = null;
+  var didSnapToUser = false;
   function applyUser(user) {
     if (userMarker) { try { map.removeLayer(userMarker); } catch (e) {} userMarker = null; }
     if (user && typeof user.lat === 'number' && typeof user.lng === 'number') {
       var userIcon = L.divIcon({ className: '', html: '<div class="user-pulse"></div>', iconSize: [16,16], iconAnchor: [8,8] });
       userMarker = L.marker([user.lat, user.lng], { icon: userIcon, interactive: false, keyboard: false }).addTo(map);
+      // First time we get a real location fix, snap the camera to a tight
+      // ~10 km-wide framing around the user. Permission usually resolves
+      // after the WebView is up, so we can't just rely on the initial
+      // setView. We don't repeat this on subsequent updates — the user is
+      // already framed; rough GPS noise shouldn't yank the map around.
+      if (!didSnapToUser) {
+        didSnapToUser = true;
+        try { map.flyTo([user.lat, user.lng], 13, { duration: 0.4 }); } catch (e) {}
+      }
     }
     initial.user = user;
   }
@@ -171,11 +181,14 @@ ${MAP_BASE_BODY}
     if (bounds.length > 0) {
       try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
     }
-    if (!didFit && bounds.length > 1) {
-      try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 9, animate: false }); didFit = true; } catch (e) {}
-    } else if (!didFit && bounds.length === 1) {
-      try { map.setView(bounds[0], 11, { animate: false }); didFit = true; } catch (e) {}
-    }
+    // Do NOT auto fit-to-all-markers. Pilgrimage points span the whole
+    // archipelago — fitting them all dropped the camera to ~zoom 6 (a
+    // country map), which made the screen feel like an atlas instead of
+    // "what's around me". We keep the initial setView (user → zoom 13 via
+    // applyUser, otherwise Tokyo Station) and let the user pan / hit the
+    // recenter button (which uses lastBounds) when they actually want the
+    // wider view.
+    didFit = true;
   };
 
   window.__focusAnime = function(target) {
@@ -355,9 +368,12 @@ function FullscreenMapView({
   const html = useMemo(() => {
     // Default to Tokyo Station so users who haven't granted location (or are
     // outside Japan) still land in the densest pilgrimage region. The user
-    // pin still renders if granted, and the locate-me button frames it
-    // alongside the nearest markers.
-    const center = { lat: TOKYO_STATION.lat, lng: TOKYO_STATION.lng, zoom: TOKYO_STATION.zoom };
+    // pin still renders if granted, and applyUser() snaps to it on the first
+    // location fix.
+    //
+    // Zoom 12 (≈15 km wide) gives a "central Tokyo" framing instead of
+    // TOKYO_STATION.zoom (11, ≈30 km wide) which felt like an overview.
+    const center = { lat: TOKYO_STATION.lat, lng: TOKYO_STATION.lng, zoom: 12 };
     const user = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
     return buildHubMapHtml({ center, user, ringColor });
     // eslint-disable-next-line react-hooks/exhaustive-deps

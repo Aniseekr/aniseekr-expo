@@ -216,11 +216,21 @@ ${MAP_BASE_BODY}
   // updates via window.__updateUser without us re-mounting the page (which
   // would blow away the tile cache).
   var userMarker = null;
+  var didSnapToUser = false;
   function applyUser(user) {
     if (userMarker) { try { map.removeLayer(userMarker); } catch (e) {} userMarker = null; }
     if (user && typeof user.lat === 'number' && typeof user.lng === 'number') {
       var userIcon = L.divIcon({ className: '', html: '<div class="user-pulse"></div>', iconSize: [16,16], iconAnchor: [8,8] });
       userMarker = L.marker([user.lat, user.lng], { icon: userIcon, interactive: false, keyboard: false }).addTo(map);
+      // Snap to user on the first location fix. Permission usually resolves
+      // after mount, so the initial setView is Tokyo Station; once we know
+      // where the user actually is, frame ~10 km around them so the hub
+      // feels like "around me" instead of "all of Tokyo". One-shot — later
+      // GPS jitter shouldn't yank the camera.
+      if (!didSnapToUser) {
+        didSnapToUser = true;
+        try { map.flyTo([user.lat, user.lng], 13, { duration: 0.4 }); } catch (e) {}
+      }
     }
     // Mutate initial.user so the recentre closure sees the freshest value.
     initial.user = user;
@@ -277,11 +287,14 @@ ${MAP_BASE_BODY}
     if (bounds.length > 0) {
       try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
     }
-    if (!didFit && bounds.length > 1) {
-      try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 9, animate: false }); didFit = true; } catch (e) {}
-    } else if (!didFit && bounds.length === 1) {
-      try { map.setView(bounds[0], 11, { animate: false }); didFit = true; } catch (e) {}
-    }
+    // Do NOT auto fit-to-all-markers. Featured + collection anime span the
+    // whole archipelago — fitting them all zoomed out to ~country scale,
+    // which is exactly what the user complained about. We keep the initial
+    // setView (user via applyUser, otherwise Tokyo Station at zoom 12) so
+    // the hub map opens at a ~10–15 km framing that feels local. lastBounds
+    // is still recorded so the recenter button can show the wider view if
+    // the user asks for it.
+    didFit = true;
   };
 
   // Native side calls this when the user taps the Nearby hero — we slide
@@ -334,10 +347,15 @@ function HubMapView({
   //
   // Default center is Tokyo Station — Japan owns ~all pilgrimage data, and
   // users opening the map from Taipei/HK don't want to land on their home
-  // city with zero markers and assume the feature is broken. Their location
-  // is preserved as a pin and used by the locate-me bounds fit.
+  // city with zero markers and assume the feature is broken. The user's
+  // pin is rendered the moment permission resolves, and applyUser() then
+  // snaps the camera to the user at zoom 13 (≈10 km wide).
+  //
+  // We override TOKYO_STATION.zoom (11, ≈30 km wide / "all of Tokyo") with
+  // 12 (≈15 km wide / "central Tokyo") so the no-location fallback already
+  // feels local rather than overview-y.
   const html = useMemo(() => {
-    const center = { lat: TOKYO_STATION.lat, lng: TOKYO_STATION.lng, zoom: TOKYO_STATION.zoom };
+    const center = { lat: TOKYO_STATION.lat, lng: TOKYO_STATION.lng, zoom: 12 };
     const user = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
     return buildHubMapHtml({ center, user, ringColor, controlsBottom: controlsBottomOffset });
     // eslint-disable-next-line react-hooks/exhaustive-deps
