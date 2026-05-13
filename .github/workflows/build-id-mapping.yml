@@ -1,0 +1,53 @@
+name: Build ID Mapping Source
+
+# Builds the merged anime ID mapping JSON (Fribb + manami-project) and
+# uploads it to the `mapping-data` GitHub Release as a release asset.
+#
+# The upload step is idempotent: the first run creates the `mapping-data`
+# release if it doesn't exist, every subsequent run just overwrites the asset
+# with --clobber.
+
+on:
+  schedule:
+    # Daily at 03:00 UTC — slightly past midnight in JP / Asia timezones to
+    # catch upstream's daily refresh window without colliding with peak load.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build merged mapping JSON
+        run: bun scripts/build-id-mapping-source.ts
+
+      - name: Verify output exists
+        run: |
+          test -s anime-id-mappings-merged.json
+          ls -lh anime-id-mappings-merged.json
+
+      - name: Upload to GitHub Release (mapping-data tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view mapping-data >/dev/null 2>&1; then
+            gh release create mapping-data \
+              --title "Anime ID Mapping Data" \
+              --notes "Auto-generated merged ID mapping JSON (Fribb + manami-project). Rebuilt nightly by the build-id-mapping workflow; clients fetch the latest asset via expo-file-system." \
+              --target main
+          fi
+          gh release upload mapping-data anime-id-mappings-merged.json --clobber

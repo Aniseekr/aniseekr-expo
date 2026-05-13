@@ -4,9 +4,14 @@ import { Stack } from 'expo-router';
 import { PLATFORM_CONFIGS, PlatformType } from '../../libs/services/auth/types';
 import { authService } from '../../libs/services/auth/auth-service';
 import { isAuthRequiresFormError, AuthFormKind } from '../../libs/services/auth/auth-errors';
-import { multiPlatformSyncService } from '../../libs/services/sync/multi-platform-sync-service';
+import {
+  multiPlatformSyncService,
+  type MappingStats,
+} from '../../libs/services/sync/multi-platform-sync-service';
 import { AnimatedPressable } from '../../components/common/AnimatedPressable';
 import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
+import { ThemedSurface, ThemedText } from '../../components/themed';
+import { Spacing } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 
 interface SheetState {
@@ -29,6 +34,7 @@ export default function SyncSettingsScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(HIDDEN_SHEET);
+  const [lastStats, setLastStats] = useState<MappingStats | null>(null);
 
   useEffect(() => {
     loadPlatforms();
@@ -99,6 +105,7 @@ export default function SyncSettingsScreen() {
     setSyncing(true);
     try {
       const result = await multiPlatformSyncService.syncAll();
+      setLastStats(result.mappingStats);
       if (result.errors.length > 0) {
         Alert.alert(
           'Sync Completed with Errors',
@@ -146,6 +153,8 @@ export default function SyncSettingsScreen() {
               </AnimatedPressable>
             </View>
           </View>
+
+          <RecentSyncPanel stats={lastStats} />
 
           <View>
             <Text className="mb-4 ml-2 text-lg font-bold dark:text-white">Connected Platforms</Text>
@@ -211,5 +220,60 @@ export default function SyncSettingsScreen() {
         onSubmit={handleSheetSubmit}
       />
     </>
+  );
+}
+
+/**
+ * "最近同步狀態" panel. Hidden until the user has actually run a sync —
+ * `stats == null` renders an empty state ("尚無同步紀錄") rather than zeros,
+ * per the no-fake-data rule. Once we have real stats, surface ID-merged vs.
+ * title-merged counts and the per-platform coverage miss so the user can see
+ * which platform's ID mapping is weak.
+ */
+function RecentSyncPanel({ stats }: { stats: MappingStats | null }) {
+  if (!stats) {
+    return (
+      <ThemedSurface variant="card" padded>
+        <ThemedText variant="titleMedium">最近同步狀態</ThemedText>
+        <ThemedText variant="bodySmall" tone="secondary" style={{ marginTop: Spacing.xs }}>
+          尚無同步紀錄
+        </ThemedText>
+      </ThemedSurface>
+    );
+  }
+
+  const missingEntries = (Object.entries(stats.coverageMissByPlatform) as [PlatformType, number][])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  return (
+    <ThemedSurface variant="card" padded>
+      <ThemedText variant="titleMedium">最近同步狀態</ThemedText>
+      <View style={{ marginTop: Spacing.sm, gap: Spacing.xs }}>
+        <ThemedText variant="bodyMedium">共 {stats.totalItems} 筆</ThemedText>
+        <ThemedText variant="bodyMedium">
+          透過 ID 對應合併 {stats.mergedById} 筆 ✅
+        </ThemedText>
+        <ThemedText variant="bodyMedium">
+          透過標題對應合併 {stats.mergedByTitle} 筆 🟡
+        </ThemedText>
+        {missingEntries.length === 0 ? (
+          <ThemedText variant="bodySmall" tone="secondary">
+            各平台對應皆已覆蓋
+          </ThemedText>
+        ) : (
+          <View style={{ gap: 2 }}>
+            <ThemedText variant="bodySmall" tone="secondary">
+              各平台對應缺漏 ⚠️
+            </ThemedText>
+            {missingEntries.map(([platform, n]) => (
+              <ThemedText key={platform} variant="bodySmall" tone="tertiary">
+                {PLATFORM_CONFIGS[platform].displayName}: {n}
+              </ThemedText>
+            ))}
+          </View>
+        )}
+      </View>
+    </ThemedSurface>
   );
 }

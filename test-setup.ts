@@ -55,6 +55,19 @@ class FakeDatabase {
   async withTransactionAsync(fn: () => Promise<void>): Promise<void> {
     await fn();
   }
+  async prepareAsync(sql: string) {
+    const self = this;
+    return {
+      async executeAsync(params: unknown[] | unknown) {
+        const arr = Array.isArray(params) ? params : [params];
+        self.run(sql, arr);
+        return { changes: 0, lastInsertRowId: 0 };
+      },
+      async finalizeAsync() {
+        return;
+      },
+    };
+  }
 
   /**
    * Tiny pattern-matched SQL evaluator. Only the queries our tests need are
@@ -242,6 +255,18 @@ mock.module('react-native', () => {
     },
   };
 
+  const TurboModuleRegistry = {
+    get: () => null,
+    getEnforcing: () => ({}),
+  };
+
+  const NativeModules: Record<string, unknown> = {};
+
+  const AppState = {
+    currentState: 'active',
+    addEventListener: () => ({ remove: () => undefined }),
+  };
+
   return {
     View: passthrough('View'),
     Text: passthrough('Text'),
@@ -251,11 +276,69 @@ mock.module('react-native', () => {
     Image: passthrough('Image'),
     ActivityIndicator: passthrough('ActivityIndicator'),
     SafeAreaView: passthrough('SafeAreaView'),
+    Switch: passthrough('Switch'),
     StyleSheet,
     Linking,
     Platform,
+    TurboModuleRegistry,
+    NativeModules,
+    AppState,
+    Alert: { alert: () => undefined },
+    Dimensions: {
+      get: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
+      addEventListener: () => ({ remove: () => undefined }),
+    },
   };
 });
+
+// Expo auth / crypto / secure-store / browser stubs. Most tests don't hit
+// auth paths but importing MultiPlatformSyncService transitively pulls them in.
+mock.module('expo-secure-store', () => ({
+  getItemAsync: async () => null,
+  setItemAsync: async () => undefined,
+  deleteItemAsync: async () => undefined,
+}));
+mock.module('expo-auth-session', () => ({
+  makeRedirectUri: () => 'aniseekr://oauth/test',
+  AuthRequest: class {
+    constructor() {}
+    async promptAsync() {
+      return { type: 'cancel' };
+    }
+  },
+  exchangeCodeAsync: async () => ({ accessToken: '', refreshToken: '', expiresIn: 0 }),
+  ResponseType: { Code: 'code' },
+  CodeChallengeMethod: { S256: 'S256' },
+}));
+mock.module('expo-crypto', () => ({
+  randomUUID: () =>
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    }),
+  digestStringAsync: async () => '',
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  CryptoEncoding: { HEX: 'hex' },
+}));
+mock.module('expo-web-browser', () => ({
+  maybeCompleteAuthSession: () => undefined,
+  openAuthSessionAsync: async () => ({ type: 'cancel' }),
+  WebBrowserResultType: { CANCEL: 'cancel', SUCCESS: 'success' },
+}));
+mock.module('expo-notifications', () => ({
+  setNotificationHandler: () => undefined,
+  getPermissionsAsync: async () => ({ status: 'undetermined' }),
+  requestPermissionsAsync: async () => ({ status: 'denied' }),
+  scheduleNotificationAsync: async () => '',
+  cancelScheduledNotificationAsync: async () => undefined,
+  AndroidImportance: { DEFAULT: 3, HIGH: 4, MAX: 5 },
+  setNotificationChannelAsync: async () => undefined,
+}));
+mock.module('expo-tracking-transparency', () => ({
+  requestTrackingPermissionsAsync: async () => ({ status: 'denied' }),
+  getTrackingPermissionsAsync: async () => ({ status: 'denied' }),
+}));
 
 mock.module('@expo/vector-icons', () => {
   const React = require('react');

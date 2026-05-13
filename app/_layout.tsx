@@ -12,6 +12,7 @@ import { authService } from '../libs/services/auth/auth-service';
 import { isOnboardingComplete } from '../libs/services/onboarding-service';
 import { dataSourceConfig } from '../libs/services/data-source-config';
 import { loadUserPrefs } from '../libs/services/user-prefs';
+import { idMappingService } from '../libs/services/sync/id-mapping-service';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -26,6 +27,15 @@ export default function RootLayout() {
     // content choice into dataSourceConfig so the read pipeline filters
     // even when the toggle was last touched on a previous launch.
     void dataSourceConfig.init().then(() => loadUserPrefs());
+    // Refresh the cross-platform ID mapping table on a tick after the first
+    // render. The service itself short-circuits when the local copy is < 14d
+    // old, so this is cheap on warm launches. Errors are swallowed (the next
+    // launch retries) so a flaky network can never block boot.
+    setTimeout(() => {
+      void idMappingService
+        .updateMappings()
+        .catch((e) => console.warn('[updateMappings]', e));
+    }, 0);
   }, []);
 
   useEffect(() => {

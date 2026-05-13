@@ -112,6 +112,15 @@ const DDL = `
       CREATE INDEX IF NOT EXISTS idx_mal_id ON id_mappings(mal_id);
       CREATE INDEX IF NOT EXISTS idx_anilist_id ON id_mappings(anilist_id);
       CREATE INDEX IF NOT EXISTS idx_kitsu_id ON id_mappings(kitsu_id);
+      CREATE INDEX IF NOT EXISTS idx_bangumi_id ON id_mappings(bangumi_id);
+      CREATE INDEX IF NOT EXISTS idx_shikimori_id ON id_mappings(shikimori_id);
+      CREATE INDEX IF NOT EXISTS idx_simkl_id ON id_mappings(simkl_id);
+      CREATE INDEX IF NOT EXISTS idx_annict_id ON id_mappings(annict_id);
+
+      CREATE TABLE IF NOT EXISTS id_mappings_meta (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT
+      );
 
       CREATE TABLE IF NOT EXISTS user_anime (
         anime_id TEXT PRIMARY KEY NOT NULL,

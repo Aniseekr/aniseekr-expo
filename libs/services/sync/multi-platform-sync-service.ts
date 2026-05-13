@@ -6,12 +6,36 @@ import { idMappingService } from './id-mapping-service';
 import { conflictResolutionService } from './conflict-resolution-service';
 import { offlineQueueService, SyncJob } from './offline-queue-service';
 import { syncDirtyTracker } from './sync-dirty-tracker';
+import { similarTitles } from './title-normalize';
+
+export type MergeMethod = 'id' | 'title' | 'no';
+
+export interface MappingStats {
+  totalItems: number;
+  mergedById: number;
+  mergedByTitle: number;
+  singletons: number;
+  coverageMissByPlatform: Record<PlatformType, number>;
+}
 
 export interface SyncResult {
   items: UniversalAnimeItem[];
   errors: { platform: PlatformType; error: string }[];
   conflictIds: number[];
   queuedJobs: number;
+  mappingStats: MappingStats;
+}
+
+const ALL_PLATFORMS = Object.keys(PLATFORM_CONFIGS) as PlatformType[];
+
+function emptyCoverageMiss(): Record<PlatformType, number> {
+  return ALL_PLATFORMS.reduce(
+    (acc, p) => {
+      acc[p] = 0;
+      return acc;
+    },
+    {} as Record<PlatformType, number>
+  );
 }
 
 export class MultiPlatformSyncService {
@@ -45,7 +69,8 @@ export class MultiPlatformSyncService {
       })
     );
 
-    const { merged, conflictIds } = await this.mergeItems(allItems);
+    const mergeResult = await this.mergeItems(allItems);
+    const { merged, conflictIds } = mergeResult;
     const queuedJobs = await this.propagateChanges(merged, allItems);
 
     const queueSummary = await this.drainOfflineQueue();
@@ -56,7 +81,15 @@ export class MultiPlatformSyncService {
       });
     }
 
-    return { items: merged, errors, conflictIds, queuedJobs };
+    const mappingStats: MappingStats = {
+      totalItems: allItems.length,
+      mergedById: mergeResult.mergedByIdCount,
+      mergedByTitle: mergeResult.mergedByTitleCount,
+      singletons: mergeResult.singletonCount,
+      coverageMissByPlatform: mergeResult.coverageMissByPlatform,
+    };
+
+    return { items: merged, errors, conflictIds, queuedJobs, mappingStats };
   }
 
   async syncProgressUpdate(
@@ -153,9 +186,16 @@ export class MultiPlatformSyncService {
     }
   }
 
-  private async mergeItems(
-    items: UniversalAnimeItem[]
-  ): Promise<{ merged: UniversalAnimeItem[]; conflictIds: number[] }> {
+  async mergeItems(items: UniversalAnimeItem[]): Promise<{
+    merged: UniversalAnimeItem[];
+    conflictIds: number[];
+    mergedByIdCount: number;
+    mergedByTitleCount: number;
+    singletonCount: number;
+    coverageMissByPlatform: Record<PlatformType, number>;
+  }> {
+    const coverageMissByPlatform = emptyCoverageMiss();
+
     const enrichedItems = await Promise.all(
       items.map(async (item) => {
         const newItem = { ...item, platformIds: { ...item.platformIds } };
@@ -163,13 +203,17 @@ export class MultiPlatformSyncService {
         const sourceId = item.platformIds[sourcePlatform];
 
         if (sourceId) {
-          const platforms = Object.keys(PLATFORM_CONFIGS) as PlatformType[];
-          for (const target of platforms) {
-            if (!newItem.platformIds[target]) {
-              const mappedId = await idMappingService.mapID(sourcePlatform, sourceId, target);
-              if (mappedId) {
-                newItem.platformIds[target] = String(mappedId);
-              }
+          const mapped = await idMappingService.mapAllPlatforms(sourcePlatform, sourceId);
+          for (const target of ALL_PLATFORMS) {
+            if (newItem.platformIds[target]) continue;
+            const value = mapped[target];
+            if (value) {
+              newItem.platformIds[target] = value;
+            } else if (target !== sourcePlatform) {
+              // Track which target platforms we couldn't reach from this
+              // source row. Useful for sysadmins eyeballing the merged
+              // mapping's freshness in the settings panel.
+              coverageMissByPlatform[target] += 1;
             }
           }
         }
@@ -178,7 +222,10 @@ export class MultiPlatformSyncService {
     );
 
     const groups: UniversalAnimeItem[][] = [];
+    const groupMethods: MergeMethod[] = [];
     const processed = new Set<number>();
+    let mergedByIdCount = 0;
+    let mergedByTitleCount = 0;
 
     for (let i = 0; i < enrichedItems.length; i++) {
       if (processed.has(i)) continue;
@@ -186,17 +233,30 @@ export class MultiPlatformSyncService {
       const current = enrichedItems[i];
       const group = [current];
       processed.add(i);
+      let groupMethod: MergeMethod = 'no';
 
       for (let j = i + 1; j < enrichedItems.length; j++) {
         if (processed.has(j)) continue;
         const other = enrichedItems[j];
 
-        if (this.areSameAnime(current, other)) {
+        const { same, method } = this.areSameAnime(current, other);
+        if (same) {
           group.push(other);
           processed.add(j);
+          // Earliest match wins — once we merged anything by ID, the group
+          // is "an ID-matched group". A later title-only match in the same
+          // bucket still counts as title since that pair wasn't proven by ID.
+          if (method === 'id') {
+            mergedByIdCount += 1;
+            if (groupMethod === 'no') groupMethod = 'id';
+          } else if (method === 'title') {
+            mergedByTitleCount += 1;
+            if (groupMethod !== 'id') groupMethod = 'title';
+          }
         }
       }
       groups.push(group);
+      groupMethods.push(groupMethod);
     }
 
     const merged: UniversalAnimeItem[] = [];
@@ -207,17 +267,48 @@ export class MultiPlatformSyncService {
       conflictIds.push(...result.conflictIds);
     }
 
-    return { merged, conflictIds };
+    const singletonCount = groups.reduce((n, g) => n + (g.length === 1 ? 1 : 0), 0);
+
+    return {
+      merged,
+      conflictIds,
+      mergedByIdCount,
+      mergedByTitleCount,
+      singletonCount,
+      coverageMissByPlatform,
+    };
   }
 
-  private areSameAnime(a: UniversalAnimeItem, b: UniversalAnimeItem): boolean {
+  /**
+   * Decide whether two enriched items are the same anime.
+   *
+   * Tier 1 (`'id'`) — any populated platformId matches → definitely same.
+   * Tier 2 (`'title'`) — normalized native (or English/Romaji) title match,
+   *   guarded by season and (when available) year. Used to bridge gaps when
+   *   neither row has an upstream-mapped ID.
+   */
+  areSameAnime(
+    a: UniversalAnimeItem,
+    b: UniversalAnimeItem
+  ): { same: boolean; method: MergeMethod } {
     for (const key of Object.keys(a.platformIds)) {
       const k = key as PlatformType;
       if (a.platformIds[k] && b.platformIds[k] && a.platformIds[k] === b.platformIds[k]) {
-        return true;
+        return { same: true, method: 'id' };
       }
     }
-    return false;
+
+    const titleA = a.titleJapanese || a.titleEnglish || a.titleRomaji || a.title;
+    const titleB = b.titleJapanese || b.titleEnglish || b.titleRomaji || b.title;
+    if (titleA && titleB) {
+      const yearA = a.startDate ? new Date(a.startDate).getFullYear() : undefined;
+      const yearB = b.startDate ? new Date(b.startDate).getFullYear() : undefined;
+      if (similarTitles(titleA, titleB, { year: yearA, yearB })) {
+        return { same: true, method: 'title' };
+      }
+    }
+
+    return { same: false, method: 'no' };
   }
 
   private async propagateChanges(
