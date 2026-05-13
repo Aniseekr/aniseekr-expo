@@ -11,7 +11,7 @@ import { PlatformSwitcher, PlatformInfo } from '../../components/profile/Platfor
 import { EditDisplayNameSheet } from '../../components/profile/EditDisplayNameSheet';
 import { ProfileShortcutsGrid } from '../../components/profile/ProfileShortcutsGrid';
 import { PaywallSheet } from '../../components/subscription/PaywallSheet';
-import { ThemedText, ThemedSurface, readableTextOn } from '../../components/themed';
+import { ThemedText, ThemedSurface, readableTextOn, Skeleton } from '../../components/themed';
 import { UserRepository, UserProfile } from '../../libs/repositories/user-repository';
 import { gachaService } from '../../libs/services/gacha-service';
 import { authService } from '../../libs/services/auth/auth-service';
@@ -205,74 +205,78 @@ export default function ProfileScreen() {
             />
           }>
           {/* Profile Card */}
-          <ThemedSurface
-            variant="card"
-            radius={Radius.card}
-            style={[styles.profileCard, { borderColor: theme.glassBorder }]}>
-            <View
-              style={[
-                styles.avatarRing,
-                {
-                  backgroundColor: theme.background.primary,
-                  borderColor: theme.accent,
-                },
-              ]}>
-              {headerAvatar ? (
-                <Image source={{ uri: headerAvatar }} style={styles.avatarImage} />
-              ) : (
-                <Ionicons name="person" size={36} color={theme.accent} />
-              )}
-            </View>
+          {user === null && !refreshing ? (
+            <Skeleton.Profile />
+          ) : (
+            <ThemedSurface
+              variant="card"
+              radius={Radius.card}
+              style={[styles.profileCard, { borderColor: theme.glassBorder }]}>
+              <View
+                style={[
+                  styles.avatarRing,
+                  {
+                    backgroundColor: theme.background.primary,
+                    borderColor: theme.accent,
+                  },
+                ]}>
+                {headerAvatar ? (
+                  <Image source={{ uri: headerAvatar }} style={styles.avatarImage} />
+                ) : (
+                  <Ionicons name="person" size={36} color={theme.accent} />
+                )}
+              </View>
 
-            <Pressable
-              onPress={handleEditName}
-              disabled={!isEditable}
-              style={({ pressed }) => [
-                styles.nameRow,
-                pressed && isEditable && { opacity: 0.7 },
-              ]}>
-              <ThemedText variant="titleLarge" weight="700">
-                {headerUsername}
-              </ThemedText>
-              {isEditable ? (
-                <MaterialIcons name="edit" size={16} color={theme.text.tertiary} />
-              ) : null}
-              {isPro ? (
-                <View style={[styles.proBadge, { backgroundColor: theme.accent }]}>
-                  <FontAwesome5 name="crown" size={10} color={ctaFg} />
-                  <ThemedText
-                    variant="captionSmall"
-                    weight="800"
-                    style={[styles.proBadgeText, { color: ctaFg }]}>
-                    PRO
+              <Pressable
+                onPress={handleEditName}
+                disabled={!isEditable}
+                style={({ pressed }) => [
+                  styles.nameRow,
+                  pressed && isEditable && { opacity: 0.7 },
+                ]}>
+                <ThemedText variant="titleLarge" weight="700">
+                  {headerUsername}
+                </ThemedText>
+                {isEditable ? (
+                  <MaterialIcons name="edit" size={16} color={theme.text.tertiary} />
+                ) : null}
+                {isPro ? (
+                  <View style={[styles.proBadge, { backgroundColor: theme.accent }]}>
+                    <FontAwesome5 name="crown" size={10} color={ctaFg} />
+                    <ThemedText
+                      variant="captionSmall"
+                      weight="800"
+                      style={[styles.proBadgeText, { color: ctaFg }]}>
+                      PRO
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </Pressable>
+
+              <View
+                style={[
+                  styles.currencyPill,
+                  {
+                    backgroundColor: theme.background.tertiary,
+                    borderColor: theme.glassBorder,
+                  },
+                ]}>
+                <View style={styles.currencyItem}>
+                  <MaterialIcons name="monetization-on" size={16} color="#FFD60A" />
+                  <ThemedText variant="bodyMedium" weight="600">
+                    {coins}
                   </ThemedText>
                 </View>
-              ) : null}
-            </Pressable>
-
-            <View
-              style={[
-                styles.currencyPill,
-                {
-                  backgroundColor: theme.background.tertiary,
-                  borderColor: theme.glassBorder,
-                },
-              ]}>
-              <View style={styles.currencyItem}>
-                <MaterialIcons name="monetization-on" size={16} color="#FFD60A" />
-                <ThemedText variant="bodyMedium" weight="600">
-                  {coins}
-                </ThemedText>
+                <View style={[styles.currencyDivider, { backgroundColor: theme.glassBorder }]} />
+                <View style={styles.currencyItem}>
+                  <MaterialIcons name="diamond" size={16} color="#06B6D4" />
+                  <ThemedText variant="bodyMedium" weight="600">
+                    {shards}
+                  </ThemedText>
+                </View>
               </View>
-              <View style={[styles.currencyDivider, { backgroundColor: theme.glassBorder }]} />
-              <View style={styles.currencyItem}>
-                <MaterialIcons name="diamond" size={16} color="#06B6D4" />
-                <ThemedText variant="bodyMedium" weight="600">
-                  {shards}
-                </ThemedText>
-              </View>
-            </View>
-          </ThemedSurface>
+            </ThemedSurface>
+          )}
 
           {/* Stats Row */}
           <View style={styles.statsRow}>

@@ -18,6 +18,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Skeleton } from '../../../components/themed';
 import { GenreCarousel } from '../../../components/rate/GenreCarousel';
 import { SeasonalView } from '../../../components/rate/seasonal/SeasonalView';
 import { AIRecommendationSheet } from '../../../components/rate/AIRecommendationSheet';
@@ -358,9 +359,7 @@ function TrendView({
           <Text style={trendStyles.sectionLink}>See all</Text>
         </View>
         {loadingPilgrimages && pilgrimages.length === 0 ? (
-          <View style={trendStyles.pilgrimageEmpty}>
-            <Text style={trendStyles.placeholderText}>Loading pilgrimages…</Text>
-          </View>
+          <Skeleton.AnimeCardList horizontal count={4} paddingHorizontal={16} />
         ) : pilgrimages.length === 0 ? (
           <View style={trendStyles.pilgrimageEmpty}>
             <Text style={trendStyles.placeholderText}>No pilgrimages available yet.</Text>

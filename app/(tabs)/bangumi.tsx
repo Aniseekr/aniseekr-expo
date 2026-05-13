@@ -40,6 +40,7 @@ import { loadUserPrefs, patchUserPrefs } from '../../libs/services/user-prefs';
 import { trackingService } from '../../libs/services/tracking/tracking-service';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
+import { Skeleton } from '../../components/themed';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 type FilterMode = 'all' | 'tracking';
@@ -414,8 +415,8 @@ export default function BangumiScreen() {
           colors={Colors.gradients.background as [string, string, ...string[]]}
           style={StyleSheet.absoluteFill}
         />
-        <SafeAreaView style={[styles.safe, styles.center, { paddingTop: top }]}>
-          <Text style={styles.loadingText}>Loading...</Text>
+        <SafeAreaView style={[styles.safe, { paddingTop: top > 0 ? 0 : Spacing.xs }]}>
+          <Skeleton.AnimeCardList count={6} />
         </SafeAreaView>
       </View>
     );
