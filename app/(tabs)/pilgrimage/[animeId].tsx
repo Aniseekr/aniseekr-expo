@@ -1021,6 +1021,7 @@ export default function PilgrimageDetailScreen() {
       setActiveSpot(null);
       const lat = hasValidGeo(spot.geo) ? String(spot.geo[0]) : undefined;
       const lng = hasValidGeo(spot.geo) ? String(spot.geo[1]) : undefined;
+      const animeTitle = anime?.cn || anime?.title || '';
       router.push({
         pathname: '/pilgrimage/compare/tips',
         params: {
@@ -1029,6 +1030,7 @@ export default function PilgrimageDetailScreen() {
           name: spot.cn || spot.name,
           ep: String(spot.ep),
           animeId: bangumiId !== null ? String(bangumiId) : '',
+          animeTitle,
           themeColor,
           ...(lat ? { spotLat: lat } : {}),
           ...(lng ? { spotLng: lng } : {}),

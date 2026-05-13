@@ -16,20 +16,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceMotion, Magnetometer } from 'expo-sensors';
-import {
-  GestureDetector,
-  Gesture,
-  GestureHandlerRootView,
-} from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Canvas, Image as SkiaImage } from '@shopify/react-native-skia';
-import { useTheme } from '../../../../context/ThemeContext';
+import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
-import { ThemedText } from '../../../../components/themed';
+import { ThemedText, readableTextOn } from '../../../../components/themed';
 import {
   locationService,
   type LatLng,
@@ -38,8 +30,7 @@ import {
   computeAlignmentScore,
   type AlignmentSensors,
 } from '../../../../libs/services/pilgrimage/alignment-scoring';
-import { getWalkDirections } from '../../../../libs/services/pilgrimage/walk-directions';
-import { useEdgeImage } from '../../../../libs/services/pilgrimage/edge-image-skia';
+import { useEdgeImage, useSketchImage } from '../../../../libs/services/pilgrimage/edge-image-skia';
 
 type SearchParams = {
   spotId: string;
@@ -47,10 +38,13 @@ type SearchParams = {
   name: string;
   ep: string;
   animeId: string;
+  animeTitle?: string;
   themeColor: string;
   spotLat: string;
   spotLng: string;
 };
+
+type OverlayMode = 'anime' | 'sketch' | 'edge';
 
 function bearingBetween(from: LatLng, to: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -59,11 +53,15 @@ function bearingBetween(from: LatLng, to: LatLng): number {
   const phi2 = toRad(to.latitude);
   const dLambda = toRad(to.longitude - from.longitude);
   const y = Math.sin(dLambda) * Math.cos(phi2);
-  const x =
-    Math.cos(phi1) * Math.sin(phi2) -
-    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
   const theta = Math.atan2(y, x);
   return (toDeg(theta) + 360) % 360;
+}
+
+function compassPoint(deg: number): string {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const idx = Math.round((((deg % 360) + 360) % 360) / 45) % 8;
+  return dirs[idx] ?? 'N';
 }
 
 export default function CompareCaptureScreen() {
@@ -76,29 +74,34 @@ export default function CompareCaptureScreen() {
   const sceneName = params.name ?? 'Scene';
   const ep = params.ep;
   const animeId = params.animeId;
+  const animeTitle = params.animeTitle ?? '';
   const themeColor = params.themeColor || theme.accent;
+  const spotLatParam = params.spotLat;
+  const spotLngParam = params.spotLng;
 
   const { width: winW, height: winH } = useWindowDimensions();
   const isLandscape = winW > winH;
 
   const targetLocation = useMemo<LatLng | null>(() => {
-    const lat = Number(params.spotLat);
-    const lng = Number(params.spotLng);
+    const lat = Number(spotLatParam);
+    const lng = Number(spotLngParam);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     return { latitude: lat, longitude: lng };
-  }, [params.spotLat, params.spotLng]);
+  }, [spotLatParam, spotLngParam]);
 
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [facing, setFacing] = useState<CameraType>('back');
-  const [opacity, setOpacity] = useState(0.5);
+  const [opacity, setOpacity] = useState(0.4);
   const [grid, setGrid] = useState(true);
   const [heading, setHeading] = useState<number | null>(null);
   const [tilt, setTilt] = useState<number | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
-  const [overlayMode, setOverlayMode] = useState<'color' | 'edge'>('color');
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>('anime');
+  const [flipped, setFlipped] = useState(false);
+  const [transformed, setTransformed] = useState(false);
   const [lockedAt, setLockedAt] = useState<number | null>(null);
   const [perfectFiredAt, setPerfectFiredAt] = useState<number | null>(null);
   const [showPerfectBanner, setShowPerfectBanner] = useState(false);
@@ -107,7 +110,7 @@ export default function CompareCaptureScreen() {
   const hintOpacity = useRef(new RNAnimated.Value(1)).current;
   const [hintIconLandscape, setHintIconLandscape] = useState(false);
 
-  // Overlay gesture transforms
+  // Overlay gesture transforms.
   const scale = useSharedValue(1);
   const baseScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -116,11 +119,8 @@ export default function CompareCaptureScreen() {
   const baseTranslateY = useSharedValue(0);
   const rotation = useSharedValue(0);
   const baseRotation = useSharedValue(0);
+  const flipScale = useSharedValue(1);
 
-  // Tips screen pre-checks permission before navigating here, so we shouldn't
-  // normally land in a denied state. If we do (deep link, settings flip),
-  // surface a clear settings affordance instead of the implicit auto-call —
-  // iOS silently ignores requestPermission once canAskAgain is false.
   useEffect(() => {
     if (!permission) return;
     if (!permission.granted && permission.canAskAgain) {
@@ -154,11 +154,8 @@ export default function CompareCaptureScreen() {
     let motionSub: { remove: () => void } | null = null;
     Magnetometer.setUpdateInterval(200);
     magSub = Magnetometer.addListener((data) => {
-      // crude heading from magnetometer x/y; iOS DeviceMotion would be more
-      // accurate but this is informational only — enough to nudge framing.
       const angle = Math.atan2(data.y, data.x);
       let deg = (angle * 180) / Math.PI;
-      // align so 0 = North, increasing clockwise
       deg = (90 - deg + 360) % 360;
       setHeading(deg);
     });
@@ -167,9 +164,7 @@ export default function CompareCaptureScreen() {
       .then((ok) => {
         if (!ok) return;
         motionSub = DeviceMotion.addListener((data) => {
-          // pitch (rotation around X axis) tells us forward tilt of phone
           const pitch = data.rotation?.beta ?? 0;
-          // convert to degrees; 0° = phone vertical pointing forward
           const deg = (pitch * 180) / Math.PI;
           setTilt(deg);
         });
@@ -192,7 +187,6 @@ export default function CompareCaptureScreen() {
   );
 
   const score = useMemo(() => computeAlignmentScore(sensors), [sensors]);
-  const walk = useMemo(() => getWalkDirections(sensors), [sensors]);
 
   // Hysteresis: lock at >=0.9, only release below 0.85 to avoid flapping.
   useEffect(() => {
@@ -208,7 +202,6 @@ export default function CompareCaptureScreen() {
     }
   }, [score.total, lockedAt]);
 
-  // Fire the perfect-moment banner once after the lock has held for 800 ms.
   useEffect(() => {
     if (lockedAt === null) return;
     if (perfectFiredAt !== null && perfectFiredAt >= lockedAt) return;
@@ -239,13 +232,15 @@ export default function CompareCaptureScreen() {
     overlayMode === 'edge' ? imageUrl : null,
     { inkColor: themeColor, inkOpacity: 1 }
   );
+  const { sketchImage, loading: sketchLoading } = useSketchImage(
+    overlayMode === 'sketch' ? imageUrl : null,
+    { inkColor: '#1A1A1A', inkOpacity: 1 }
+  );
 
-  // Once the user actually rotates to landscape we never want to nag them again.
   useEffect(() => {
     if (isLandscape) setHintDismissed(true);
   }, [isLandscape]);
 
-  // Auto-dismiss the rotate hint after 5s — keep nag short.
   useEffect(() => {
     if (hintDismissed || isLandscape) return;
     const timer = setTimeout(() => {
@@ -258,13 +253,16 @@ export default function CompareCaptureScreen() {
     return () => clearTimeout(timer);
   }, [hintDismissed, isLandscape, hintOpacity]);
 
-  // Toggle the hint icon between portrait/landscape every 800 ms so users
-  // see the intended motion at a glance.
   useEffect(() => {
     if (hintDismissed || isLandscape) return;
     const t = setInterval(() => setHintIconLandscape((v) => !v), 800);
     return () => clearInterval(t);
   }, [hintDismissed, isLandscape]);
+
+  // Gesture composition: pinch + pan + two-finger rotate. Flip is a button toggle.
+  const markTransformed = useCallback(() => {
+    setTransformed(true);
+  }, []);
 
   const pinch = useMemo(
     () =>
@@ -275,13 +273,17 @@ export default function CompareCaptureScreen() {
         .onUpdate((e) => {
           const next = baseScale.value * e.scale;
           scale.value = Math.max(0.25, Math.min(4, next));
+        })
+        .onEnd(() => {
+          if (Math.abs(scale.value - 1) > 0.01) markTransformed();
         }),
-    [scale, baseScale]
+    [scale, baseScale, markTransformed]
   );
 
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .minDistance(4)
         .onStart(() => {
           baseTranslateX.value = translateX.value;
           baseTranslateY.value = translateY.value;
@@ -289,8 +291,13 @@ export default function CompareCaptureScreen() {
         .onUpdate((e) => {
           translateX.value = baseTranslateX.value + e.translationX;
           translateY.value = baseTranslateY.value + e.translationY;
+        })
+        .onEnd(() => {
+          if (Math.abs(translateX.value) > 1 || Math.abs(translateY.value) > 1) {
+            markTransformed();
+          }
         }),
-    [translateX, translateY, baseTranslateX, baseTranslateY]
+    [translateX, translateY, baseTranslateX, baseTranslateY, markTransformed]
   );
 
   const rotate = useMemo(
@@ -301,8 +308,11 @@ export default function CompareCaptureScreen() {
         })
         .onUpdate((e) => {
           rotation.value = baseRotation.value + e.rotation;
+        })
+        .onEnd(() => {
+          if (Math.abs(rotation.value) > 0.005) markTransformed();
         }),
-    [rotation, baseRotation]
+    [rotation, baseRotation, markTransformed]
   );
 
   const composedGesture = useMemo(
@@ -316,8 +326,18 @@ export default function CompareCaptureScreen() {
       { translateY: translateY.value },
       { scale: scale.value },
       { rotate: `${rotation.value}rad` },
+      { scaleX: flipScale.value },
     ],
   }));
+
+  const [rotationDisplay, setRotationDisplay] = useState<number>(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const deg = Math.round((rotation.value * 180) / Math.PI);
+      setRotationDisplay((prev) => (prev === deg ? prev : deg));
+    }, 80);
+    return () => clearInterval(id);
+  }, [rotation]);
 
   const resetTransforms = useCallback(() => {
     hapticsBridge.tap();
@@ -325,7 +345,18 @@ export default function CompareCaptureScreen() {
     translateX.value = withSpring(0);
     translateY.value = withSpring(0);
     rotation.value = withSpring(0);
-  }, [scale, translateX, translateY, rotation]);
+    flipScale.value = withSpring(1);
+    setFlipped(false);
+    setTransformed(false);
+  }, [scale, translateX, translateY, rotation, flipScale]);
+
+  const toggleFlip = useCallback(() => {
+    hapticsBridge.selection();
+    const next = !flipped;
+    setFlipped(next);
+    flipScale.value = withSpring(next ? -1 : 1);
+    markTransformed();
+  }, [flipped, flipScale, markTransformed]);
 
   const handleShutter = useCallback(async () => {
     if (!cameraRef.current || capturing) return;
@@ -359,10 +390,10 @@ export default function CompareCaptureScreen() {
           animeId: animeId ?? '',
           themeColor,
           heading: headingValue,
-          distanceMeters:
-            snapshot.distanceMeters != null ? String(snapshot.distanceMeters) : '',
-          headingDeltaDeg:
-            snapshot.headingDeltaDeg != null ? String(snapshot.headingDeltaDeg) : '',
+          spotLat: spotLatParam ?? '',
+          spotLng: spotLngParam ?? '',
+          distanceMeters: snapshot.distanceMeters != null ? String(snapshot.distanceMeters) : '',
+          headingDeltaDeg: snapshot.headingDeltaDeg != null ? String(snapshot.headingDeltaDeg) : '',
           tilt: snapshot.tilt != null ? String(snapshot.tilt) : '',
         },
       });
@@ -382,12 +413,14 @@ export default function CompareCaptureScreen() {
     themeColor,
     score.distanceMeters,
     score.headingDeltaDeg,
+    spotLatParam,
+    spotLngParam,
     tilt,
   ]);
 
-  const toggleOverlayMode = useCallback(() => {
+  const selectMode = useCallback((mode: OverlayMode) => {
     hapticsBridge.selection();
-    setOverlayMode((prev) => (prev === 'color' ? 'edge' : 'color'));
+    setOverlayMode(mode);
   }, []);
 
   const dismissHint = useCallback(() => {
@@ -409,10 +442,16 @@ export default function CompareCaptureScreen() {
     setGrid((g) => !g);
   }, []);
 
+  const openInfo = useCallback(() => {
+    hapticsBridge.tap();
+    router.push({
+      pathname: '/pilgrimage/compare/align',
+      params: { ...params },
+    });
+  }, [router, params]);
+
   if (!permission) {
-    return (
-      <View style={[styles.permRoot, { backgroundColor: theme.background.primary }]} />
-    );
+    return <View style={[styles.permRoot, { backgroundColor: theme.background.primary }]} />;
   }
 
   if (!permission.granted) {
@@ -438,7 +477,6 @@ export default function CompareCaptureScreen() {
                 if (permission.canAskAgain) {
                   void requestPermission();
                 } else {
-                  // iOS won't re-prompt — only Settings can flip it back on.
                   Linking.openSettings().catch(() => undefined);
                 }
               }}
@@ -446,7 +484,10 @@ export default function CompareCaptureScreen() {
                 styles.permBtn,
                 { backgroundColor: themeColor, opacity: pressed ? 0.85 : 1 },
               ]}>
-              <ThemedText variant="titleSmall" weight="700" style={{ color: '#000' }}>
+              <ThemedText
+                variant="titleSmall"
+                weight="700"
+                style={{ color: readableTextOn(themeColor) }}>
                 {permission.canAskAgain ? 'Grant access' : '前往設定 · Open Settings'}
               </ThemedText>
             </Pressable>
@@ -461,6 +502,14 @@ export default function CompareCaptureScreen() {
     );
   }
 
+  const totalPct = score.total !== null ? Math.round(score.total * 100) : null;
+  const headingDir = heading !== null ? compassPoint(heading) : null;
+  const headingDeg = heading !== null ? Math.round(heading) : null;
+  const headingDelta = score.headingDeltaDeg;
+  const headingAligned = headingDelta !== null && Math.abs(headingDelta) <= 8;
+  const subtitleText = animeTitle ? `${animeTitle} 場景` : ep ? `EP ${ep} · 場景` : '場景';
+  const showRotationBadge = Math.abs(rotationDisplay) >= 2;
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -471,13 +520,26 @@ export default function CompareCaptureScreen() {
 
         <GestureDetector gesture={composedGesture}>
           <Animated.View style={[styles.overlayWrap, overlayStyle]} pointerEvents="auto">
-            {overlayMode === 'color' ? (
+            {overlayMode === 'anime' ? (
               <Image
                 source={{ uri: imageUrl }}
                 style={[styles.overlayImage, { opacity }]}
                 contentFit="contain"
                 transition={120}
               />
+            ) : overlayMode === 'sketch' ? (
+              <Canvas style={[styles.overlayImage, { opacity }]}>
+                {sketchImage ? (
+                  <SkiaImage
+                    image={sketchImage}
+                    x={0}
+                    y={0}
+                    width={winW}
+                    height={winH}
+                    fit="contain"
+                  />
+                ) : null}
+              </Canvas>
             ) : (
               <Canvas style={[styles.overlayImage, { opacity }]}>
                 {edgeImage ? (
@@ -492,7 +554,8 @@ export default function CompareCaptureScreen() {
                 ) : null}
               </Canvas>
             )}
-            {overlayMode === 'edge' && edgeLoading ? (
+            {(overlayMode === 'edge' && edgeLoading) ||
+            (overlayMode === 'sketch' && sketchLoading) ? (
               <View style={styles.edgeLoader} pointerEvents="none">
                 <ActivityIndicator size="small" color="#fff" />
               </View>
@@ -500,8 +563,10 @@ export default function CompareCaptureScreen() {
           </Animated.View>
         </GestureDetector>
 
+        <CornerBrackets color={themeColor} insets={insets} />
+
         <LinearGradient
-          colors={['rgba(0,0,0,0.72)', 'rgba(0,0,0,0)']}
+          colors={['rgba(0,0,0,0.78)', 'rgba(0,0,0,0)']}
           style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
           <Pressable
             onPress={() => router.back()}
@@ -509,37 +574,37 @@ export default function CompareCaptureScreen() {
             style={({ pressed }) => [styles.topBtn, pressed && { opacity: 0.6 }]}
             accessibilityRole="button"
             accessibilityLabel="Close camera">
-            <Ionicons name="close" size={24} color="#fff" />
+            <Ionicons name="close" size={22} color="#fff" />
           </Pressable>
           <View style={styles.topMid}>
             <ThemedText
-              variant="bodyMedium"
+              variant="titleSmall"
               weight="700"
               align="center"
               style={{ color: '#fff' }}
               numberOfLines={1}>
               {sceneName}
             </ThemedText>
-            {ep ? (
-              <ThemedText
-                variant="captionSmall"
-                align="center"
-                style={{ color: 'rgba(255,255,255,0.7)' }}>
-                EP {ep}
-              </ThemedText>
-            ) : null}
+            <ThemedText
+              variant="captionSmall"
+              weight="700"
+              align="center"
+              style={{ color: themeColor }}
+              numberOfLines={1}>
+              {subtitleText}
+            </ThemedText>
           </View>
           <Pressable
-            onPress={resetTransforms}
+            onPress={openInfo}
             hitSlop={14}
             style={({ pressed }) => [styles.topBtn, pressed && { opacity: 0.6 }]}
             accessibilityRole="button"
-            accessibilityLabel="Reset overlay position">
-            <Ionicons name="refresh" size={22} color="#fff" />
+            accessibilityLabel="Open framing tips">
+            <Ionicons name="information-circle-outline" size={22} color="#fff" />
           </Pressable>
         </LinearGradient>
 
-        <View style={[styles.liveBadgeWrap, { top: insets.top + 60 }]}>
+        <View style={[styles.liveBadgeWrap, { top: insets.top + 64 }]}>
           <View style={styles.liveBadge}>
             <View style={styles.liveDot} />
             <ThemedText
@@ -551,85 +616,178 @@ export default function CompareCaptureScreen() {
           </View>
         </View>
 
-        <AlignmentOverlay
-          score={score}
-          walk={walk}
+        {showRotationBadge ? (
+          <View style={[styles.rotationBadge, { top: insets.top + 64, borderColor: themeColor }]}
+            pointerEvents="none">
+            <Ionicons name="sync" size={12} color={themeColor} />
+            <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+              {`${rotationDisplay > 0 ? '+' : ''}${rotationDisplay}°`}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {transformed ? (
+          <Pressable
+            onPress={resetTransforms}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Reset overlay position"
+            style={({ pressed }) => [
+              styles.resetChip,
+              { top: insets.top + 64, opacity: pressed ? 0.7 : 1 },
+            ]}>
+            <Ionicons name="refresh" size={14} color="#fff" />
+            <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+              復原
+            </ThemedText>
+          </Pressable>
+        ) : null}
+
+        <RightControlPanel
+          insets={insets}
+          theme={theme}
+          themeColor={themeColor}
+          opacity={opacity}
+          setOpacity={setOpacity}
+          overlayMode={overlayMode}
+          onSelectMode={selectMode}
+          flipped={flipped}
+          onToggleFlip={toggleFlip}
+        />
+
+        <InfoPill
+          distanceMeters={score.distanceMeters}
+          headingDir={headingDir}
+          headingDeg={headingDeg}
+          headingAligned={headingAligned}
           tilt={tilt}
           theme={theme}
           themeColor={themeColor}
-          bottom={insets.bottom + 188}
+          bottom={insets.bottom + 196}
         />
 
-        {/* v1 fallback: bottom bar stays anchored to the bottom in landscape too — rotation hint alone delivers the framing UX. */}
+        {totalPct !== null ? (
+          <View
+            style={[styles.alignmentChipWrap, { bottom: insets.bottom + 156 }]}
+            pointerEvents="none">
+            <View
+              style={[
+                styles.alignmentChip,
+                {
+                  borderColor: themeColor,
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                },
+              ]}>
+              <Ionicons name="star" size={12} color={themeColor} />
+              <ThemedText
+                variant="captionSmall"
+                weight="700"
+                style={{ color: themeColor, letterSpacing: 0.5 }}>
+                對齊度 {totalPct}%
+              </ThemedText>
+              {totalPct >= 90 ? (
+                <>
+                  <View style={[styles.chipDot, { backgroundColor: themeColor }]} />
+                  <ThemedText
+                    variant="captionSmall"
+                    weight="700"
+                    style={{ color: theme.status.success }}>
+                    完美時刻
+                  </ThemedText>
+                </>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
           <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']}
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.78)']}
             style={StyleSheet.absoluteFill}
           />
-          <View style={styles.sliderRow}>
-            <Ionicons name="image-outline" size={16} color="#fff" />
-            <Slider
-              style={styles.slider}
-              minimumValue={0.1}
-              maximumValue={1}
-              value={opacity}
-              onValueChange={setOpacity}
-              minimumTrackTintColor={themeColor}
-              maximumTrackTintColor="rgba(255,255,255,0.3)"
-              thumbTintColor="#fff"
+          <View style={styles.bottomRow}>
+            <ThumbnailBtn
+              kind="map"
+              themeColor={themeColor}
+              onPress={() => {
+                hapticsBridge.tap();
+                router.push({
+                  pathname: '/pilgrimage/compare/align',
+                  params: { ...params },
+                });
+              }}
             />
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{ color: '#fff', width: 36, textAlign: 'right' }}>
-              {Math.round(opacity * 100)}%
-            </ThemedText>
+
+            <View style={styles.shutterColumn}>
+              <Pressable
+                onPress={handleShutter}
+                disabled={capturing}
+                accessibilityRole="button"
+                accessibilityLabel="Take comparison photo"
+                style={({ pressed }) => [
+                  styles.shutterOuter,
+                  { borderColor: themeColor },
+                  pressed && { opacity: 0.85 },
+                  capturing && { opacity: 0.6 },
+                ]}>
+                <View style={[styles.shutterInner, { backgroundColor: themeColor }]} />
+              </Pressable>
+              <ThemedText
+                variant="captionSmall"
+                weight="700"
+                align="center"
+                style={{ color: 'rgba(255,255,255,0.6)', marginTop: 6, letterSpacing: 1 }}>
+                PHOTO
+              </ThemedText>
+            </View>
+
+            <ThumbnailBtn
+              kind="reference"
+              themeColor={themeColor}
+              imageUrl={imageUrl}
+              onPress={() => {
+                hapticsBridge.tap();
+                selectMode('anime');
+              }}
+            />
           </View>
 
-          <View style={styles.actionRow}>
-            <CircleBtn
-              icon={overlayMode === 'edge' ? 'color-palette-outline' : 'pencil'}
-              accessibilityLabel={
-                overlayMode === 'edge'
-                  ? 'Switch to colour overlay'
-                  : 'Switch to edge overlay'
-              }
-              onPress={toggleOverlayMode}
-              active={overlayMode === 'edge'}
-              activeColor={themeColor}
-            />
-            <CircleBtn
-              icon={grid ? 'grid' : 'grid-outline'}
-              accessibilityLabel="Toggle rule-of-thirds grid"
-              onPress={toggleGrid}
-              active={grid}
-              activeColor={themeColor}
-            />
+          <View style={styles.bottomActionRow}>
             <Pressable
-              onPress={handleShutter}
-              disabled={capturing}
+              onPress={toggleGrid}
+              hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel="Take comparison photo"
+              accessibilityLabel="Toggle rule-of-thirds grid"
               style={({ pressed }) => [
-                styles.shutterOuter,
-                pressed && { opacity: 0.85 },
-                capturing && { opacity: 0.6 },
+                styles.miniBtn,
+                {
+                  backgroundColor: grid ? themeColor + '33' : 'rgba(255,255,255,0.12)',
+                  borderColor: grid ? themeColor : 'rgba(255,255,255,0.22)',
+                  opacity: pressed ? 0.7 : 1,
+                },
               ]}>
-              <View style={[styles.shutterInner, { backgroundColor: '#fff' }]} />
+              <Ionicons
+                name={grid ? 'grid' : 'grid-outline'}
+                size={16}
+                color={grid ? themeColor : '#fff'}
+              />
             </Pressable>
-            <CircleBtn
-              icon="camera-reverse-outline"
-              accessibilityLabel="Switch front/back camera"
+            <Pressable
               onPress={toggleFacing}
-            />
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Switch front/back camera"
+              style={({ pressed }) => [
+                styles.miniBtn,
+                {
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  borderColor: 'rgba(255,255,255,0.22)',
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}>
+              <Ionicons name="camera-reverse-outline" size={16} color="#fff" />
+            </Pressable>
           </View>
-
-          <ThemedText
-            variant="captionSmall"
-            align="center"
-            style={{ color: 'rgba(255,255,255,0.6)', marginTop: 6 }}>
-            Pinch · drag · twist the reference to align
-          </ThemedText>
         </View>
 
         {showPerfectBanner ? (
@@ -638,16 +796,13 @@ export default function CompareCaptureScreen() {
             style={[
               styles.perfectBanner,
               {
-                bottom: insets.bottom + 220,
+                bottom: insets.bottom + 232,
                 backgroundColor: theme.status.success,
                 opacity: perfectOpacity,
               },
             ]}>
             <Ionicons name="checkmark-circle" size={18} color="#fff" />
-            <ThemedText
-              variant="bodySmall"
-              weight="700"
-              style={{ color: '#fff' }}>
+            <ThemedText variant="bodySmall" weight="700" style={{ color: '#fff' }}>
               完美時刻 · Perfect alignment
             </ThemedText>
           </RNAnimated.View>
@@ -661,19 +816,13 @@ export default function CompareCaptureScreen() {
               onPress={dismissHint}
               accessibilityRole="button"
               accessibilityLabel="Dismiss rotate hint"
-              style={({ pressed }) => [
-                styles.rotateHint,
-                pressed && { opacity: 0.85 },
-              ]}>
+              style={({ pressed }) => [styles.rotateHint, pressed && { opacity: 0.85 }]}>
               <Ionicons
                 name={hintIconLandscape ? 'phone-landscape-outline' : 'phone-portrait-outline'}
                 size={18}
                 color="#fff"
               />
-              <ThemedText
-                variant="captionSmall"
-                weight="700"
-                style={{ color: '#fff' }}>
+              <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
                 請旋轉手機 · Rotate for 16:9 framing
               </ThemedText>
             </Pressable>
@@ -684,34 +833,306 @@ export default function CompareCaptureScreen() {
   );
 }
 
-function CircleBtn({
-  icon,
-  accessibilityLabel,
-  onPress,
-  active,
-  activeColor,
+function CornerBrackets({
+  color,
+  insets,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  accessibilityLabel: string;
+  color: string;
+  insets: { top: number; bottom: number; left: number; right: number };
+}) {
+  // Inset matches the visible camera framing the user is meant to align to.
+  const T = insets.top + 100;
+  const B = insets.bottom + 240;
+  const L = 18;
+  const R = 18 + 76; // leave room for the right panel
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={[styles.bracket, styles.bracketTL, { top: T, left: L, borderColor: color }]} />
+      <View style={[styles.bracket, styles.bracketTR, { top: T, right: R, borderColor: color }]} />
+      <View
+        style={[styles.bracket, styles.bracketBL, { bottom: B, left: L, borderColor: color }]}
+      />
+      <View
+        style={[styles.bracket, styles.bracketBR, { bottom: B, right: R, borderColor: color }]}
+      />
+    </View>
+  );
+}
+
+function RightControlPanel({
+  insets,
+  theme,
+  themeColor,
+  opacity,
+  setOpacity,
+  overlayMode,
+  onSelectMode,
+  flipped,
+  onToggleFlip,
+}: {
+  insets: { top: number; bottom: number; left: number; right: number };
+  theme: ThemePalette;
+  themeColor: string;
+  opacity: number;
+  setOpacity: (n: number) => void;
+  overlayMode: OverlayMode;
+  onSelectMode: (mode: OverlayMode) => void;
+  flipped: boolean;
+  onToggleFlip: () => void;
+}) {
+  const sliderHeight = 110;
+  return (
+    <View
+      style={[
+        styles.rightPanel,
+        {
+          top: insets.top + 100,
+          right: 14,
+          borderColor: theme.glassBorder,
+        },
+      ]}
+      pointerEvents="box-none">
+      <View style={styles.panelInner} pointerEvents="auto">
+        <ThemedText
+          variant="captionSmall"
+          weight="700"
+          align="center"
+          style={{ color: 'rgba(255,255,255,0.75)' }}>
+          透明度
+        </ThemedText>
+        <ThemedText
+          variant="titleSmall"
+          weight="700"
+          align="center"
+          style={{ color: themeColor, marginTop: 2, marginBottom: 6 }}>
+          {Math.round(opacity * 100)}%
+        </ThemedText>
+        <View style={{ height: sliderHeight, justifyContent: 'center', alignItems: 'center' }}>
+          <Slider
+            style={{
+              width: sliderHeight,
+              transform: [{ rotate: '-90deg' }],
+            }}
+            minimumValue={0.1}
+            maximumValue={1}
+            value={opacity}
+            onValueChange={setOpacity}
+            minimumTrackTintColor={themeColor}
+            maximumTrackTintColor="rgba(255,255,255,0.25)"
+            thumbTintColor="#fff"
+          />
+        </View>
+
+        <View style={styles.modeStack}>
+          <ModePill
+            label="anime"
+            active={overlayMode === 'anime'}
+            themeColor={themeColor}
+            onPress={() => onSelectMode('anime')}
+          />
+          <ModePill
+            label="sketch"
+            active={overlayMode === 'sketch'}
+            themeColor={themeColor}
+            onPress={() => onSelectMode('sketch')}
+          />
+          <ModePill
+            label="edge"
+            active={overlayMode === 'edge'}
+            themeColor={themeColor}
+            onPress={() => onSelectMode('edge')}
+          />
+        </View>
+
+        <Pressable
+          onPress={onToggleFlip}
+          accessibilityRole="button"
+          accessibilityLabel={flipped ? 'Unflip overlay' : 'Flip overlay horizontally'}
+          style={({ pressed }) => [
+            styles.flipBtn,
+            {
+              backgroundColor: flipped ? themeColor + '33' : 'rgba(255,255,255,0.10)',
+              borderColor: flipped ? themeColor : 'rgba(255,255,255,0.22)',
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}>
+          <Ionicons
+            name="swap-horizontal"
+            size={16}
+            color={flipped ? themeColor : '#fff'}
+          />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function ModePill({
+  label,
+  active,
+  themeColor,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  themeColor: string;
   onPress: () => void;
-  active?: boolean;
-  activeColor?: string;
+}) {
+  const fg = active ? readableTextOn(themeColor) : 'rgba(255,255,255,0.65)';
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} overlay`}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.modePill,
+        {
+          backgroundColor: active ? themeColor : 'rgba(255,255,255,0.08)',
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}>
+      <ThemedText variant="captionSmall" weight="700" style={{ color: fg }}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function InfoPill({
+  distanceMeters,
+  headingDir,
+  headingDeg,
+  headingAligned,
+  tilt,
+  theme,
+  themeColor,
+  bottom,
+}: {
+  distanceMeters: number | null;
+  headingDir: string | null;
+  headingDeg: number | null;
+  headingAligned: boolean;
+  tilt: number | null;
+  theme: ThemePalette;
+  themeColor: string;
+  bottom: number;
+}) {
+  const hasAny =
+    distanceMeters !== null || headingDir !== null || tilt !== null;
+  if (!hasAny) return null;
+
+  const distanceText =
+    distanceMeters === null
+      ? '—'
+      : distanceMeters < 100
+        ? `${distanceMeters.toFixed(1)}m`
+        : `${Math.round(distanceMeters)}m`;
+  const headingText =
+    headingDir !== null && headingDeg !== null ? `${headingDir} ${headingDeg}°` : '—';
+  const tiltText =
+    tilt === null ? '—' : `${tilt >= 0 ? '+' : '−'}${Math.abs(tilt).toFixed(1)}°`;
+
+  return (
+    <View style={[styles.infoPill, { bottom }]} pointerEvents="none">
+      <View style={styles.infoCell}>
+        <ThemedText
+          variant="captionSmall"
+          weight="700"
+          style={{ color: 'rgba(255,255,255,0.55)' }}>
+          距離
+        </ThemedText>
+        <View style={styles.infoRow}>
+          <Ionicons name="location" size={12} color={themeColor} />
+          <ThemedText variant="bodySmall" weight="700" style={{ color: '#fff' }}>
+            {distanceText}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.infoDivider} />
+
+      <View style={[styles.infoCell, { flex: 1.3 }]}>
+        <ThemedText
+          variant="captionSmall"
+          weight="700"
+          style={{ color: 'rgba(255,255,255,0.55)' }}>
+          方位
+        </ThemedText>
+        <View style={styles.infoRow}>
+          <Ionicons name="compass" size={12} color={themeColor} />
+          <ThemedText variant="bodySmall" weight="700" style={{ color: '#fff' }}>
+            {headingText}
+          </ThemedText>
+          {headingAligned ? (
+            <View style={styles.alignedTag}>
+              <Ionicons name="checkmark" size={10} color={theme.status.success} />
+              <ThemedText
+                variant="captionSmall"
+                weight="700"
+                style={{ color: theme.status.success }}>
+                Aligned
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.infoDivider} />
+
+      <View style={styles.infoCell}>
+        <ThemedText
+          variant="captionSmall"
+          weight="700"
+          style={{ color: 'rgba(255,255,255,0.55)' }}>
+          傾斜
+        </ThemedText>
+        <View style={styles.infoRow}>
+          <Ionicons name="reorder-three" size={12} color={themeColor} />
+          <ThemedText variant="bodySmall" weight="700" style={{ color: '#fff' }}>
+            {tiltText}
+          </ThemedText>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ThumbnailBtn({
+  kind,
+  imageUrl,
+  themeColor,
+  onPress,
+}: {
+  kind: 'map' | 'reference';
+  imageUrl?: string;
+  themeColor: string;
+  onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      hitSlop={10}
+      accessibilityLabel={kind === 'map' ? 'Open map' : 'Show anime reference'}
       style={({ pressed }) => [
-        styles.circleBtn,
+        styles.thumbBtn,
         {
-          backgroundColor: active && activeColor ? activeColor + '33' : 'rgba(255,255,255,0.18)',
-          borderColor: active && activeColor ? activeColor : 'rgba(255,255,255,0.35)',
-          opacity: pressed ? 0.65 : 1,
+          borderColor: kind === 'map' ? themeColor : 'rgba(255,255,255,0.28)',
+          opacity: pressed ? 0.7 : 1,
         },
       ]}>
-      <Ionicons name={icon} size={20} color={active && activeColor ? activeColor : '#fff'} />
+      {kind === 'reference' && imageUrl ? (
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.thumbImage}
+          contentFit="cover"
+          transition={120}
+        />
+      ) : (
+        <View style={[styles.thumbMap, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <Ionicons name="map" size={18} color={themeColor} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -723,150 +1144,6 @@ function RuleOfThirdsGrid() {
       <View style={[styles.gridLine, styles.gridV, { left: '66.66%' }]} />
       <View style={[styles.gridLine, styles.gridH, { top: '33.33%' }]} />
       <View style={[styles.gridLine, styles.gridH, { top: '66.66%' }]} />
-    </View>
-  );
-}
-
-type AlignmentScoreShape = {
-  position: number | null;
-  heading: number | null;
-  tilt: number | null;
-  total: number | null;
-  distanceMeters: number | null;
-  headingDeltaDeg: number | null;
-};
-
-type WalkShape = {
-  distanceText: string | null;
-  headingText: string | null;
-  tiltText: string | null;
-};
-
-function AlignmentOverlay({
-  score,
-  walk,
-  tilt,
-  theme,
-  themeColor,
-  bottom,
-}: {
-  score: AlignmentScoreShape;
-  walk: WalkShape;
-  tilt: number | null;
-  theme: ReturnType<typeof useTheme>['theme'];
-  themeColor: string;
-  bottom: number;
-}) {
-  const hasAny = score.position !== null || score.heading !== null || score.tilt !== null;
-  if (!hasAny) return null;
-
-  const walkLine = [walk.distanceText, walk.headingText, walk.tiltText]
-    .filter((s): s is string => Boolean(s))
-    .join(' · ');
-
-  const totalPct = score.total !== null ? Math.round(score.total * 100) : null;
-  const totalTone =
-    score.total === null
-      ? '#fff'
-      : score.total >= 0.8
-      ? theme.status.success
-      : score.total >= 0.5
-      ? themeColor
-      : theme.status.warning;
-
-  return (
-    <View style={[styles.alignmentWrap, { bottom }]} pointerEvents="none">
-      <View style={styles.alignmentBars}>
-        {score.position !== null ? (
-          <AlignmentBar
-            label="Position"
-            fill={score.position}
-            value={
-              score.distanceMeters !== null
-                ? `${score.distanceMeters.toFixed(1)} m`
-                : '—'
-            }
-            tone={themeColor}
-          />
-        ) : null}
-        {score.heading !== null ? (
-          <AlignmentBar
-            label="Heading"
-            fill={score.heading}
-            value={
-              score.headingDeltaDeg !== null
-                ? `±${Math.round(Math.abs(score.headingDeltaDeg))}°`
-                : '—'
-            }
-            tone={themeColor}
-          />
-        ) : null}
-        {score.tilt !== null ? (
-          <AlignmentBar
-            label="Tilt"
-            fill={score.tilt}
-            value={
-              tilt !== null
-                ? `${tilt >= 0 ? '+' : '−'}${Math.abs(tilt).toFixed(0)}°`
-                : '—'
-            }
-            tone={themeColor}
-          />
-        ) : null}
-        {walkLine ? (
-          <ThemedText
-            variant="captionSmall"
-            weight="600"
-            style={{ color: 'rgba(255,255,255,0.85)', marginTop: 4 }}>
-            {walkLine}
-          </ThemedText>
-        ) : null}
-      </View>
-      {totalPct !== null ? (
-        <View style={styles.alignmentTotal}>
-          <ThemedText
-            variant="displayMedium"
-            weight="700"
-            style={{ color: totalTone, lineHeight: 32 }}>
-            {totalPct}
-          </ThemedText>
-          <ThemedText variant="bodySmall" weight="700" style={{ color: totalTone }}>
-            %
-          </ThemedText>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function AlignmentBar({
-  label,
-  fill,
-  value,
-  tone,
-}: {
-  label: string;
-  fill: number;
-  value: string;
-  tone: string;
-}) {
-  const pct = Math.max(0, Math.min(1, fill)) * 100;
-  return (
-    <View style={styles.alignmentRow}>
-      <ThemedText variant="captionSmall" weight="700" style={styles.alignmentLabel}>
-        {label}
-      </ThemedText>
-      <View style={[styles.alignmentTrack, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
-        <View
-          style={[
-            styles.alignmentFill,
-            { width: `${pct}%`, backgroundColor: tone },
-          ]}
-        />
-      </View>
-      <ThemedText variant="captionSmall" weight="700" style={styles.alignmentValue}>
-        {value}
-      </ThemedText>
     </View>
   );
 }
@@ -908,10 +1185,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -922,38 +1199,61 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: 24,
   },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  slider: { flex: 1, height: 28 },
-  actionRow: {
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    paddingHorizontal: 8,
   },
-  circleBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  shutterColumn: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
   shutterOuter: {
     width: 78,
     height: 78,
     borderRadius: 39,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 4,
-    borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  thumbBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 2,
+    overflow: 'hidden',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbMap: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 18,
+    marginTop: 14,
+  },
+  miniBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   gridLine: {
     position: 'absolute',
@@ -983,51 +1283,149 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#FF3B30',
   },
-  alignmentWrap: {
+  rotationBadge: {
+    position: 'absolute',
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1,
+  },
+  resetChip: {
+    position: 'absolute',
+    left: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  bracket: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderWidth: 3,
+  },
+  bracketTL: {
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 4,
+  },
+  bracketTR: {
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 4,
+  },
+  bracketBL: {
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 4,
+  },
+  bracketBR: {
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 4,
+  },
+  rightPanel: {
+    position: 'absolute',
+    width: 72,
+    borderRadius: 18,
+    backgroundColor: 'rgba(20,20,20,0.78)',
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+  },
+  panelInner: {
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  modeStack: {
+    gap: 6,
+    alignItems: 'stretch',
+    marginTop: 4,
+  },
+  modePill: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  flipBtn: {
+    alignSelf: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  infoPill: {
     position: 'absolute',
     left: 14,
     right: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
+    gap: 10,
   },
-  alignmentBars: {
+  infoCell: {
     flex: 1,
-    gap: 6,
+    gap: 2,
   },
-  alignmentRow: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
   },
-  alignmentLabel: {
-    color: 'rgba(255,255,255,0.75)',
-    width: 56,
+  infoDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  alignmentTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  alignmentFill: {
-    height: 6,
-    borderRadius: 3,
-  },
-  alignmentValue: {
-    color: '#fff',
-    width: 56,
-    textAlign: 'right',
-  },
-  alignmentTotal: {
+  alignedTag: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    marginLeft: 4,
+  },
+  alignmentChipWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  alignmentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    marginHorizontal: 2,
   },
   perfectBanner: {
     position: 'absolute',

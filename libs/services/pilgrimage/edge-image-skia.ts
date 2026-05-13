@@ -1,8 +1,9 @@
 // Tracing-paper edge overlay for the pilgrimage compare flow.
-// Decodes a URI image via Skia, runs Sobel edge detection through a
-// `RuntimeEffect` SKSL shader, snapshots the result, and exposes it as a
-// React-friendly hook. Failures resolve to `{edgeImage: null, error}` — never
-// a hash-seeded "plausible" placeholder (CLAUDE.md Rule 8).
+// Decodes a URI image via Skia, runs Sobel edge detection (or a softer
+// sketch-style blend) through a `RuntimeEffect` SKSL shader, snapshots the
+// result, and exposes it as a React-friendly hook. Failures resolve to
+// `{image: null, error}` — never a hash-seeded "plausible" placeholder
+// (CLAUDE.md Rule 8).
 
 import { Skia, TileMode, FilterMode, MipmapMode } from '@shopify/react-native-skia';
 import type { SkImage, SkRuntimeEffect } from '@shopify/react-native-skia';
@@ -16,6 +17,17 @@ export interface EdgeImageOptions {
 
 export interface EdgeImageState {
   edgeImage: SkImage | null;
+  loading: boolean;
+  error: Error | null;
+}
+
+export interface SketchImageOptions {
+  inkColor?: string;
+  inkOpacity?: number;
+}
+
+export interface SketchImageState {
+  sketchImage: SkImage | null;
   loading: boolean;
   error: Error | null;
 }
@@ -49,6 +61,36 @@ half4 main(float2 xy) {
 }
 `;
 
+// Sketch shader: grayscale + soft Sobel blend. Dark image areas and edges both
+// contribute, producing a pencil-on-tracing-paper feel that sits between the
+// full-color `anime` overlay and the sharp `edge` outline.
+const SKSL_SKETCH = `
+uniform shader src;
+uniform float2 px;
+uniform half4 ink;
+
+half luma(half4 c) { return 0.299*c.r + 0.587*c.g + 0.114*c.b; }
+
+half4 main(float2 xy) {
+  half tl = luma(src.eval(xy + float2(-1.0, -1.0) * px));
+  half tm = luma(src.eval(xy + float2( 0.0, -1.0) * px));
+  half tr = luma(src.eval(xy + float2( 1.0, -1.0) * px));
+  half ml = luma(src.eval(xy + float2(-1.0,  0.0) * px));
+  half mm = luma(src.eval(xy));
+  half mr = luma(src.eval(xy + float2( 1.0,  0.0) * px));
+  half bl = luma(src.eval(xy + float2(-1.0,  1.0) * px));
+  half bm = luma(src.eval(xy + float2( 0.0,  1.0) * px));
+  half br = luma(src.eval(xy + float2( 1.0,  1.0) * px));
+  half gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
+  half gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
+  half mag = sqrt(gx*gx + gy*gy);
+  half edge = smoothstep(half(0.08), half(0.35), mag);
+  half shade = clamp(1.0 - mm, half(0.0), half(1.0)) * 0.4;
+  half darkness = clamp(edge * 0.9 + shade, half(0.0), half(0.85));
+  return ink * darkness;
+}
+`;
+
 let cachedEffect: SkRuntimeEffect | null = null;
 function getSobelEffect(): SkRuntimeEffect {
   if (cachedEffect) return cachedEffect;
@@ -58,7 +100,17 @@ function getSobelEffect(): SkRuntimeEffect {
   return effect;
 }
 
+let cachedSketchEffect: SkRuntimeEffect | null = null;
+function getSketchEffect(): SkRuntimeEffect {
+  if (cachedSketchEffect) return cachedSketchEffect;
+  const effect = Skia.RuntimeEffect.Make(SKSL_SKETCH);
+  if (!effect) throw new Error('Failed to compile sketch SKSL shader');
+  cachedSketchEffect = effect;
+  return effect;
+}
+
 const renderCache = new Map<string, SkImage>();
+const sketchCache = new Map<string, SkImage>();
 
 function parseHexToRgb(hex: string): { r: number; g: number; b: number } {
   const cleaned = hex.replace('#', '').trim();
@@ -183,4 +235,102 @@ export function useEdgeImage(
   }, [uri, threshold, inkColor, inkOpacity]);
 
   return { edgeImage, loading, error };
+}
+
+async function buildSketchImage(
+  uri: string,
+  inkColor: string,
+  inkOpacity: number
+): Promise<SkImage> {
+  const data = await Skia.Data.fromURI(uri);
+  if (!data) throw new Error('Failed to load image data');
+
+  const image = Skia.Image.MakeImageFromEncoded(data);
+  if (!image) throw new Error('Failed to decode image');
+
+  const w = image.width();
+  const h = image.height();
+  if (!w || !h) throw new Error('Image has zero dimensions');
+
+  const surface = Skia.Surface.Make(w, h);
+  if (!surface) throw new Error('Failed to allocate Skia surface');
+
+  const effect = getSketchEffect();
+  const imageShader = image.makeShaderOptions(
+    TileMode.Clamp,
+    TileMode.Clamp,
+    FilterMode.Linear,
+    MipmapMode.None
+  );
+
+  const { r, g, b } = parseHexToRgb(inkColor);
+  const a = Math.max(0, Math.min(1, inkOpacity));
+
+  // Uniform order must match SKSL_SKETCH: px (float2), ink (half4).
+  const uniforms = [1 / w, 1 / h, r * a, g * a, b * a, a];
+  const shader = effect.makeShaderWithChildren(uniforms, [imageShader]);
+
+  const paint = Skia.Paint();
+  paint.setShader(shader);
+
+  const canvas = surface.getCanvas();
+  canvas.drawRect({ x: 0, y: 0, width: w, height: h }, paint);
+
+  return surface.makeImageSnapshot();
+}
+
+export function useSketchImage(
+  uri: string | null | undefined,
+  opts: SketchImageOptions = {}
+): SketchImageState {
+  const inkColor = opts.inkColor ?? '#1A1A1A';
+  const inkOpacity = opts.inkOpacity ?? 1;
+
+  const [sketchImage, setSketchImage] = useState<SkImage | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!uri) {
+      setSketchImage(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const key = `${uri}|${inkColor}|${inkOpacity}`;
+    const cached = sketchCache.get(key);
+    if (cached) {
+      setSketchImage(cached);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSketchImage(null);
+    setLoading(true);
+    setError(null);
+
+    buildSketchImage(uri, inkColor, inkOpacity)
+      .then((img) => {
+        if (cancelled) return;
+        sketchCache.set(key, img);
+        setSketchImage(img);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const e = err instanceof Error ? err : new Error(String(err));
+        setSketchImage(null);
+        setLoading(false);
+        setError(e);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, inkColor, inkOpacity]);
+
+  return { sketchImage, loading, error };
 }
