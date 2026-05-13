@@ -24,6 +24,15 @@ try {
 
 const STORAGE_KEY = '@aniseekr/pilgrimage/captures/v1';
 
+export interface SensorSnapshot {
+  /** meters to target spot at shutter time; null if location unavailable */
+  distanceMeters: number | null;
+  /** signed degrees: targetBearing − heading, wrapped to [-180, 180]; null if either sensor unavailable */
+  headingDeltaDeg: number | null;
+  /** signed degrees from level (pitch beta); null if motion unavailable */
+  tilt: number | null;
+}
+
 export interface PilgrimageCapture {
   spotId: string;
   /** local file URI (saved by expo-camera or via FileSystem cache). */
@@ -32,8 +41,10 @@ export interface PilgrimageCapture {
   compositeUri?: string;
   /** epoch ms */
   capturedAt: number;
-  /** orientation snapshot — phone heading in degrees when shutter fired. */
+  /** legacy raw heading at shutter; kept for backwards-compat */
   heading?: number;
+  /** new: alignment sensor snapshot taken at shutter time */
+  sensorSnapshot?: SensorSnapshot;
 }
 
 interface Index {

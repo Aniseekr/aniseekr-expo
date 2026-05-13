@@ -1,0 +1,186 @@
+// Tracing-paper edge overlay for the pilgrimage compare flow.
+// Decodes a URI image via Skia, runs Sobel edge detection through a
+// `RuntimeEffect` SKSL shader, snapshots the result, and exposes it as a
+// React-friendly hook. Failures resolve to `{edgeImage: null, error}` — never
+// a hash-seeded "plausible" placeholder (CLAUDE.md Rule 8).
+
+import { Skia, TileMode, FilterMode, MipmapMode } from '@shopify/react-native-skia';
+import type { SkImage, SkRuntimeEffect } from '@shopify/react-native-skia';
+import { useEffect, useState } from 'react';
+
+export interface EdgeImageOptions {
+  threshold?: number;
+  inkColor?: string;
+  inkOpacity?: number;
+}
+
+export interface EdgeImageState {
+  edgeImage: SkImage | null;
+  loading: boolean;
+  error: Error | null;
+}
+
+const DEFAULT_THRESHOLD = 0.18;
+const DEFAULT_INK_COLOR = '#FFFFFF';
+const DEFAULT_INK_OPACITY = 1;
+
+const SKSL = `
+uniform shader src;
+uniform float2 px;
+uniform float threshold;
+uniform half4 ink;
+
+half luma(half4 c) { return 0.299*c.r + 0.587*c.g + 0.114*c.b; }
+
+half4 main(float2 xy) {
+  half tl = luma(src.eval(xy + float2(-1.0, -1.0) * px));
+  half tm = luma(src.eval(xy + float2( 0.0, -1.0) * px));
+  half tr = luma(src.eval(xy + float2( 1.0, -1.0) * px));
+  half ml = luma(src.eval(xy + float2(-1.0,  0.0) * px));
+  half mr = luma(src.eval(xy + float2( 1.0,  0.0) * px));
+  half bl = luma(src.eval(xy + float2(-1.0,  1.0) * px));
+  half bm = luma(src.eval(xy + float2( 0.0,  1.0) * px));
+  half br = luma(src.eval(xy + float2( 1.0,  1.0) * px));
+  half gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
+  half gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
+  half mag = sqrt(gx*gx + gy*gy);
+  half edge = smoothstep(half(threshold), half(threshold) * 1.8, mag);
+  return ink * edge;
+}
+`;
+
+let cachedEffect: SkRuntimeEffect | null = null;
+function getSobelEffect(): SkRuntimeEffect {
+  if (cachedEffect) return cachedEffect;
+  const effect = Skia.RuntimeEffect.Make(SKSL);
+  if (!effect) throw new Error('Failed to compile Sobel SKSL shader');
+  cachedEffect = effect;
+  return effect;
+}
+
+const renderCache = new Map<string, SkImage>();
+
+function parseHexToRgb(hex: string): { r: number; g: number; b: number } {
+  const cleaned = hex.replace('#', '').trim();
+  const normalized =
+    cleaned.length === 3
+      ? cleaned
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : cleaned;
+  if (normalized.length !== 6) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
+  const n = parseInt(normalized, 16);
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid hex color: ${hex}`);
+  }
+  return {
+    r: ((n >> 16) & 0xff) / 255,
+    g: ((n >> 8) & 0xff) / 255,
+    b: (n & 0xff) / 255,
+  };
+}
+
+async function buildEdgeImage(
+  uri: string,
+  threshold: number,
+  inkColor: string,
+  inkOpacity: number
+): Promise<SkImage> {
+  const data = await Skia.Data.fromURI(uri);
+  if (!data) throw new Error('Failed to load image data');
+
+  const image = Skia.Image.MakeImageFromEncoded(data);
+  if (!image) throw new Error('Failed to decode image');
+
+  const w = image.width();
+  const h = image.height();
+  if (!w || !h) throw new Error('Image has zero dimensions');
+
+  const surface = Skia.Surface.Make(w, h);
+  if (!surface) throw new Error('Failed to allocate Skia surface');
+
+  const effect = getSobelEffect();
+  const imageShader = image.makeShaderOptions(
+    TileMode.Clamp,
+    TileMode.Clamp,
+    FilterMode.Linear,
+    MipmapMode.None
+  );
+
+  const { r, g, b } = parseHexToRgb(inkColor);
+  const a = Math.max(0, Math.min(1, inkOpacity));
+
+  // Uniform layout must match the SKSL declaration order:
+  // px (float2), threshold (float), ink (half4 = float4).
+  const uniforms = [1 / w, 1 / h, threshold, r * a, g * a, b * a, a];
+  const shader = effect.makeShaderWithChildren(uniforms, [imageShader]);
+
+  const paint = Skia.Paint();
+  paint.setShader(shader);
+
+  const canvas = surface.getCanvas();
+  canvas.drawRect({ x: 0, y: 0, width: w, height: h }, paint);
+
+  const snapshot = surface.makeImageSnapshot();
+  return snapshot;
+}
+
+export function useEdgeImage(
+  uri: string | null | undefined,
+  opts: EdgeImageOptions = {}
+): EdgeImageState {
+  const threshold = opts.threshold ?? DEFAULT_THRESHOLD;
+  const inkColor = opts.inkColor ?? DEFAULT_INK_COLOR;
+  const inkOpacity = opts.inkOpacity ?? DEFAULT_INK_OPACITY;
+
+  const [edgeImage, setEdgeImage] = useState<SkImage | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!uri) {
+      setEdgeImage(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const key = `${uri}|${threshold}|${inkColor}|${inkOpacity}`;
+    const cached = renderCache.get(key);
+    if (cached) {
+      setEdgeImage(cached);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setEdgeImage(null);
+    setLoading(true);
+    setError(null);
+
+    buildEdgeImage(uri, threshold, inkColor, inkOpacity)
+      .then((img) => {
+        if (cancelled) return;
+        renderCache.set(key, img);
+        setEdgeImage(img);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const e = err instanceof Error ? err : new Error(String(err));
+        setEdgeImage(null);
+        setLoading(false);
+        setError(e);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, threshold, inkColor, inkOpacity]);
+
+  return { edgeImage, loading, error };
+}

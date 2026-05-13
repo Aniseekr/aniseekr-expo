@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated as RNAnimated,
+  Linking,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
@@ -14,14 +22,24 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import { Canvas, Image as SkiaImage } from '@shopify/react-native-skia';
 import { useTheme } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../../components/themed';
+import {
+  locationService,
+  type LatLng,
+} from '../../../../libs/services/pilgrimage/location-service';
+import {
+  computeAlignmentScore,
+  type AlignmentSensors,
+} from '../../../../libs/services/pilgrimage/alignment-scoring';
+import { getWalkDirections } from '../../../../libs/services/pilgrimage/walk-directions';
+import { useEdgeImage } from '../../../../libs/services/pilgrimage/edge-image-skia';
 
 type SearchParams = {
   spotId: string;
@@ -34,10 +52,18 @@ type SearchParams = {
   spotLng: string;
 };
 
-function headingToCardinal(deg: number): string {
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  const idx = Math.round(deg / 45) % 8;
-  return dirs[idx] ?? 'N';
+function bearingBetween(from: LatLng, to: LatLng): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+  const phi1 = toRad(from.latitude);
+  const phi2 = toRad(to.latitude);
+  const dLambda = toRad(to.longitude - from.longitude);
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const theta = Math.atan2(y, x);
+  return (toDeg(theta) + 360) % 360;
 }
 
 export default function CompareCaptureScreen() {
@@ -52,6 +78,16 @@ export default function CompareCaptureScreen() {
   const animeId = params.animeId;
   const themeColor = params.themeColor || theme.accent;
 
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isLandscape = winW > winH;
+
+  const targetLocation = useMemo<LatLng | null>(() => {
+    const lat = Number(params.spotLat);
+    const lng = Number(params.spotLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { latitude: lat, longitude: lng };
+  }, [params.spotLat, params.spotLng]);
+
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -61,6 +97,15 @@ export default function CompareCaptureScreen() {
   const [heading, setHeading] = useState<number | null>(null);
   const [tilt, setTilt] = useState<number | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [overlayMode, setOverlayMode] = useState<'color' | 'edge'>('color');
+  const [lockedAt, setLockedAt] = useState<number | null>(null);
+  const [perfectFiredAt, setPerfectFiredAt] = useState<number | null>(null);
+  const [showPerfectBanner, setShowPerfectBanner] = useState(false);
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const perfectOpacity = useRef(new RNAnimated.Value(0)).current;
+  const hintOpacity = useRef(new RNAnimated.Value(1)).current;
+  const [hintIconLandscape, setHintIconLandscape] = useState(false);
 
   // Overlay gesture transforms
   const scale = useSharedValue(1);
@@ -82,6 +127,27 @@ export default function CompareCaptureScreen() {
       requestPermission().catch(() => undefined);
     }
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    let cancelled = false;
+    locationService
+      .getCurrentLocation()
+      .then((loc) => {
+        if (!cancelled && loc) setUserLocation(loc);
+      })
+      .catch(() => undefined);
+
+    const unsubscribe = locationService.subscribeToUpdates(
+      (loc) => {
+        if (!cancelled) setUserLocation(loc);
+      },
+      { distanceIntervalMeters: 5, timeIntervalMs: 3000 }
+    );
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     let magSub: { remove: () => void } | null = null;
@@ -114,6 +180,91 @@ export default function CompareCaptureScreen() {
       motionSub?.remove();
     };
   }, []);
+
+  const targetBearing = useMemo<number | null>(() => {
+    if (!userLocation || !targetLocation) return null;
+    return bearingBetween(userLocation, targetLocation);
+  }, [userLocation, targetLocation]);
+
+  const sensors = useMemo<AlignmentSensors>(
+    () => ({ userLocation, targetLocation, heading, targetBearing, tilt }),
+    [userLocation, targetLocation, heading, targetBearing, tilt]
+  );
+
+  const score = useMemo(() => computeAlignmentScore(sensors), [sensors]);
+  const walk = useMemo(() => getWalkDirections(sensors), [sensors]);
+
+  // Hysteresis: lock at >=0.9, only release below 0.85 to avoid flapping.
+  useEffect(() => {
+    const total = score.total;
+    if (total == null) {
+      if (lockedAt !== null) setLockedAt(null);
+      return;
+    }
+    if (total >= 0.9 && lockedAt === null) {
+      setLockedAt(Date.now());
+    } else if (total < 0.85 && lockedAt !== null) {
+      setLockedAt(null);
+    }
+  }, [score.total, lockedAt]);
+
+  // Fire the perfect-moment banner once after the lock has held for 800 ms.
+  useEffect(() => {
+    if (lockedAt === null) return;
+    if (perfectFiredAt !== null && perfectFiredAt >= lockedAt) return;
+    const elapsed = Date.now() - lockedAt;
+    const delay = Math.max(0, 800 - elapsed);
+    const timer = setTimeout(() => {
+      if (lockedAt === null) return;
+      hapticsBridge.success();
+      setPerfectFiredAt(Date.now());
+      setShowPerfectBanner(true);
+      RNAnimated.timing(perfectOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      setTimeout(() => {
+        RNAnimated.timing(perfectOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => setShowPerfectBanner(false));
+      }, 1600);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [lockedAt, perfectFiredAt, perfectOpacity]);
+
+  const { edgeImage, loading: edgeLoading } = useEdgeImage(
+    overlayMode === 'edge' ? imageUrl : null,
+    { inkColor: themeColor, inkOpacity: 1 }
+  );
+
+  // Once the user actually rotates to landscape we never want to nag them again.
+  useEffect(() => {
+    if (isLandscape) setHintDismissed(true);
+  }, [isLandscape]);
+
+  // Auto-dismiss the rotate hint after 5s — keep nag short.
+  useEffect(() => {
+    if (hintDismissed || isLandscape) return;
+    const timer = setTimeout(() => {
+      RNAnimated.timing(hintOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setHintDismissed(true));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [hintDismissed, isLandscape, hintOpacity]);
+
+  // Toggle the hint icon between portrait/landscape every 800 ms so users
+  // see the intended motion at a glance.
+  useEffect(() => {
+    if (hintDismissed || isLandscape) return;
+    const t = setInterval(() => setHintIconLandscape((v) => !v), 800);
+    return () => clearInterval(t);
+  }, [hintDismissed, isLandscape]);
 
   const pinch = useMemo(
     () =>
@@ -190,6 +341,11 @@ export default function CompareCaptureScreen() {
         return;
       }
       const headingValue = heading != null ? heading.toFixed(0) : '';
+      const snapshot = {
+        distanceMeters: score.distanceMeters,
+        headingDeltaDeg: score.headingDeltaDeg,
+        tilt,
+      };
       router.replace({
         pathname: '/pilgrimage/compare/preview',
         params: {
@@ -203,6 +359,11 @@ export default function CompareCaptureScreen() {
           animeId: animeId ?? '',
           themeColor,
           heading: headingValue,
+          distanceMeters:
+            snapshot.distanceMeters != null ? String(snapshot.distanceMeters) : '',
+          headingDeltaDeg:
+            snapshot.headingDeltaDeg != null ? String(snapshot.headingDeltaDeg) : '',
+          tilt: snapshot.tilt != null ? String(snapshot.tilt) : '',
         },
       });
     } catch (err) {
@@ -219,7 +380,24 @@ export default function CompareCaptureScreen() {
     router,
     spotId,
     themeColor,
+    score.distanceMeters,
+    score.headingDeltaDeg,
+    tilt,
   ]);
+
+  const toggleOverlayMode = useCallback(() => {
+    hapticsBridge.selection();
+    setOverlayMode((prev) => (prev === 'color' ? 'edge' : 'color'));
+  }, []);
+
+  const dismissHint = useCallback(() => {
+    hapticsBridge.tap();
+    RNAnimated.timing(hintOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setHintDismissed(true));
+  }, [hintOpacity]);
 
   const toggleFacing = useCallback(() => {
     hapticsBridge.selection();
@@ -293,12 +471,32 @@ export default function CompareCaptureScreen() {
 
         <GestureDetector gesture={composedGesture}>
           <Animated.View style={[styles.overlayWrap, overlayStyle]} pointerEvents="auto">
-            <Image
-              source={{ uri: imageUrl }}
-              style={[styles.overlayImage, { opacity }]}
-              contentFit="contain"
-              transition={120}
-            />
+            {overlayMode === 'color' ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={[styles.overlayImage, { opacity }]}
+                contentFit="contain"
+                transition={120}
+              />
+            ) : (
+              <Canvas style={[styles.overlayImage, { opacity }]}>
+                {edgeImage ? (
+                  <SkiaImage
+                    image={edgeImage}
+                    x={0}
+                    y={0}
+                    width={winW}
+                    height={winH}
+                    fit="contain"
+                  />
+                ) : null}
+              </Canvas>
+            )}
+            {overlayMode === 'edge' && edgeLoading ? (
+              <View style={styles.edgeLoader} pointerEvents="none">
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            ) : null}
           </Animated.View>
         </GestureDetector>
 
@@ -353,31 +551,16 @@ export default function CompareCaptureScreen() {
           </View>
         </View>
 
-        <View style={[styles.telemetryStrip, { bottom: insets.bottom + 188 }]}>
-          {heading != null ? (
-            <View style={styles.telemetryCell}>
-              <Ionicons name="compass" size={12} color={themeColor} />
-              <ThemedText
-                variant="captionSmall"
-                weight="700"
-                style={{ color: '#fff' }}>
-                {Math.round(heading)}° {headingToCardinal(heading)}
-              </ThemedText>
-            </View>
-          ) : null}
-          {tilt != null ? (
-            <View style={styles.telemetryCell}>
-              <Ionicons name="speedometer" size={12} color={themeColor} />
-              <ThemedText
-                variant="captionSmall"
-                weight="700"
-                style={{ color: '#fff' }}>
-                {tilt >= 0 ? '↓' : '↑'} {Math.abs(tilt).toFixed(0)}°
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
+        <AlignmentOverlay
+          score={score}
+          walk={walk}
+          tilt={tilt}
+          theme={theme}
+          themeColor={themeColor}
+          bottom={insets.bottom + 188}
+        />
 
+        {/* v1 fallback: bottom bar stays anchored to the bottom in landscape too — rotation hint alone delivers the framing UX. */}
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
           <LinearGradient
             colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']}
@@ -404,6 +587,17 @@ export default function CompareCaptureScreen() {
           </View>
 
           <View style={styles.actionRow}>
+            <CircleBtn
+              icon={overlayMode === 'edge' ? 'color-palette-outline' : 'pencil'}
+              accessibilityLabel={
+                overlayMode === 'edge'
+                  ? 'Switch to colour overlay'
+                  : 'Switch to edge overlay'
+              }
+              onPress={toggleOverlayMode}
+              active={overlayMode === 'edge'}
+              activeColor={themeColor}
+            />
             <CircleBtn
               icon={grid ? 'grid' : 'grid-outline'}
               accessibilityLabel="Toggle rule-of-thirds grid"
@@ -437,6 +631,54 @@ export default function CompareCaptureScreen() {
             Pinch · drag · twist the reference to align
           </ThemedText>
         </View>
+
+        {showPerfectBanner ? (
+          <RNAnimated.View
+            pointerEvents="none"
+            style={[
+              styles.perfectBanner,
+              {
+                bottom: insets.bottom + 220,
+                backgroundColor: theme.status.success,
+                opacity: perfectOpacity,
+              },
+            ]}>
+            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+            <ThemedText
+              variant="bodySmall"
+              weight="700"
+              style={{ color: '#fff' }}>
+              完美時刻 · Perfect alignment
+            </ThemedText>
+          </RNAnimated.View>
+        ) : null}
+
+        {!isLandscape && !hintDismissed ? (
+          <RNAnimated.View
+            style={[styles.rotateHintWrap, { opacity: hintOpacity }]}
+            pointerEvents="box-none">
+            <Pressable
+              onPress={dismissHint}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss rotate hint"
+              style={({ pressed }) => [
+                styles.rotateHint,
+                pressed && { opacity: 0.85 },
+              ]}>
+              <Ionicons
+                name={hintIconLandscape ? 'phone-landscape-outline' : 'phone-portrait-outline'}
+                size={18}
+                color="#fff"
+              />
+              <ThemedText
+                variant="captionSmall"
+                weight="700"
+                style={{ color: '#fff' }}>
+                請旋轉手機 · Rotate for 16:9 framing
+              </ThemedText>
+            </Pressable>
+          </RNAnimated.View>
+        ) : null}
       </View>
     </GestureHandlerRootView>
   );
@@ -481,6 +723,150 @@ function RuleOfThirdsGrid() {
       <View style={[styles.gridLine, styles.gridV, { left: '66.66%' }]} />
       <View style={[styles.gridLine, styles.gridH, { top: '33.33%' }]} />
       <View style={[styles.gridLine, styles.gridH, { top: '66.66%' }]} />
+    </View>
+  );
+}
+
+type AlignmentScoreShape = {
+  position: number | null;
+  heading: number | null;
+  tilt: number | null;
+  total: number | null;
+  distanceMeters: number | null;
+  headingDeltaDeg: number | null;
+};
+
+type WalkShape = {
+  distanceText: string | null;
+  headingText: string | null;
+  tiltText: string | null;
+};
+
+function AlignmentOverlay({
+  score,
+  walk,
+  tilt,
+  theme,
+  themeColor,
+  bottom,
+}: {
+  score: AlignmentScoreShape;
+  walk: WalkShape;
+  tilt: number | null;
+  theme: ReturnType<typeof useTheme>['theme'];
+  themeColor: string;
+  bottom: number;
+}) {
+  const hasAny = score.position !== null || score.heading !== null || score.tilt !== null;
+  if (!hasAny) return null;
+
+  const walkLine = [walk.distanceText, walk.headingText, walk.tiltText]
+    .filter((s): s is string => Boolean(s))
+    .join(' · ');
+
+  const totalPct = score.total !== null ? Math.round(score.total * 100) : null;
+  const totalTone =
+    score.total === null
+      ? '#fff'
+      : score.total >= 0.8
+      ? theme.status.success
+      : score.total >= 0.5
+      ? themeColor
+      : theme.status.warning;
+
+  return (
+    <View style={[styles.alignmentWrap, { bottom }]} pointerEvents="none">
+      <View style={styles.alignmentBars}>
+        {score.position !== null ? (
+          <AlignmentBar
+            label="Position"
+            fill={score.position}
+            value={
+              score.distanceMeters !== null
+                ? `${score.distanceMeters.toFixed(1)} m`
+                : '—'
+            }
+            tone={themeColor}
+          />
+        ) : null}
+        {score.heading !== null ? (
+          <AlignmentBar
+            label="Heading"
+            fill={score.heading}
+            value={
+              score.headingDeltaDeg !== null
+                ? `±${Math.round(Math.abs(score.headingDeltaDeg))}°`
+                : '—'
+            }
+            tone={themeColor}
+          />
+        ) : null}
+        {score.tilt !== null ? (
+          <AlignmentBar
+            label="Tilt"
+            fill={score.tilt}
+            value={
+              tilt !== null
+                ? `${tilt >= 0 ? '+' : '−'}${Math.abs(tilt).toFixed(0)}°`
+                : '—'
+            }
+            tone={themeColor}
+          />
+        ) : null}
+        {walkLine ? (
+          <ThemedText
+            variant="captionSmall"
+            weight="600"
+            style={{ color: 'rgba(255,255,255,0.85)', marginTop: 4 }}>
+            {walkLine}
+          </ThemedText>
+        ) : null}
+      </View>
+      {totalPct !== null ? (
+        <View style={styles.alignmentTotal}>
+          <ThemedText
+            variant="displayMedium"
+            weight="700"
+            style={{ color: totalTone, lineHeight: 32 }}>
+            {totalPct}
+          </ThemedText>
+          <ThemedText variant="bodySmall" weight="700" style={{ color: totalTone }}>
+            %
+          </ThemedText>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function AlignmentBar({
+  label,
+  fill,
+  value,
+  tone,
+}: {
+  label: string;
+  fill: number;
+  value: string;
+  tone: string;
+}) {
+  const pct = Math.max(0, Math.min(1, fill)) * 100;
+  return (
+    <View style={styles.alignmentRow}>
+      <ThemedText variant="captionSmall" weight="700" style={styles.alignmentLabel}>
+        {label}
+      </ThemedText>
+      <View style={[styles.alignmentTrack, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+        <View
+          style={[
+            styles.alignmentFill,
+            { width: `${pct}%`, backgroundColor: tone },
+          ]}
+        />
+      </View>
+      <ThemedText variant="captionSmall" weight="700" style={styles.alignmentValue}>
+        {value}
+      </ThemedText>
     </View>
   );
 }
@@ -597,22 +983,88 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#FF3B30',
   },
-  telemetryStrip: {
+  alignmentWrap: {
     position: 'absolute',
     left: 14,
     right: 14,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  telemetryCell: {
+  alignmentBars: {
+    flex: 1,
+    gap: 6,
+  },
+  alignmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 8,
+  },
+  alignmentLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    width: 56,
+  },
+  alignmentTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  alignmentFill: {
+    height: 6,
+    borderRadius: 3,
+  },
+  alignmentValue: {
+    color: '#fff',
+    width: 56,
+    textAlign: 'right',
+  },
+  alignmentTotal: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  perfectBanner: {
+    position: 'absolute',
+    left: '15%',
+    right: '15%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  rotateHintWrap: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  rotateHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  edgeLoader: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
 });

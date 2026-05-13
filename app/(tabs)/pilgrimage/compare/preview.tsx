@@ -16,8 +16,48 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../../components/themed';
-import { recordCapture } from '../../../../libs/services/pilgrimage/captures';
+import {
+  recordCapture,
+  type SensorSnapshot,
+} from '../../../../libs/services/pilgrimage/captures';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
+
+// Real-data alignment helpers — inline so this screen has no dependency on
+// services that aren't yet in place. See CLAUDE.md Rule 8: numbers shown to
+// the user must come from real sensor input, never a hash/seed.
+function overallScore(s: SensorSnapshot): number | null {
+  const { distanceMeters, headingDeltaDeg, tilt } = s;
+  if (distanceMeters == null || headingDeltaDeg == null || tilt == null) return null;
+  const pos = Math.max(0, 1 - distanceMeters / 30);
+  const head = 1 - Math.abs(headingDeltaDeg) / 180;
+  const tlt = Math.max(0, 1 - Math.abs(tilt) / 45);
+  return 0.4 * pos + 0.4 * head + 0.2 * tlt;
+}
+
+function getRetakeTip(s: SensorSnapshot | null): string | null {
+  if (!s) return null;
+  if (s.headingDeltaDeg != null && Math.abs(s.headingDeltaDeg) > 15) {
+    return s.headingDeltaDeg > 0
+      ? '下次站位時可以再向右轉一點，方位會更貼近原圖。'
+      : '下次站位時可以再向左轉一點，方位會更貼近原圖。';
+  }
+  if (s.distanceMeters != null && s.distanceMeters > 20) {
+    return '下次可以走近一點再拍，距離越近構圖越接近原圖。';
+  }
+  if (s.tilt != null && Math.abs(s.tilt) > 10) {
+    return s.tilt > 0
+      ? '下次手機可以再放平一點，避免地面比例失衡。'
+      : '下次手機稍微往下一點，避免天空佔太多畫面。';
+  }
+  return null;
+}
+
+function formatSignedDeg(value: number): string {
+  const rounded = Math.round(value);
+  if (rounded > 0) return `+${rounded}°`;
+  if (rounded < 0) return `−${Math.abs(rounded)}°`;
+  return '0°';
+}
 
 type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider';
 
@@ -43,21 +83,30 @@ export default function ComparePreviewScreen() {
   const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions();
   const [stagePx, setStagePx] = useState({ width: 0, height: 0 });
 
-  // Deterministic "match score" — pseudo-AI for now. We seed a per-spot hash so
-  // each scene reads a consistent feedback, and bias it slightly higher when a
-  // heading was captured (means the user was at least pointing the right way).
-  const matchScores = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < spotId.length; i++) hash = (hash * 31 + spotId.charCodeAt(i)) | 0;
-    const seedFor = (offset: number) =>
-      Math.abs(((hash >> offset) % 18) + (heading != null ? 78 : 70));
-    return {
-      overall: Math.min(99, seedFor(0)),
-      angle: Math.min(99, seedFor(2)),
-      composition: Math.min(99, seedFor(4)),
-      scale: Math.min(99, seedFor(6)),
-    };
-  }, [spotId, heading]);
+  // Alignment sensor snapshot — strictly real data from capture-time sensors.
+  // Returns null when no sensor reading was passed; the UI then omits the
+  // alignment cards instead of inventing a score.
+  const sensorSnapshot = useMemo<SensorSnapshot | null>(() => {
+    const dist = getNumberParam(params, 'distanceMeters');
+    const head = getNumberParam(params, 'headingDeltaDeg');
+    const tlt = getNumberParam(params, 'tilt');
+    if (dist == null && head == null && tlt == null) return null;
+    return { distanceMeters: dist, headingDeltaDeg: head, tilt: tlt };
+  }, [params]);
+
+  const overall = useMemo(
+    () => (sensorSnapshot ? overallScore(sensorSnapshot) : null),
+    [sensorSnapshot]
+  );
+
+  const retakeTip = useMemo(() => getRetakeTip(sensorSnapshot), [sensorSnapshot]);
+
+  const overallTone = useMemo(() => {
+    if (overall == null) return theme.accent;
+    if (overall >= 0.8) return theme.status.success;
+    if (overall >= 0.5) return theme.accent;
+    return theme.status.warning;
+  }, [overall, theme.accent, theme.status.success, theme.status.warning]);
 
   const stageRef = useRef<View>(null);
 
@@ -106,9 +155,10 @@ export default function ComparePreviewScreen() {
         compositeUri,
         capturedAt: Date.now(),
         heading: heading ?? undefined,
+        sensorSnapshot: sensorSnapshot ?? undefined,
       });
     },
-    [spotId, shotUri, heading]
+    [spotId, shotUri, heading, sensorSnapshot]
   );
 
   const snapshotComposite = useCallback(async (): Promise<string | null> => {
@@ -158,20 +208,23 @@ export default function ComparePreviewScreen() {
 
   const handleShare = useCallback(() => {
     hapticsBridge.tap();
+    const shareParams: Record<string, string> = {
+      spotId,
+      imageUrl,
+      shotUri,
+      name: sceneName,
+      ep: ep ?? '',
+      animeId: animeId ?? '',
+      themeColor,
+    };
+    if (overall != null) {
+      shareParams.matchScore = String(Math.round(overall * 100));
+    }
     router.push({
       pathname: '/pilgrimage/compare/share',
-      params: {
-        spotId,
-        imageUrl,
-        shotUri,
-        name: sceneName,
-        ep: ep ?? '',
-        animeId: animeId ?? '',
-        themeColor,
-        matchScore: String(matchScores.overall),
-      },
+      params: shareParams,
     });
-  }, [router, spotId, imageUrl, shotUri, sceneName, ep, animeId, themeColor, matchScores.overall]);
+  }, [router, spotId, imageUrl, shotUri, sceneName, ep, animeId, themeColor, overall]);
 
   const handleRetake = useCallback(() => {
     hapticsBridge.tap();
@@ -224,39 +277,88 @@ export default function ComparePreviewScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          <View style={[styles.scoreCard, { backgroundColor: theme.background.secondary, borderColor: theme.glassBorder }]}>
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="captionSmall" tone="secondary" weight="600">
-                Match Score · 對比度
-              </ThemedText>
-              <View style={styles.scoreValueRow}>
-                <ThemedText
-                  variant="displayMedium"
-                  weight="700"
-                  style={{ color: theme.status.success, lineHeight: 36 }}>
-                  {matchScores.overall}
+          {sensorSnapshot ? (
+            <View
+              style={[
+                styles.scoreCard,
+                {
+                  backgroundColor: theme.background.secondary,
+                  borderColor: theme.glassBorder,
+                },
+              ]}>
+              <View style={{ flex: 1, gap: 10 }}>
+                <ThemedText variant="captionSmall" tone="secondary" weight="600">
+                  Alignment · 對位回放
                 </ThemedText>
-                <ThemedText
-                  variant="bodyMedium"
-                  weight="700"
-                  style={{ color: theme.status.success }}>
-                  %
-                </ThemedText>
+                <View style={styles.pillRow}>
+                  {sensorSnapshot.distanceMeters != null ? (
+                    <View
+                      style={[
+                        styles.pill,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <ThemedText variant="bodySmall" weight="700">
+                        {`${sensorSnapshot.distanceMeters.toFixed(1)} m`}
+                      </ThemedText>
+                      <ThemedText variant="captionSmall" tone="secondary">
+                        距離 spot
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  {sensorSnapshot.headingDeltaDeg != null ? (
+                    <View
+                      style={[
+                        styles.pill,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <ThemedText variant="bodySmall" weight="700">
+                        {formatSignedDeg(sensorSnapshot.headingDeltaDeg)}
+                      </ThemedText>
+                      <ThemedText variant="captionSmall" tone="secondary">
+                        方位偏移
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                  {sensorSnapshot.tilt != null ? (
+                    <View
+                      style={[
+                        styles.pill,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <ThemedText variant="bodySmall" weight="700">
+                        {formatSignedDeg(sensorSnapshot.tilt)}
+                      </ThemedText>
+                      <ThemedText variant="captionSmall" tone="secondary">
+                        水平偏角
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-              <View style={[styles.scoreTrack, { backgroundColor: theme.background.tertiary }]}>
-                <View
-                  style={[
-                    styles.scoreFill,
-                    {
-                      backgroundColor: theme.status.success,
-                      width: `${matchScores.overall}%`,
-                    },
-                  ]}
-                />
-              </View>
+              {overall != null ? (
+                <View style={styles.overallWrap}>
+                  <ThemedText
+                    variant="displayMedium"
+                    weight="700"
+                    style={{ color: overallTone, lineHeight: 36 }}>
+                    {Math.round(overall * 100)}
+                  </ThemedText>
+                  <ThemedText variant="bodyMedium" weight="700" style={{ color: overallTone }}>
+                    %
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
-            <Ionicons name="checkmark-circle" size={26} color={theme.status.success} />
-          </View>
+          ) : null}
 
           <View style={styles.modeRow}>
             {(['stacked', 'sideBySide', 'overlay', 'slider'] as Mode[]).map((m) => {
@@ -368,44 +470,68 @@ export default function ComparePreviewScreen() {
           </View>
           </View>
 
-          <View style={[styles.analysisCard, { backgroundColor: theme.background.secondary, borderColor: theme.glassBorder }]}>
-            <View style={styles.analysisHeader}>
-              <ThemedText variant="titleMedium" weight="700">
-                Analysis · 構圖分析
-              </ThemedText>
-              <Ionicons name="sparkles" size={14} color={theme.accent} />
+          {sensorSnapshot ? (
+            <View
+              style={[
+                styles.analysisCard,
+                {
+                  backgroundColor: theme.background.secondary,
+                  borderColor: theme.glassBorder,
+                },
+              ]}>
+              <View style={styles.analysisHeader}>
+                <ThemedText variant="titleMedium" weight="700">
+                  Analysis · 對位細項
+                </ThemedText>
+                <Ionicons name="sparkles" size={14} color={theme.accent} />
+              </View>
+              {sensorSnapshot.distanceMeters != null ? (
+                <AnalysisBar
+                  label="位置 Position"
+                  value={Math.max(0, 1 - sensorSnapshot.distanceMeters / 30) * 100}
+                  rightLabel={`${sensorSnapshot.distanceMeters.toFixed(1)} m`}
+                  theme={theme}
+                  tone={theme.status.success}
+                />
+              ) : null}
+              {sensorSnapshot.headingDeltaDeg != null ? (
+                <AnalysisBar
+                  label="方位 Heading"
+                  value={(1 - Math.abs(sensorSnapshot.headingDeltaDeg) / 180) * 100}
+                  rightLabel={`±${Math.round(Math.abs(sensorSnapshot.headingDeltaDeg))}°`}
+                  theme={theme}
+                  tone={theme.status.info}
+                />
+              ) : null}
+              {sensorSnapshot.tilt != null ? (
+                <AnalysisBar
+                  label="水平 Tilt"
+                  value={Math.max(0, 1 - Math.abs(sensorSnapshot.tilt) / 45) * 100}
+                  rightLabel={formatSignedDeg(sensorSnapshot.tilt)}
+                  theme={theme}
+                  tone={theme.accent}
+                />
+              ) : null}
             </View>
-            <AnalysisBar
-              label="角度方位 Angle"
-              value={matchScores.angle}
-              theme={theme}
-              tone={theme.status.success}
-            />
-            <AnalysisBar
-              label="構圖匹配 Composition"
-              value={matchScores.composition}
-              theme={theme}
-              tone={theme.status.info}
-            />
-            <AnalysisBar
-              label="縮放比例 Scale"
-              value={matchScores.scale}
-              theme={theme}
-              tone={theme.accent}
-            />
-          </View>
+          ) : null}
 
-          <View style={[styles.tipCard, { backgroundColor: `${theme.accent}14`, borderColor: `${theme.accent}55` }]}>
-            <Ionicons name="bulb-outline" size={16} color={theme.accent} />
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="captionSmall" weight="700" style={{ color: theme.accent }}>
-                Tips to improve · 還能更好
-              </ThemedText>
-              <ThemedText variant="bodySmall" tone="secondary" style={{ marginTop: 2 }}>
-                試試後退 0.5m 再拍，並讓主體靠右側三分線交叉點。
-              </ThemedText>
+          {retakeTip ? (
+            <View
+              style={[
+                styles.tipCard,
+                { backgroundColor: `${theme.accent}14`, borderColor: `${theme.accent}55` },
+              ]}>
+              <Ionicons name="bulb-outline" size={16} color={theme.accent} />
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="captionSmall" weight="700" style={{ color: theme.accent }}>
+                  Tips to improve · 還能更好
+                </ThemedText>
+                <ThemedText variant="bodySmall" tone="secondary" style={{ marginTop: 2 }}>
+                  {retakeTip}
+                </ThemedText>
+              </View>
             </View>
-          </View>
+          ) : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
@@ -484,14 +610,17 @@ function LabeledImage({
 function AnalysisBar({
   label,
   value,
+  rightLabel,
   theme,
   tone,
 }: {
   label: string;
   value: number;
+  rightLabel: string;
   theme: ThemePalette;
   tone: string;
 }) {
+  const clamped = Math.max(0, Math.min(100, value));
   return (
     <View style={styles.analysisRow}>
       <View style={styles.analysisLabelRow}>
@@ -499,11 +628,11 @@ function AnalysisBar({
           {label}
         </ThemedText>
         <ThemedText variant="bodySmall" weight="700" style={{ color: tone }}>
-          {value}%
+          {rightLabel}
         </ThemedText>
       </View>
       <View style={[styles.analysisTrack, { backgroundColor: theme.background.tertiary }]}>
-        <View style={[styles.analysisFill, { backgroundColor: tone, width: `${value}%` }]} />
+        <View style={[styles.analysisFill, { backgroundColor: tone, width: `${clamped}%` }]} />
       </View>
     </View>
   );
@@ -579,21 +708,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
-  scoreValueRow: {
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+    minWidth: 84,
+  },
+  overallWrap: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 2,
-    marginTop: 2,
-  },
-  scoreTrack: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  scoreFill: {
-    height: 6,
-    borderRadius: 3,
   },
   analysisCard: {
     marginHorizontal: 16,
