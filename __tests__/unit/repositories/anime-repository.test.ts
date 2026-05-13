@@ -581,4 +581,47 @@ describe('AnimeRepository', () => {
     expect(calls[0].parsedBody.variables).toMatchObject({ search: 'adult-check', isAdult: false });
     expect(results.map((item) => item.title)).toEqual(['Safe']);
   });
+
+  it('REPO-041 legacy getGenres hides adult genre cards when SFW mode is on', async () => {
+    const calls: FetchCall[] = [];
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      const parsedBody = JSON.parse((init?.body as string) ?? '{}') as FetchCall['parsedBody'];
+      calls.push({ url: String(url), init, parsedBody });
+
+      if (parsedBody.query.includes('GenreCollection')) {
+        return fakeJson({
+          data: { GenreCollection: ['Action', 'Hentai', 'Ecchi', 'Comedy'] },
+        });
+      }
+
+      return fakeJson({
+        data: {
+          Page: {
+            media: [
+              makeAniListAnime({
+                id: 10,
+                title: {
+                  romaji: `${String(parsedBody.variables.genre)} Sample`,
+                  english: null,
+                  native: null,
+                },
+                genres: [String(parsedBody.variables.genre)],
+              }),
+            ],
+          },
+        },
+      });
+    });
+    AniListClient.__setDefaultForTests(
+      new AniListClient({ fetchImpl: fetchImpl as unknown as typeof fetch })
+    );
+
+    const genres = await AnimeRepository.getGenres();
+
+    expect(genres.map((genre) => genre.displayName)).toEqual(['Action', 'Comedy']);
+    expect(calls.map((call) => call.parsedBody.variables.genre).filter(Boolean)).toEqual([
+      'Action',
+      'Comedy',
+    ]);
+  });
 });
