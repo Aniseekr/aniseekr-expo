@@ -20,6 +20,8 @@ import type {
 } from '../../libs/services/data-sources/anime-data-source';
 import type { PlatformType } from '../../libs/services/auth/types';
 import { pilgrimageRepository } from '../../libs/services/pilgrimage/pilgrimage-repository';
+import { lookupBangumiByPlatformId } from '../../libs/services/pilgrimage/anitabi-cross-index';
+import { dataSourceConfig } from '../../libs/services/data-source-config';
 import { Skeleton } from '../../components/themed';
 import { AnimePilgrimageCard } from '../../components/pilgrimage/AnimePilgrimageCard';
 import type { AnitabiBangumi } from '../../libs/services/pilgrimage/types';
@@ -91,8 +93,20 @@ export default function AnimeDetailScreen() {
     let cancelled = false;
     if (!id) return;
     setPilgrimage(null);
+
+    // Use the active browse source so the repository's L2 cross-index lookup
+    // can short-circuit (anilist/myanimelist hit L2, others fall through to
+    // the L1 SQLite mapping table). Pre-resolving the bangumiId via L2 also
+    // gives the AnimePilgrimageCard a stable key when we hand it off later.
+    const sourcePlatform = dataSourceConfig.browseSource;
+    const directBangumiId = lookupBangumiByPlatformId(sourcePlatform, id);
+
     pilgrimageRepository
-      .getSpotsForAnime({ sourcePlatform: 'anilist', id })
+      .getSpotsForAnime({
+        sourcePlatform,
+        id,
+        bangumiId: directBangumiId,
+      })
       .then((result) => {
         if (cancelled) return;
         setPilgrimage(result);
@@ -277,7 +291,9 @@ export default function AnimeDetailScreen() {
             source={{ uri: anime.bannerImage || anime.image }}
             style={{ width: '100%', height: '100%', opacity: 0.6 }}
             contentFit="cover"
-            transition={200}
+            transition={120}
+            cachePolicy="memory-disk"
+            recyclingKey={anime.id}
           />
           <LinearGradient
             colors={['transparent', '#000']}
@@ -303,7 +319,9 @@ export default function AnimeDetailScreen() {
                 borderColor: 'rgba(255,255,255,0.1)',
               }}
               contentFit="cover"
-              transition={200}
+              transition={120}
+              cachePolicy="memory-disk"
+              recyclingKey={`${anime.id}-poster`}
             />
             <View className="flex-1 pb-2">
               <Text className="text-xl leading-tight font-bold text-white" numberOfLines={2}>

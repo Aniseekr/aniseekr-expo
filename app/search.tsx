@@ -21,11 +21,12 @@ import { AnimeRepository } from '../libs/repositories/anime-repository';
 import { ShimmerEffect } from '../components/common/ShimmerEffect';
 import { EmptyStateView } from '../components/common/EmptyStateView';
 import { ErrorStateView } from '../components/common/ErrorStateView';
-import { Colors, Radius, Spacing, Typography } from '../constants/DesignSystem';
+import { Colors, IconSize, Radius, Spacing, Typography } from '../constants/DesignSystem';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 import { isStringArray, safeJsonParse } from '../libs/utils/safe-json';
 import { pilgrimageRepository } from '../libs/services/pilgrimage/pilgrimage-repository';
 import { dataSourceConfig } from '../libs/services/data-source-config';
+import { lookupBangumiByPlatformId } from '../libs/services/pilgrimage/anitabi-cross-index';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -471,6 +472,9 @@ export default function SearchScreen() {
               <ResultCard
                 anime={item}
                 pending={resolvingId === item.id}
+                hasPilgrimage={
+                  lookupBangumiByPlatformId(dataSourceConfig.browseSource, item.id) !== null
+                }
                 onPress={() => handleSelect(item)}
               />
             )}
@@ -491,10 +495,17 @@ export default function SearchScreen() {
 interface ResultCardProps {
   anime: Anime;
   pending?: boolean;
+  /**
+   * Whether the L2 Anitabi cross-index resolved a pilgrimage entry for this
+   * anime. Renders a 📍 marker on the title row so users can see at a glance
+   * which results have real pilgrimage data — no fake markers; falsy = no
+   * marker, never a placeholder.
+   */
+  hasPilgrimage?: boolean;
   onPress: () => void;
 }
 
-function ResultCard({ anime, pending, onPress }: ResultCardProps) {
+function ResultCard({ anime, pending, hasPilgrimage, onPress }: ResultCardProps) {
   const score = typeof anime.score === 'number' ? formatScore(anime.score) : null;
   const tags = anime.tags?.slice(0, 3) ?? [];
   return (
@@ -502,7 +513,9 @@ function ResultCard({ anime, pending, onPress }: ResultCardProps) {
       onPress={onPress}
       disabled={pending}
       accessibilityRole="button"
-      accessibilityLabel={anime.title}
+      accessibilityLabel={
+        hasPilgrimage ? `${anime.title}, pilgrimage available` : anime.title
+      }
       style={({ pressed }) => [
         styles.resultCard,
         pressed && { opacity: 0.85 },
@@ -510,9 +523,20 @@ function ResultCard({ anime, pending, onPress }: ResultCardProps) {
       ]}>
       <Image source={{ uri: anime.image }} style={styles.thumb} contentFit="cover" transition={150} />
       <View style={styles.resultBody}>
-        <Text style={styles.resultTitle} numberOfLines={2}>
-          {anime.title}
-        </Text>
+        <View style={styles.resultTitleRow}>
+          <Text style={styles.resultTitle} numberOfLines={2}>
+            {anime.title}
+          </Text>
+          {hasPilgrimage ? (
+            <Ionicons
+              name="location-sharp"
+              size={IconSize.sm}
+              color={Colors.primary}
+              style={styles.pilgrimagePin}
+              accessibilityLabel="Has pilgrimage spots"
+            />
+          ) : null}
+        </View>
         <View style={styles.resultMetaRow}>
           {anime.format || anime.type ? (
             <View style={styles.typeChip}>
@@ -780,11 +804,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 4,
   },
+  resultTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+  },
   resultTitle: {
+    flex: 1,
+    minWidth: 0,
     color: Colors.text.primary,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  pilgrimagePin: {
+    padding: Spacing.xs,
+    marginTop: -Spacing.xs,
+    marginRight: -Spacing.xs,
   },
   resultMetaRow: {
     flexDirection: 'row',

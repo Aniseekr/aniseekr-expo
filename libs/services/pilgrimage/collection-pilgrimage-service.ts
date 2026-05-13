@@ -10,6 +10,7 @@ import { LocalDB } from '../../db';
 import type { PlatformType } from '../auth/types';
 import { dataSourceConfig } from '../data-source-config';
 import { idMappingService, IDMappingService } from '../sync/id-mapping-service';
+import { lookupBangumiByPlatformId } from './anitabi-cross-index';
 import { anitabiService, AnitabiService } from './anitabi-service';
 import type { AnitabiBangumi } from './types';
 
@@ -146,6 +147,14 @@ export class CollectionPilgrimageService {
       const parsed = Number(animeId);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     }
+
+    // L2 first: pure in-memory lookup. Hits short-circuit the SQLite
+    // round-trip for the (very common) anilist/myanimelist browse case.
+    const l2 = lookupBangumiByPlatformId(platform, animeId);
+    if (l2 !== null) return l2;
+
+    // L1 fallback: the legacy IDMappingService backed by SQLite + manual
+    // overrides. Slower but covers platforms outside the L2 index.
     try {
       const mapped = await this.mappingService.mapID(platform, animeId, 'bangumi');
       if (mapped === null || mapped === undefined) return null;

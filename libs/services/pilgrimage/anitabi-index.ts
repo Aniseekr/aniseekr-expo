@@ -34,6 +34,17 @@ export interface AnitabiIndexEntry {
   zoom: number;
   /** Total point count across the anime (`pointsLength` from `/lite`). */
   pointsLength: number;
+  /**
+   * Episode count from Anitabi (when known). Used downstream by the L2
+   * cross-index builder for AniList disambiguation. `null` when Anitabi has
+   * no value or the index pre-dates this column.
+   */
+  episodes?: number | null;
+  /**
+   * First-air year from Anitabi (when known). Same disambiguation role as
+   * `episodes`. Optional for backwards compatibility with older index files.
+   */
+  startYear?: number | null;
   /** Index build timestamp (epoch ms). */
   builtAt: number;
 }

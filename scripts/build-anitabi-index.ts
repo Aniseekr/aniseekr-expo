@@ -44,6 +44,19 @@ interface IndexEntry {
   lng: number;
   zoom: number;
   pointsLength: number;
+  /**
+   * Episode count from Anitabi (when present in /lite). Used by the L2
+   * anitabi-cross-index builder to disambiguate AniList candidates that share
+   * a Japanese title across series and movies. `null` when Anitabi has no
+   * value.
+   */
+  episodes: number | null;
+  /**
+   * First-air year from Anitabi (when present in /lite). Used by the L2
+   * anitabi-cross-index builder for the same disambiguation as `episodes`.
+   * `null` when Anitabi has no value.
+   */
+  startYear: number | null;
   builtAt: number;
 }
 
@@ -78,8 +91,45 @@ function toEntry(b: AnitabiBangumi, builtAt: number): IndexEntry {
     lng: round6(b.geo[1]),
     zoom: round1(b.zoom ?? 0),
     pointsLength: b.pointsLength ?? 0,
+    episodes: extractEpisodes(b),
+    startYear: extractStartYear(b),
     builtAt,
   };
+}
+
+// Anitabi's /lite payload is loosely typed — fields like `episodes`, `eps`,
+// `year`, `airYear`, `date` and `air` come and go depending on the source row.
+// Pull whatever's there into a plain integer and surface `null` otherwise so
+// the L2 cross-index builder can disambiguate AniList candidates.
+function extractEpisodes(b: AnitabiBangumi): number | null {
+  const raw = b as unknown as Record<string, unknown>;
+  const candidate = raw.episodes ?? raw.eps ?? raw.episode;
+  return coerceInt(candidate);
+}
+
+function extractStartYear(b: AnitabiBangumi): number | null {
+  const raw = b as unknown as Record<string, unknown>;
+  const direct = coerceInt(raw.startYear ?? raw.year ?? raw.airYear);
+  if (direct !== null) return direct;
+  const dateLike = raw.date ?? raw.air ?? raw.airDate ?? raw.startDate;
+  if (typeof dateLike === 'string' && dateLike.length >= 4) {
+    const parsed = Number(dateLike.slice(0, 4));
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
+function coerceInt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  }
+  return null;
 }
 
 function round1(n: number): number {

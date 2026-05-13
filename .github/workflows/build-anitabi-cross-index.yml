@@ -1,0 +1,77 @@
+name: Build Anitabi Cross-Index (L2)
+
+# Builds libs/services/pilgrimage/anitabi-cross-index.data.json by resolving
+# every Anitabi seed (Bangumi-keyed) to its AniList and MAL ids via the
+# AniList GraphQL API. Commits the regenerated JSON straight back to `main`.
+#
+# AniList allows 90 req/min unauthenticated; the script uses ~1 req/sec so a
+# full ~1072-row rebuild takes about 20 minutes. Incremental reruns (e.g.
+# when only a handful of seeds change) finish in a few minutes.
+
+on:
+  schedule:
+    # Nightly at 04:00 UTC — runs ~1h after build-id-mapping so any new
+    # mappings published upstream get reflected here on the same calendar day.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force full rebuild (ignore cached rows)'
+        type: boolean
+        default: false
+  # Re-run automatically whenever the seed index changes on main so the
+  # cross-index never drifts more than a commit behind.
+  push:
+    branches: [main]
+    paths:
+      - 'libs/services/pilgrimage/anitabi-index.data.json'
+      - 'scripts/build-anitabi-cross-index.ts'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Need real history so the auto-commit step can push back to main.
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build anitabi cross-index
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            bun scripts/build-anitabi-cross-index.ts --force
+          else
+            bun scripts/build-anitabi-cross-index.ts
+          fi
+
+      - name: Verify output exists
+        run: |
+          test -s libs/services/pilgrimage/anitabi-cross-index.data.json
+          ls -lh libs/services/pilgrimage/anitabi-cross-index.data.json
+
+      - name: Commit updated cross-index
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet libs/services/pilgrimage/anitabi-cross-index.data.json; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git add libs/services/pilgrimage/anitabi-cross-index.data.json
+          git commit -m "chore(pilgrimage): refresh anitabi cross-index [skip ci]"
+          git push origin HEAD:main

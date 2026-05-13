@@ -4,6 +4,7 @@
 // See spec/pilgrimage_spec.md §5 and spec/architecture.md §4.
 
 import { IDMappingService } from '../sync/id-mapping-service';
+import { lookupBangumiByPlatformId } from './anitabi-cross-index';
 import { AnitabiService, anitabiService } from './anitabi-service';
 import { LocationService, locationService, type LatLng } from './location-service';
 import type { AnitabiBangumi, AnitabiPointDetail } from './types';
@@ -148,7 +149,15 @@ export class PilgrimageRepository {
       if (Number.isFinite(parsed) && parsed > 0) return parsed;
     }
 
-    // 3. ID-mapping translation when source/id known.
+    // 3. L2 in-memory cross-index lookup. This is offline, cache-free and
+    //    ~free CPU, so we check it before the SQLite-backed L1 fallback to
+    //    short-circuit the common case where the user browses anilist/MAL.
+    if (context.sourcePlatform && context.id !== undefined && context.id !== null) {
+      const l2 = lookupBangumiByPlatformId(context.sourcePlatform, context.id);
+      if (l2 !== null) return l2;
+    }
+
+    // 4. L1 ID-mapping translation when source/id known.
     if (context.sourcePlatform && context.id !== undefined && context.id !== null) {
       try {
         const translated = await this.mappingService.mapID(
