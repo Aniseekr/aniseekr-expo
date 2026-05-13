@@ -141,11 +141,19 @@ export const MAP_BASE_CSS = `
    * --mc-bottom is set per-mount via an inline style on the HTML body.
    * Defaults to 12px (true-fullscreen maps). Hub-inline maps override it to
    * something larger so the +/-/recentre buttons clear the floating tab bar.
+   *
+   * The controls are split into two groups (.map-btn-group): zoom on top,
+   * locate on the bottom, with a wider gap between groups than between the
+   * +/- buttons themselves. Users read these as two distinct controls
+   * (camera framing vs. map zoom) so the spacing makes that obvious.
    */
   .map-controls {
     position: absolute; right: 12px; bottom: var(--mc-bottom, 12px); z-index: 1000;
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 14px;
     transition: bottom 0.2s ease;
+  }
+  .map-btn-group {
+    display: flex; flex-direction: column; gap: 6px;
   }
   /*
    * Lift the leaflet attribution chip above the floating tab bar in the same
@@ -244,10 +252,14 @@ export const MAP_BASE_BODY = `
 <div id="map-loading" class="map-loading"><div class="spinner"></div></div>
 <div id="map-banner" class="map-banner"><span class="dot"></span><span id="map-banner-label">Connecting…</span></div>
 <div class="map-controls" id="map-controls">
-  <div class="map-btn" data-act="in" role="button" aria-label="Zoom in">+</div>
-  <div class="map-btn" data-act="out" role="button" aria-label="Zoom out">&#8722;</div>
-  <div class="map-btn" data-act="re" role="button" aria-label="Recenter">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 .001 8.001A4 4 0 0 0 12 8zm9 3h-2.07A7.001 7.001 0 0 0 13 5.07V3h-2v2.07A7.001 7.001 0 0 0 5.07 11H3v2h2.07A7.001 7.001 0 0 0 11 18.93V21h2v-2.07A7.001 7.001 0 0 0 18.93 13H21v-2zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
+  <div class="map-btn-group" data-group="zoom">
+    <div class="map-btn" data-act="in" role="button" aria-label="Zoom in">+</div>
+    <div class="map-btn" data-act="out" role="button" aria-label="Zoom out">&#8722;</div>
+  </div>
+  <div class="map-btn-group" data-group="locate">
+    <div class="map-btn" data-act="re" role="button" aria-label="Recenter">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 .001 8.001A4 4 0 0 0 12 8zm9 3h-2.07A7.001 7.001 0 0 0 13 5.07V3h-2v2.07A7.001 7.001 0 0 0 5.07 11H3v2h2.07A7.001 7.001 0 0 0 11 18.93V21h2v-2.07A7.001 7.001 0 0 0 18.93 13H21v-2zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
+    </div>
   </div>
 </div>
 `;
