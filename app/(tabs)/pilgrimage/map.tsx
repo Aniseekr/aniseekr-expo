@@ -43,6 +43,11 @@ import {
 } from '../../../libs/services/pilgrimage/leaflet-map';
 import { getNumberParam } from '../../../libs/utils/route-params';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
+import {
+  getAnimeInBounds,
+  type AnitabiIndexEntry,
+  type BoundingBox,
+} from '../../../libs/services/pilgrimage/anitabi-index';
 
 interface HubMapMarker {
   bangumiId: number;
@@ -155,13 +160,20 @@ ${MAP_BASE_BODY}
 
   var clusterLayer = window.__makeClusterGroup({ ringColor: initial.ringColor, disableAt: 12 });
   clusterLayer.addTo(map);
-  var didFit = false;
+
+  // Dedup so we can call __updateMarkers(union) repeatedly without
+  // re-rendering existing markers. The map-bounds lazy loader appends new
+  // entries to the same state and re-injects the full union every change;
+  // additive handling here avoids flicker and unnecessary DOM churn.
+  var loadedIds = new Set();
+  var allBounds = [];
 
   window.__updateMarkers = function(markers) {
-    clusterLayer.clearLayers();
-    var bounds = [];
     var batch = [];
     for (var i = 0; i < markers.length; i++) {
+      var m = markers[i];
+      if (loadedIds.has(m.bangumiId)) continue;
+      loadedIds.add(m.bangumiId);
       (function(m){
         var html = '<div class="anime-marker" style="--ring:' + m.ringColor + '">' +
           (m.cover ? '<img src="' + m.cover + '" loading="lazy" />' : '') +
@@ -172,14 +184,15 @@ ${MAP_BASE_BODY}
         marker.__appId = m.bangumiId;
         marker.on('click', function() { window.__post({ type: 'animePress', id: m.bangumiId }); });
         batch.push(marker);
-        bounds.push([m.lat, m.lng]);
-      })(markers[i]);
+        allBounds.push([m.lat, m.lng]);
+      })(m);
     }
+    if (batch.length === 0) return;
     if (typeof clusterLayer.addLayers === 'function') clusterLayer.addLayers(batch);
     else for (var k = 0; k < batch.length; k++) clusterLayer.addLayer(batch[k]);
 
-    if (bounds.length > 0) {
-      try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
+    if (allBounds.length > 0) {
+      try { lastBounds = L.latLngBounds(allBounds); } catch (e) { /* noop */ }
     }
     // Do NOT auto fit-to-all-markers. Pilgrimage points span the whole
     // archipelago — fitting them all dropped the camera to ~zoom 6 (a
@@ -188,7 +201,6 @@ ${MAP_BASE_BODY}
     // applyUser, otherwise Tokyo Station) and let the user pan / hit the
     // recenter button (which uses lastBounds) when they actually want the
     // wider view.
-    didFit = true;
   };
 
   window.__focusAnime = function(target) {
@@ -196,7 +208,28 @@ ${MAP_BASE_BODY}
     try { map.flyTo([target.lat, target.lng], 11, { duration: 0.6 }); } catch (e) {}
   };
 
+  // Emit current bounds to RN so it can lazy-load more anime from the
+  // offline index. Debounced inside the WebView (300 ms) — Leaflet's
+  // moveend fires once per gesture, but pinch-zoom on iOS can chain a
+  // few in quick succession.
+  var boundsTimer = null;
+  function emitBounds() {
+    if (boundsTimer) { clearTimeout(boundsTimer); }
+    boundsTimer = setTimeout(function() {
+      try {
+        var b = map.getBounds();
+        window.__post({
+          type: 'bounds',
+          n: b.getNorth(), s: b.getSouth(),
+          e: b.getEast(), w: b.getWest(),
+        });
+      } catch (e) { /* noop */ }
+    }, 300);
+  }
+  map.on('moveend', emitBounds);
+
   window.__post({ type: 'ready' });
+  emitBounds();
 })();
 </script>
 </body>
@@ -273,10 +306,35 @@ export default function PilgrimageMapScreen() {
     };
   }, []);
 
+  // Lazy-loaded entries from the offline index, keyed by bangumi id and
+  // additive only (we never remove — the WebView dedups by id so duplicates
+  // are cheap, and pan-back-and-forth wants the markers to stay put).
+  const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(
+    () => new Map()
+  );
+
+  const handleBoundsChange = useCallback(
+    (bounds: BoundingBox) => {
+      const seen = new Set<number>();
+      for (const a of animes) seen.add(a.id);
+      for (const id of extraIndexed.keys()) seen.add(id);
+      const next = getAnimeInBounds(bounds, { exclude: seen, limit: 40 });
+      if (next.length === 0) return;
+      setExtraIndexed((prev) => {
+        const merged = new Map(prev);
+        for (const entry of next) merged.set(entry.id, entry);
+        return merged;
+      });
+    },
+    [animes, extraIndexed]
+  );
+
   const markers = useMemo<HubMapMarker[]>(() => {
     const out: HubMapMarker[] = [];
+    const seen = new Set<number>();
     for (const anime of animes) {
       if (!isValidGeo(anime.geo)) continue;
+      seen.add(anime.id);
       out.push({
         bangumiId: anime.id,
         lat: anime.geo[0],
@@ -288,8 +346,21 @@ export default function PilgrimageMapScreen() {
         ringColor: anime.color || theme.accent,
       });
     }
+    for (const entry of extraIndexed.values()) {
+      if (seen.has(entry.id)) continue;
+      out.push({
+        bangumiId: entry.id,
+        lat: entry.lat,
+        lng: entry.lng,
+        cover: entry.cover,
+        title: entry.cn || entry.title,
+        city: entry.city,
+        pointsLength: entry.pointsLength,
+        ringColor: entry.color || theme.accent,
+      });
+    }
     return out;
-  }, [animes, theme.accent]);
+  }, [animes, extraIndexed, theme.accent]);
 
   const handleAnimePress = useCallback(
     (bangumiId: number) => {
@@ -326,6 +397,7 @@ export default function PilgrimageMapScreen() {
           theme={theme}
           focusBangumiId={focusBangumiId}
           onAnimePress={handleAnimePress}
+          onBoundsChange={handleBoundsChange}
         />
       )}
 
@@ -352,6 +424,7 @@ interface FullscreenMapViewProps {
   theme: ThemePalette;
   focusBangumiId: number | null;
   onAnimePress: (bangumiId: number) => void;
+  onBoundsChange: (bounds: BoundingBox) => void;
 }
 
 function FullscreenMapView({
@@ -361,6 +434,7 @@ function FullscreenMapView({
   theme,
   focusBangumiId,
   onAnimePress,
+  onBoundsChange,
 }: FullscreenMapViewProps) {
   const webviewRef = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
@@ -414,13 +488,30 @@ function FullscreenMapView({
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
-      const data = JSON.parse(event.nativeEvent.data) as { type: string; id?: number };
+      const data = JSON.parse(event.nativeEvent.data) as {
+        type: string;
+        id?: number;
+        n?: number;
+        s?: number;
+        e?: number;
+        w?: number;
+      };
       if (data.type === 'ready') {
         setReady(true);
         return;
       }
       if (data.type === 'animePress' && typeof data.id === 'number') {
         onAnimePress(data.id);
+        return;
+      }
+      if (
+        data.type === 'bounds' &&
+        typeof data.n === 'number' &&
+        typeof data.s === 'number' &&
+        typeof data.e === 'number' &&
+        typeof data.w === 'number'
+      ) {
+        onBoundsChange({ north: data.n, south: data.s, east: data.e, west: data.w });
       }
     } catch {
       // ignore
