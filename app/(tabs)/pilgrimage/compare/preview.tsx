@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,10 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../../components/themed';
-import {
-  recordCapture,
-  type SensorSnapshot,
-} from '../../../../libs/services/pilgrimage/captures';
+import { recordCapture, type SensorSnapshot } from '../../../../libs/services/pilgrimage/captures';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 
 // Real-data alignment helpers — inline so this screen has no dependency on
@@ -75,6 +68,8 @@ export default function ComparePreviewScreen() {
   const animeId = getStringParam(params, 'animeId');
   const themeColor = getStringParam(params, 'themeColor') || theme.accent;
   const heading = getNumberParam(params, 'heading');
+  const spotLat = getStringParam(params, 'spotLat');
+  const spotLng = getStringParam(params, 'spotLng');
 
   const [mode, setMode] = useState<Mode>('stacked');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
@@ -216,6 +211,8 @@ export default function ComparePreviewScreen() {
       ep: ep ?? '',
       animeId: animeId ?? '',
       themeColor,
+      spotLat: spotLat ?? '',
+      spotLng: spotLng ?? '',
     };
     if (overall != null) {
       shareParams.matchScore = String(Math.round(overall * 100));
@@ -224,7 +221,19 @@ export default function ComparePreviewScreen() {
       pathname: '/pilgrimage/compare/share',
       params: shareParams,
     });
-  }, [router, spotId, imageUrl, shotUri, sceneName, ep, animeId, themeColor, overall]);
+  }, [
+    router,
+    spotId,
+    imageUrl,
+    shotUri,
+    sceneName,
+    ep,
+    animeId,
+    themeColor,
+    spotLat,
+    spotLng,
+    overall,
+  ]);
 
   const handleRetake = useCallback(() => {
     hapticsBridge.tap();
@@ -254,11 +263,7 @@ export default function ComparePreviewScreen() {
             <ThemedText variant="titleLarge" weight="700" align="center" numberOfLines={1}>
               對比結果
             </ThemedText>
-            <ThemedText
-              variant="captionSmall"
-              tone="secondary"
-              align="center"
-              numberOfLines={1}>
+            <ThemedText variant="captionSmall" tone="secondary" align="center" numberOfLines={1}>
               {ep ? `EP ${ep} · ` : ''}
               {sceneName}
             </ThemedText>
@@ -362,112 +367,116 @@ export default function ComparePreviewScreen() {
 
           <View style={styles.modeRow}>
             {(['stacked', 'sideBySide', 'overlay', 'slider'] as Mode[]).map((m) => {
-            const active = m === mode;
-            const label =
-              m === 'stacked'
-                ? '上下'
-                : m === 'sideBySide'
-                ? '左右'
-                : m === 'overlay'
-                ? '疊圖'
-                : '滑動';
-            return (
-              <Pressable
-                key={m}
-                onPress={() => {
-                  hapticsBridge.selection();
-                  setMode(m);
-                }}
-                style={({ pressed }) => [
-                  styles.modeBtn,
-                  {
-                    backgroundColor: active ? themeColor : theme.background.secondary,
-                    borderColor: active ? themeColor : theme.glassBorder,
-                  },
-                  pressed && { opacity: 0.85 },
-                ]}>
-                <ThemedText
-                  variant="bodySmall"
-                  weight={active ? '700' : '500'}
-                  style={{ color: active ? '#000' : theme.text.primary }}>
-                  {label}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.stageWrap}>
-          <View
-            ref={stageRef}
-            collapsable={false}
-            onLayout={handleStageLayout}
-            style={[styles.stage, { backgroundColor: theme.background.secondary }]}>
-            {mode === 'stacked' ? (
-              <View style={styles.stackedFlow}>
-                <LabeledImage uri={imageUrl} label="原圖 Anime" accent={themeColor} />
-                <LabeledImage uri={shotUri} label="你的拍 Yours" accent={themeColor} />
-              </View>
-            ) : mode === 'sideBySide' ? (
-              <View style={styles.sideFlow}>
-                <View style={styles.sideHalf}>
-                  <LabeledImage uri={imageUrl} label="原圖" accent={themeColor} compact />
-                </View>
-                <View style={styles.sideHalf}>
-                  <LabeledImage uri={shotUri} label="你的拍" accent={themeColor} compact />
-                </View>
-              </View>
-            ) : mode === 'overlay' ? (
-              <View style={styles.overlayFlow}>
-                <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={[styles.fullImage, StyleSheet.absoluteFillObject, { opacity: overlayOpacity }]}
-                  contentFit="cover"
-                />
-                <View style={styles.overlayControls}>
-                  <OpacityBar
-                    value={overlayOpacity}
-                    onChange={setOverlayOpacity}
-                    accent={themeColor}
-                  />
-                </View>
-              </View>
-            ) : (
-              <GestureDetector gesture={sliderPan}>
-                <View style={styles.sliderFlow}>
-                  <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
-                  <Animated.View style={[styles.sliderClip, sliderClipStyle]}>
-                    {stagePx.width > 0 ? (
-                      <Image
-                        source={{ uri: imageUrl }}
-                        style={{ width: stagePx.width, height: stagePx.height }}
-                        contentFit="cover"
-                      />
-                    ) : null}
-                  </Animated.View>
-                  <Animated.View
-                    style={[styles.sliderHandle, sliderHandleStyle]}
-                    pointerEvents="none">
-                    <View style={[styles.sliderKnob, { backgroundColor: themeColor }]}>
-                      <Ionicons name="chevron-back" size={12} color="#000" />
-                      <Ionicons name="chevron-forward" size={12} color="#000" />
-                    </View>
-                  </Animated.View>
-                  <View style={[styles.sliderHint, styles.sliderHintLeft]}>
-                    <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
-                      原圖
-                    </ThemedText>
-                  </View>
-                  <View style={[styles.sliderHint, styles.sliderHintRight]}>
-                    <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
-                      你的拍
-                    </ThemedText>
-                  </View>
-                </View>
-              </GestureDetector>
-            )}
+              const active = m === mode;
+              const label =
+                m === 'stacked'
+                  ? '上下'
+                  : m === 'sideBySide'
+                    ? '左右'
+                    : m === 'overlay'
+                      ? '疊圖'
+                      : '滑動';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => {
+                    hapticsBridge.selection();
+                    setMode(m);
+                  }}
+                  style={({ pressed }) => [
+                    styles.modeBtn,
+                    {
+                      backgroundColor: active ? themeColor : theme.background.secondary,
+                      borderColor: active ? themeColor : theme.glassBorder,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}>
+                  <ThemedText
+                    variant="bodySmall"
+                    weight={active ? '700' : '500'}
+                    style={{ color: active ? '#000' : theme.text.primary }}>
+                    {label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
+
+          <View style={styles.stageWrap}>
+            <View
+              ref={stageRef}
+              collapsable={false}
+              onLayout={handleStageLayout}
+              style={[styles.stage, { backgroundColor: theme.background.secondary }]}>
+              {mode === 'stacked' ? (
+                <View style={styles.stackedFlow}>
+                  <LabeledImage uri={imageUrl} label="原圖 Anime" accent={themeColor} />
+                  <LabeledImage uri={shotUri} label="你的拍 Yours" accent={themeColor} />
+                </View>
+              ) : mode === 'sideBySide' ? (
+                <View style={styles.sideFlow}>
+                  <View style={styles.sideHalf}>
+                    <LabeledImage uri={imageUrl} label="原圖" accent={themeColor} compact />
+                  </View>
+                  <View style={styles.sideHalf}>
+                    <LabeledImage uri={shotUri} label="你的拍" accent={themeColor} compact />
+                  </View>
+                </View>
+              ) : mode === 'overlay' ? (
+                <View style={styles.overlayFlow}>
+                  <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={[
+                      styles.fullImage,
+                      StyleSheet.absoluteFillObject,
+                      { opacity: overlayOpacity },
+                    ]}
+                    contentFit="cover"
+                  />
+                  <View style={styles.overlayControls}>
+                    <OpacityBar
+                      value={overlayOpacity}
+                      onChange={setOverlayOpacity}
+                      accent={themeColor}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <GestureDetector gesture={sliderPan}>
+                  <View style={styles.sliderFlow}>
+                    <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
+                    <Animated.View style={[styles.sliderClip, sliderClipStyle]}>
+                      {stagePx.width > 0 ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={{ width: stagePx.width, height: stagePx.height }}
+                          contentFit="cover"
+                        />
+                      ) : null}
+                    </Animated.View>
+                    <Animated.View
+                      style={[styles.sliderHandle, sliderHandleStyle]}
+                      pointerEvents="none">
+                      <View style={[styles.sliderKnob, { backgroundColor: themeColor }]}>
+                        <Ionicons name="chevron-back" size={12} color="#000" />
+                        <Ionicons name="chevron-forward" size={12} color="#000" />
+                      </View>
+                    </Animated.View>
+                    <View style={[styles.sliderHint, styles.sliderHintLeft]}>
+                      <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+                        原圖
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.sliderHint, styles.sliderHintRight]}>
+                      <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+                        你的拍
+                      </ThemedText>
+                    </View>
+                  </View>
+                </GestureDetector>
+              )}
+            </View>
           </View>
 
           {sensorSnapshot ? (
@@ -593,10 +602,7 @@ function LabeledImage({
   return (
     <View style={[styles.labelWrap, compact && { flex: 1 }]}>
       <Image source={{ uri }} style={styles.fullImage} contentFit="cover" />
-      <LinearGradient
-        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
-        style={styles.labelGradient}
-      />
+      <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.labelGradient} />
       <View style={[styles.labelBadge, { borderColor: accent }]}>
         <View style={[styles.labelDot, { backgroundColor: accent }]} />
         <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>

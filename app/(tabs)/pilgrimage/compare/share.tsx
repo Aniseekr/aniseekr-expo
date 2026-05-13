@@ -5,14 +5,7 @@
 // the native share sheet can send.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Switch,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -24,19 +17,15 @@ import { Radius, Spacing } from '../../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../../components/themed';
+import {
+  formatShareLocation,
+  getShareEpisode,
+  getShareMatchScore,
+  getShareSceneName,
+} from '../../../../libs/services/pilgrimage/share-card';
+import { getStringParam } from '../../../../libs/utils/route-params';
 
 type Template = 'polaroid' | 'classic' | 'minimal' | 'comic' | 'manga';
-
-type SearchParams = {
-  spotId: string;
-  imageUrl: string;
-  shotUri: string;
-  name: string;
-  ep: string;
-  animeId: string;
-  themeColor: string;
-  matchScore: string;
-};
 
 const TEMPLATES: { id: Template; label: string }[] = [
   { id: 'polaroid', label: 'Polaroid' },
@@ -50,13 +39,17 @@ export default function ShareComparisonScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const params = useLocalSearchParams<SearchParams>();
+  const params = useLocalSearchParams();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
-  const accent = params.themeColor || theme.accent;
+  const accent = getStringParam(params, 'themeColor') || theme.accent;
   const accentFg = readableTextOn(accent);
-  const sceneName = params.name || 'Scene';
-  const matchScore = Number(params.matchScore) || 0;
+  const sceneName = getShareSceneName(params);
+  const ep = getShareEpisode(params);
+  const matchScore = getShareMatchScore(params);
+  const locationText = formatShareLocation(params);
+  const imageUrl = getStringParam(params, 'imageUrl') ?? '';
+  const shotUri = getStringParam(params, 'shotUri') ?? '';
 
   const [template, setTemplate] = useState<Template>('polaroid');
   const [showScore, setShowScore] = useState(true);
@@ -113,13 +106,13 @@ export default function ShareComparisonScreen() {
       try {
         await Share.share({
           url: uri,
-          message: `${sceneName}${params.ep ? ` · EP ${params.ep}` : ''} #aniseekr${platform ? ` via ${platform}` : ''}`,
+          message: `${sceneName}${ep ? ` · EP ${ep}` : ''} #aniseekr${platform ? ` via ${platform}` : ''}`,
         });
       } catch (err) {
         console.warn('share failed', err);
       }
     },
-    [captureCard, sceneName, params.ep]
+    [captureCard, sceneName, ep]
   );
 
   return (
@@ -172,13 +165,13 @@ export default function ShareComparisonScreen() {
               <View style={styles.cardHeader}>
                 <View>
                   <ThemedText variant="titleMedium" weight="700">
-                    {params.name || 'K-On!'}
+                    {sceneName}
                   </ThemedText>
                   <ThemedText variant="captionSmall" tone="secondary">
-                    鴨川デルタ · Kamogawa Delta
+                    {ep ? `EP ${ep} · 聖地巡禮` : '聖地巡禮 · Pilgrimage'}
                   </ThemedText>
                 </View>
-                {showScore ? (
+                {showScore && matchScore !== null ? (
                   <View
                     style={[
                       styles.scoreBadge,
@@ -192,7 +185,7 @@ export default function ShareComparisonScreen() {
                       variant="captionSmall"
                       weight="700"
                       style={{ color: theme.status.success }}>
-                      Match {matchScore || 94}%
+                      Match {matchScore}%
                     </ThemedText>
                   </View>
                 ) : null}
@@ -200,42 +193,21 @@ export default function ShareComparisonScreen() {
 
               <View style={styles.cardImages}>
                 <View style={styles.cardHalf}>
-                  <Image
-                    source={{ uri: params.imageUrl }}
-                    style={styles.cardImage}
-                    contentFit="cover"
-                  />
+                  <Image source={{ uri: imageUrl }} style={styles.cardImage} contentFit="cover" />
                   <View style={[styles.cardImageBadge, { borderColor: accent }]}>
                     <View style={[styles.cardBadgeDot, { backgroundColor: accent }]} />
-                    <ThemedText
-                      variant="captionSmall"
-                      weight="700"
-                      style={{ color: '#fff' }}>
+                    <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
                       ANIME
                     </ThemedText>
                   </View>
                 </View>
                 <View style={styles.cardHalf}>
-                  <Image
-                    source={{ uri: params.shotUri }}
-                    style={styles.cardImage}
-                    contentFit="cover"
-                  />
-                  <View
-                    style={[
-                      styles.cardImageBadge,
-                      { borderColor: theme.status.success },
-                    ]}>
+                  <Image source={{ uri: shotUri }} style={styles.cardImage} contentFit="cover" />
+                  <View style={[styles.cardImageBadge, { borderColor: theme.status.success }]}>
                     <View
-                      style={[
-                        styles.cardBadgeDot,
-                        { backgroundColor: theme.status.success },
-                      ]}
+                      style={[styles.cardBadgeDot, { backgroundColor: theme.status.success }]}
                     />
-                    <ThemedText
-                      variant="captionSmall"
-                      weight="700"
-                      style={{ color: '#fff' }}>
+                    <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
                       REAL
                     </ThemedText>
                   </View>
@@ -253,9 +225,17 @@ export default function ShareComparisonScreen() {
                 ) : null}
                 {showLocation ? (
                   <View style={styles.metaCell}>
-                    <Ionicons name="location" size={12} color={theme.accent} />
-                    <ThemedText variant="captionSmall" weight="600" style={{ color: theme.accent }}>
-                      35.0316°N
+                    <Ionicons
+                      name="location"
+                      size={12}
+                      color={locationText ? theme.accent : theme.text.secondary}
+                    />
+                    <ThemedText
+                      variant="captionSmall"
+                      tone={locationText ? undefined : 'secondary'}
+                      weight="600"
+                      style={locationText ? { color: theme.accent } : undefined}>
+                      {locationText ?? 'GPS unavailable'}
                     </ThemedText>
                   </View>
                 ) : null}
