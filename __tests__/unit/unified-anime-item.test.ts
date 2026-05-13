@@ -270,6 +270,36 @@ describe('UnifiedAnimeItem — merge', () => {
   });
 });
 
+describe('UnifiedAnimeItem — adult content detection', () => {
+  it('UAI-070 flags iOS SFW blacklist genres and tags case-insensitively', () => {
+    expect(new UnifiedAnimeItem({ title: 'A', genres: ['Ecchi'] }).isAdult).toBe(true);
+    expect(new UnifiedAnimeItem({ title: 'B', genres: ['harem'] }).isAdult).toBe(true);
+    expect(new UnifiedAnimeItem({ title: 'C', tags: ['Sexual Violence'] }).isAdult).toBe(true);
+    expect(new UnifiedAnimeItem({ title: 'D', tags: ['nudity'] }).isAdult).toBe(true);
+    expect(new UnifiedAnimeItem({ title: 'E', genres: ['Space'], tags: ['School'] }).isAdult).toBe(
+      false
+    );
+  });
+
+  it('UAI-071 preserves an explicit adult flag when merging platform items', () => {
+    const explicitAdult = new UnifiedAnimeItem({
+      title: 'Adult source flag',
+      isAdult: true,
+      platformData: { anilist: { id: '1' } },
+    });
+    const safeMetadata = new UnifiedAnimeItem({
+      title: 'Safe-looking metadata',
+      genres: ['Drama'],
+      tags: ['School'],
+      platformData: { bangumi: { id: '2' } },
+    });
+
+    const merged = UnifiedAnimeItem.merge([explicitAdult, safeMetadata]);
+
+    expect(merged?.isAdult).toBe(true);
+  });
+});
+
 describe('UnifiedAnimeItem — localization & synonym preservation', () => {
   it('UAI-060 traditional title autocomputed from titleChinese when not provided', () => {
     const item = new UnifiedAnimeItem({ title: 'A', titleChinese: '冰菓' });

@@ -12,6 +12,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, type Mock } from 'bun:test';
 import { AnimeRepository, CancellationError } from '../../../libs/repositories/anime-repository';
+import { AniListClient, type AniListAnime } from '../../../libs/clients/anilist-client';
 import {
   type AnimeDataSource,
   type AnimeGenre,
@@ -23,6 +24,12 @@ import { UnifiedAnimeItem } from '../../../libs/models/unified-anime-item';
 import { queryClient } from '../../../libs/services/query-client';
 import { IDMappingService, idMappingService } from '../../../libs/services/sync/id-mapping-service';
 import type { PlatformType } from '../../../libs/services/auth/types';
+
+interface FetchCall {
+  url: string;
+  init: RequestInit | undefined;
+  parsedBody: { query: string; variables: Record<string, unknown> };
+}
 
 // ---------- Helpers ----------
 
@@ -68,6 +75,46 @@ function makeItem(opts: { id: string; source: PlatformType; title?: string }): U
   });
 }
 
+function fakeJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function makeAniListAnime(overrides: Partial<AniListAnime> = {}): AniListAnime {
+  return {
+    id: 1,
+    idMal: null,
+    title: {
+      romaji: 'Safe Show',
+      english: 'Safe Show',
+      native: null,
+    },
+    coverImage: {
+      large: 'https://img/safe.jpg',
+      extraLarge: 'https://img/safe-xl.jpg',
+      color: null,
+    },
+    bannerImage: null,
+    averageScore: 80,
+    popularity: 100,
+    description: null,
+    format: 'TV',
+    episodes: 12,
+    duration: 24,
+    status: 'FINISHED',
+    season: 'WINTER',
+    seasonYear: 2024,
+    genres: ['Drama'],
+    tags: [],
+    studios: { nodes: [] },
+    startDate: { year: 2024, month: 1, day: 1 },
+    nextAiringEpisode: null,
+    ...overrides,
+  };
+}
+
 /**
  * Reset shared singletons. Note: `DataSourceConfig.__resetForTests` and
  * `QueryClient.__resetForTests` swap their singletons but leave the
@@ -81,6 +128,8 @@ async function resetSingletons(): Promise<void> {
   IDMappingService.__resetForTests();
   AnimeRepository.__resetForTests();
   await dataSourceConfig.setBrowseSource('anilist');
+  await dataSourceConfig.setAllowR18Content(false);
+  AniListClient.__setDefaultForTests(null);
   await CacheService.init();
   await CacheService.clear();
 }
@@ -206,7 +255,7 @@ describe('AnimeRepository', () => {
       repo.searchAnime('Bebop', 1, 'anilist'),
     ]);
     expect(callCount).toBe(1);
-    expect(a).toBe(b); // QueryClient caches the same Promise resolution.
+    expect(a).toEqual(b);
     expect(a.length).toBe(1);
   });
 
@@ -255,7 +304,7 @@ describe('AnimeRepository', () => {
     });
 
     // Pre-populate disk cache for the exact key the repository will compute.
-    const cacheKey = `seasonal_anilist_2024_WINTER_1`;
+    const cacheKey = `seasonal_anilist_2024_WINTER_1_r0`;
     const preExisting = [makeItem({ id: 'cached', source: 'anilist' })];
     await CacheService.set(cacheKey, preExisting, 60_000);
 
@@ -495,5 +544,41 @@ describe('AnimeRepository', () => {
     // jikan fallback was attempted but resolveMalId returned null → no call.
     expect(jikanStaff).not.toHaveBeenCalled();
     translateSpy.mockRestore();
+  });
+
+  it('REPO-040 legacy searchAnime sends isAdult=false and filters adult rows when SFW mode is on', async () => {
+    const calls: FetchCall[] = [];
+    const fetchImpl = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      const parsedBody = JSON.parse((init?.body as string) ?? '{}') as FetchCall['parsedBody'];
+      calls.push({ url: String(url), init, parsedBody });
+      return fakeJson({
+        data: {
+          Page: {
+            media: [
+              makeAniListAnime({ id: 1, title: { romaji: 'Safe', english: 'Safe', native: null } }),
+              makeAniListAnime({
+                id: 2,
+                title: { romaji: 'Explicit Adult', english: null, native: null },
+                isAdult: true,
+              }),
+              makeAniListAnime({
+                id: 3,
+                title: { romaji: 'Tag Adult', english: null, native: null },
+                genres: ['Ecchi'],
+              }),
+            ],
+          },
+        },
+      });
+    });
+    AniListClient.__setDefaultForTests(
+      new AniListClient({ fetchImpl: fetchImpl as unknown as typeof fetch })
+    );
+
+    const results = await AnimeRepository.searchAnime('adult-check', 1);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].parsedBody.variables).toMatchObject({ search: 'adult-check', isAdult: false });
+    expect(results.map((item) => item.title)).toEqual(['Safe']);
   });
 });

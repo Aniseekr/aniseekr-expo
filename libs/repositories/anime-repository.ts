@@ -42,6 +42,7 @@ import { KitsuDataSource } from '../services/data-sources/kitsu-data-source';
 import { ShikimoriDataSource } from '../services/data-sources/shikimori-data-source';
 import { SimklDataSource } from '../services/data-sources/simkl-data-source';
 import { dataSourceConfig } from '../services/data-source-config';
+import { filterSFWContent, hasAdultContentSignal } from '../services/sfw-content-filter';
 import { queryClient, type QueryKeyObject } from '../services/query-client';
 import { idMappingService } from '../services/sync/id-mapping-service';
 import { AnnictClient } from '../clients/annict-client';
@@ -316,7 +317,7 @@ export class AnimeRepository {
    */
   private applyAdultFilter(items: UnifiedAnimeItem[]): UnifiedAnimeItem[] {
     if (this.config.allowR18Content) return items;
-    return items.filter((it) => !it.isAdult);
+    return filterSFWContent(items);
   }
 
   async fetchAnimeGenres(preferredSource?: PlatformType): Promise<AnimeGenre[]> {
@@ -590,11 +591,13 @@ export class AnimeRepository {
   }
 
   static async getTopAnime(page = 1): Promise<Anime[]> {
-    const cacheKey = `top_anime_${page}`;
+    const cacheKey = `top_anime_${page}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime[]>(cacheKey);
     if (cached) return cached.map(mapAniListToAnime);
 
-    const data = await AniListClient.getTopAnime(page);
+    const data = filterAniListAnime(
+      await AniListClient.getTopAnime(page, 20, legacyAniListOptions())
+    );
     await CacheService.set(cacheKey, data, LEGACY_LIST_CACHE_TTL_MS);
     return data.map(mapAniListToAnime);
   }
@@ -623,7 +626,7 @@ export class AnimeRepository {
     const forceRefresh = options.forceRefresh === true;
     // perPage + maxItems are part of the cache key so different callers
     // (bangumi screen vs. rating hook) don't trample each other's payloads.
-    const cacheKey = `seasonal_${targetSeason}_${targetYear}_${page}_p${perPage}_m${maxItems}`;
+    const cacheKey = `seasonal_${targetSeason}_${targetYear}_${page}_p${perPage}_m${maxItems}_r${r18CacheFlag()}`;
 
     if (!forceRefresh) {
       const cached = await CacheService.get<AniListAnime[]>(cacheKey);
@@ -637,9 +640,10 @@ export class AnimeRepository {
         targetSeason,
         targetYear,
         currentPage,
-        perPage
+        perPage,
+        legacyAniListOptions()
       );
-      collected.push(...media);
+      collected.push(...filterAniListAnime(media));
       if (!hasNextPage || media.length === 0) break;
       currentPage += 1;
     }
@@ -649,27 +653,31 @@ export class AnimeRepository {
   }
 
   static async searchAnime(query: string, page = 1): Promise<Anime[]> {
-    const cacheKey = `search_${query}_${page}`;
+    const cacheKey = `search_${query}_${page}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime[]>(cacheKey);
     if (cached) return cached.map(mapAniListToAnime);
 
-    const data = await AniListClient.searchAnime(query, page);
+    const data = filterAniListAnime(
+      await AniListClient.searchAnime(query, page, 20, legacyAniListOptions())
+    );
     await CacheService.set(cacheKey, data, LEGACY_SEARCH_CACHE_TTL_MS);
     return data.map(mapAniListToAnime);
   }
 
   static async getAnimeByGenre(genre: string, page = 1): Promise<Anime[]> {
-    const cacheKey = `genre_${genre}_${page}`;
+    const cacheKey = `genre_${genre}_${page}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime[]>(cacheKey);
     if (cached) return cached.map(mapAniListToAnime);
 
-    const data = await AniListClient.getAnimeByGenre(genre, page);
+    const data = filterAniListAnime(
+      await AniListClient.getAnimeByGenre(genre, page, 20, legacyAniListOptions())
+    );
     await CacheService.set(cacheKey, data, LEGACY_LIST_CACHE_TTL_MS);
     return data.map(mapAniListToAnime);
   }
 
   static async getGenres(): Promise<Genre[]> {
-    const cacheKey = `genres_list_v2`;
+    const cacheKey = `genres_list_v2_r${r18CacheFlag()}`;
     const cached = await CacheService.get<Genre[]>(cacheKey);
     if (cached) return cached;
 
@@ -678,7 +686,9 @@ export class AnimeRepository {
     const genresWithImages: Genre[] = await Promise.all(
       genres.slice(0, 20).map(async (name) => {
         try {
-          const anime = await AniListClient.getAnimeByGenre(name, 1, 1);
+          const anime = filterAniListAnime(
+            await AniListClient.getAnimeByGenre(name, 1, 1, legacyAniListOptions())
+          );
           const image = anime[0]?.coverImage?.extraLarge ?? anime[0]?.coverImage?.large ?? '';
           return {
             id: name,
@@ -696,11 +706,14 @@ export class AnimeRepository {
   }
 
   static async getAnimeDetails(id: string): Promise<Anime> {
-    const cacheKey = `anime_detail_${id}`;
+    const cacheKey = `anime_detail_${id}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime>(cacheKey);
     if (cached) return mapAniListDetailToAnime(cached);
 
     const data = await AniListClient.getAnimeDetails(Number(id));
+    if (!dataSourceConfig.allowR18Content && !isAniListAnimeSFW(data)) {
+      throw new Error('Adult content is hidden by current settings');
+    }
     await CacheService.set(cacheKey, data, LEGACY_DETAIL_CACHE_TTL_MS);
     return mapAniListDetailToAnime(data);
   }
@@ -807,6 +820,27 @@ function mapAniListDetailToAnime(item: AniListAnime): Anime {
 }
 
 // MARK: - Helpers
+
+function r18CacheFlag(): '0' | '1' {
+  return dataSourceConfig.allowR18Content ? '1' : '0';
+}
+
+function legacyAniListOptions(): { includeAdult: boolean } {
+  return { includeAdult: dataSourceConfig.allowR18Content };
+}
+
+function filterAniListAnime(items: AniListAnime[]): AniListAnime[] {
+  if (dataSourceConfig.allowR18Content) return items;
+  return items.filter(isAniListAnimeSFW);
+}
+
+function isAniListAnimeSFW(item: AniListAnime): boolean {
+  return !hasAdultContentSignal({
+    isAdult: item.isAdult,
+    genres: item.genres,
+    tags: item.tags.map((tag) => tag.name).filter((name): name is string => Boolean(name)),
+  });
+}
 
 function makeKey(name: string, params: Record<string, string | number>): QueryKeyObject {
   return { name, params };

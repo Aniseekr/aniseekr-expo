@@ -38,6 +38,10 @@ export interface AniListClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface AniListLegacyQueryOptions {
+  includeAdult?: boolean;
+}
+
 // MARK: - Legacy response types kept for the existing `AnimeRepository`
 
 export interface AniListAnime {
@@ -85,6 +89,7 @@ export interface AniListAnime {
     airingAt: number;
     episode: number;
   } | null;
+  isAdult?: boolean | null;
 }
 
 interface AniListPage<T> {
@@ -146,6 +151,7 @@ const MEDIA_FRAGMENT = `
       airingAt
       episode
     }
+    isAdult
   }
 `;
 
@@ -271,11 +277,15 @@ export class AniListClient {
     AniListClient.defaultInstance = instance;
   }
 
-  static async getTopAnime(page = 1, perPage = 20): Promise<AniListAnime[]> {
+  static async getTopAnime(
+    page = 1,
+    perPage = 20,
+    options: AniListLegacyQueryOptions = {}
+  ): Promise<AniListAnime[]> {
     const query = `
-      query ($page: Int, $perPage: Int) {
+      query ($page: Int, $perPage: Int, $isAdult: Boolean) {
         Page(page: $page, perPage: $perPage) {
-          media(sort: [POPULARITY_DESC], type: ANIME) {
+          media(sort: [POPULARITY_DESC], type: ANIME, isAdult: $isAdult) {
             ...mediaFields
             description
             startDate { year month day }
@@ -287,15 +297,20 @@ export class AniListClient {
     const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
       page,
       perPage,
+      ...adultQueryVariables(options),
     });
     return data.Page.media;
   }
 
-  static async getTrendingAnime(page = 1, perPage = 20): Promise<AniListAnime[]> {
+  static async getTrendingAnime(
+    page = 1,
+    perPage = 20,
+    options: AniListLegacyQueryOptions = {}
+  ): Promise<AniListAnime[]> {
     const query = `
-      query ($page: Int, $perPage: Int) {
+      query ($page: Int, $perPage: Int, $isAdult: Boolean) {
         Page(page: $page, perPage: $perPage) {
-          media(sort: [TRENDING_DESC], type: ANIME) {
+          media(sort: [TRENDING_DESC], type: ANIME, isAdult: $isAdult) {
             ...mediaFields
             description
             startDate { year month day }
@@ -307,6 +322,7 @@ export class AniListClient {
     const data = await AniListClient.getDefaultInstance().query<AniListPage<AniListAnime>>(query, {
       page,
       perPage,
+      ...adultQueryVariables(options),
     });
     return data.Page.media;
   }
@@ -315,9 +331,16 @@ export class AniListClient {
     season: string,
     year: number,
     page = 1,
-    perPage = 20
+    perPage = 20,
+    options: AniListLegacyQueryOptions = {}
   ): Promise<AniListAnime[]> {
-    const { media } = await AniListClient.getSeasonalAnimePage(season, year, page, perPage);
+    const { media } = await AniListClient.getSeasonalAnimePage(
+      season,
+      year,
+      page,
+      perPage,
+      options
+    );
     return media;
   }
 
@@ -331,13 +354,14 @@ export class AniListClient {
     season: string,
     year: number,
     page = 1,
-    perPage = 50
+    perPage = 50,
+    options: AniListLegacyQueryOptions = {}
   ): Promise<{ media: AniListAnime[]; hasNextPage: boolean }> {
     const query = `
-      query ($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {
+      query ($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int, $isAdult: Boolean) {
         Page(page: $page, perPage: $perPage) {
           pageInfo { hasNextPage }
-          media(season: $season, seasonYear: $seasonYear, type: ANIME, sort: [POPULARITY_DESC]) {
+          media(season: $season, seasonYear: $seasonYear, type: ANIME, isAdult: $isAdult, sort: [POPULARITY_DESC]) {
             ...mediaFields
             description
             startDate { year month day }
@@ -351,6 +375,7 @@ export class AniListClient {
       perPage,
       season: season.toUpperCase(),
       seasonYear: year,
+      ...adultQueryVariables(options),
     });
     return {
       media: data.Page.media,
@@ -358,11 +383,16 @@ export class AniListClient {
     };
   }
 
-  static async searchAnime(search: string, page = 1, perPage = 20): Promise<AniListAnime[]> {
+  static async searchAnime(
+    search: string,
+    page = 1,
+    perPage = 20,
+    options: AniListLegacyQueryOptions = {}
+  ): Promise<AniListAnime[]> {
     const query = `
-      query ($page: Int, $perPage: Int, $search: String) {
+      query ($page: Int, $perPage: Int, $search: String, $isAdult: Boolean) {
         Page(page: $page, perPage: $perPage) {
-          media(search: $search, type: ANIME, sort: [POPULARITY_DESC]) {
+          media(search: $search, type: ANIME, isAdult: $isAdult, sort: [POPULARITY_DESC]) {
             ...mediaFields
             description
             startDate { year month day }
@@ -375,15 +405,21 @@ export class AniListClient {
       page,
       perPage,
       search,
+      ...adultQueryVariables(options),
     });
     return data.Page.media;
   }
 
-  static async getAnimeByGenre(genre: string, page = 1, perPage = 20): Promise<AniListAnime[]> {
+  static async getAnimeByGenre(
+    genre: string,
+    page = 1,
+    perPage = 20,
+    options: AniListLegacyQueryOptions = {}
+  ): Promise<AniListAnime[]> {
     const query = `
-      query ($page: Int, $perPage: Int, $genre: String) {
+      query ($page: Int, $perPage: Int, $genre: String, $isAdult: Boolean) {
         Page(page: $page, perPage: $perPage) {
-          media(genre: $genre, type: ANIME, sort: [POPULARITY_DESC]) {
+          media(genre: $genre, type: ANIME, isAdult: $isAdult, sort: [POPULARITY_DESC]) {
             ...mediaFields
             description
             startDate { year month day }
@@ -396,6 +432,7 @@ export class AniListClient {
       page,
       perPage,
       genre,
+      ...adultQueryVariables(options),
     });
     return data.Page.media;
   }
@@ -429,6 +466,10 @@ export class AniListClient {
 }
 
 // MARK: - Helpers
+
+function adultQueryVariables(options: AniListLegacyQueryOptions): { isAdult?: false } {
+  return options.includeAdult === false ? { isAdult: false } : {};
+}
 
 function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
