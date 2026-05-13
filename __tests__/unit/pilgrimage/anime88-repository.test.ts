@@ -14,7 +14,8 @@ const YURUCAMP_YAMANASHI: AnimeTourism88Entry = {
   prefecture: '山梨県',
   city: '山梨市',
   regionEn: 'Yamanashi Pref. / Yamanashi City',
-  externalIds: { bangumi: 207195, anilist: null, mal: null },
+  externalIds: { bangumi: 207195, anilist: 98444, mal: null },
+  anilistPopularity: 160391,
 };
 const YURUCAMP_TOKYO: AnimeTourism88Entry = {
   id: 2,
@@ -25,7 +26,8 @@ const YURUCAMP_TOKYO: AnimeTourism88Entry = {
   prefecture: '東京都',
   city: '昭島市',
   regionEn: 'Tokyo / Akishima City',
-  externalIds: { bangumi: 207195, anilist: null, mal: null },
+  externalIds: { bangumi: 207195, anilist: 98444, mal: null },
+  anilistPopularity: 160391,
 };
 const BOCCHI: AnimeTourism88Entry = {
   id: 3,
@@ -36,7 +38,8 @@ const BOCCHI: AnimeTourism88Entry = {
   prefecture: '東京都',
   city: '世田谷区',
   regionEn: 'Tokyo / Setagaya-ku',
-  externalIds: { bangumi: 328609, anilist: null, mal: null },
+  externalIds: { bangumi: 328609, anilist: 130003, mal: null },
+  anilistPopularity: 244113,
 };
 const ANOHANA: AnimeTourism88Entry = {
   id: 4,
@@ -47,7 +50,8 @@ const ANOHANA: AnimeTourism88Entry = {
   prefecture: '埼玉県',
   city: '秩父市',
   regionEn: 'Saitama Pref. / Chichibu City',
-  externalIds: { bangumi: 10440, anilist: null, mal: null },
+  externalIds: { bangumi: 10440, anilist: 9989, mal: null },
+  anilistPopularity: 379852,
 };
 const NULL_BANGUMI: AnimeTourism88Entry = {
   id: 5,
@@ -59,6 +63,7 @@ const NULL_BANGUMI: AnimeTourism88Entry = {
   city: '京都市',
   regionEn: 'Kyoto / Kyoto City',
   externalIds: { bangumi: null, anilist: null, mal: null },
+  anilistPopularity: null,
 };
 
 mock.module('../../../libs/services/pilgrimage/anime-tourism-88.data.json', () => ({
@@ -131,7 +136,14 @@ describe('anime88-repository', () => {
     const yuru = unique.find((u) => u.bangumiId === 207195);
     expect(yuru?.locations).toHaveLength(2);
     expect(yuru?.regions.sort()).toEqual(['chubu', 'tokyo']);
+    expect(yuru?.anilistPopularity).toBe(160391);
     expect(unique.find((u) => u.titleJa === 'Mystery Show')).toBeUndefined();
+  });
+
+  it('A88-REPO-006b getUnique88AnimeByPopularity sorts by anilist popularity desc', () => {
+    const sorted = repo.getUnique88AnimeByPopularity();
+    expect(sorted.map((u) => u.bangumiId)).toEqual([10440, 328609, 207195]);
+    expect(sorted.map((u) => u.anilistPopularity)).toEqual([379852, 244113, 160391]);
   });
 
   it('A88-REPO-007 get88EntriesWithCoords joins entries to city centroids', () => {

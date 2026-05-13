@@ -75,6 +75,8 @@ export interface UniqueAnime88Entry {
   locations: AnimeTourism88Entry[];
   /** Distinct regions this anime touches. */
   regions: AnimeTourism88Region[];
+  /** Highest AniList popularity score across this anime's rows; null when unresolved. */
+  anilistPopularity: number | null;
 }
 
 /** All 88 rows, in the canonical 1..N order. Do NOT mutate. */
@@ -147,11 +149,15 @@ export function getUnique88Anime(): UniqueAnime88Entry[] {
   for (const entry of DATA.entries) {
     const bangumiId = entry.externalIds.bangumi;
     if (typeof bangumiId !== 'number') continue;
+    const popularity = typeof entry.anilistPopularity === 'number' ? entry.anilistPopularity : null;
     const existing = seen.get(bangumiId);
     if (existing) {
       existing.locations.push(entry);
       if (!existing.regions.includes(entry.region)) {
         existing.regions.push(entry.region);
+      }
+      if (popularity !== null) {
+        existing.anilistPopularity = Math.max(existing.anilistPopularity ?? 0, popularity);
       }
     } else {
       seen.set(bangumiId, {
@@ -160,8 +166,23 @@ export function getUnique88Anime(): UniqueAnime88Entry[] {
         titleEn: entry.titleEn,
         locations: [entry],
         regions: [entry.region],
+        anilistPopularity: popularity,
       });
     }
   }
   return Array.from(seen.values());
+}
+
+/**
+ * Same as `getUnique88Anime` but sorted by AniList popularity descending.
+ * Anime with no AniList resolution sort last in canonical (id) order so the
+ * tail stays deterministic between renders.
+ */
+export function getUnique88AnimeByPopularity(): UniqueAnime88Entry[] {
+  return getUnique88Anime().sort((a, b) => {
+    const ap = a.anilistPopularity ?? -1;
+    const bp = b.anilistPopularity ?? -1;
+    if (ap !== bp) return bp - ap;
+    return a.locations[0].id - b.locations[0].id;
+  });
 }

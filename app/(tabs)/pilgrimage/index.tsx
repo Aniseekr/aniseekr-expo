@@ -52,6 +52,9 @@ import {
   TOKYO_STATION,
 } from '../../../libs/services/pilgrimage/leaflet-map';
 import { Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
+import { Tourism88Rail } from '../../../components/pilgrimage/Tourism88Rail';
+import { getUnique88AnimeByPopularity } from '../../../libs/services/pilgrimage/anime88-repository';
+import { getAllIndexed } from '../../../libs/services/pilgrimage/anitabi-index';
 import type { AnitabiBangumi, AnitabiPoint } from '../../../libs/services/pilgrimage/types';
 
 interface FeaturedSpot {
@@ -699,6 +702,33 @@ export default function PilgrimageHubScreen() {
 
   const popularList = useMemo(() => animeCards.slice(0, POPULAR_LIMIT), [animeCards]);
 
+  // Anime Tourism 88 rail. Sorted once at module import; the cover map is
+  // rebuilt from anitabi-index (drops to placeholder when an entry isn't in
+  // the offline Anitabi cache yet).
+  const tourism88Entries = useMemo(() => getUnique88AnimeByPopularity(), []);
+  const tourism88Covers = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const e of getAllIndexed()) {
+      if (e.cover) m.set(e.id, e.cover);
+    }
+    return m;
+  }, []);
+  const collectionBangumiIds = useMemo(
+    () => new Set(collectionAnimes.map((a) => a.id)),
+    [collectionAnimes]
+  );
+  const handle88EntryPress = useCallback(
+    (entry: (typeof tourism88Entries)[number]) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      router.push(`/pilgrimage/${entry.bangumiId}`);
+    },
+    [router]
+  );
+  const handleSee88All = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setMode('map');
+  }, []);
+
   return (
     <View style={styles.root}>
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
@@ -849,6 +879,14 @@ export default function PilgrimageHubScreen() {
                 </ThemedText>
               </View>
             ) : null}
+
+            <Tourism88Rail
+              entries={tourism88Entries}
+              collectionBangumiIds={collectionBangumiIds}
+              coversById={tourism88Covers}
+              onPressEntry={handle88EntryPress}
+              onSeeAll={handleSee88All}
+            />
 
             {popularList.length > 0 ? (
               <View style={styles.section}>
