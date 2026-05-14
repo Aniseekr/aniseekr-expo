@@ -29,6 +29,14 @@ function openDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+export interface CachedMeta<T> {
+  value: T;
+  /** Milliseconds since the entry was written. */
+  age: number;
+  /** True when age has passed ttl but is still within the caller's graceMs. */
+  isStale: boolean;
+}
+
 export class CacheService {
   static async init() {
     await openDb();
@@ -54,6 +62,40 @@ export class CacheService {
       return JSON.parse(result.value) as T;
     } catch (error) {
       console.warn('CacheService.get error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Stale-while-revalidate variant of `get`. Within `ttl` the entry is fresh
+   * (isStale=false). Within `ttl + graceMs` it is returned with isStale=true
+   * so the caller can render it instantly while triggering a background
+   * refresh. Past `ttl + graceMs` the row is deleted and `null` is returned.
+   */
+  static async getWithMeta<T>(key: string, graceMs: number = 0): Promise<CachedMeta<T> | null> {
+    try {
+      const db = await openDb();
+      const result = await db.getFirstAsync<{
+        value: string;
+        timestamp: number;
+        ttl: number;
+      }>('SELECT value, timestamp, ttl FROM cache WHERE key = ?', key);
+
+      if (!result) return null;
+
+      const age = Date.now() - result.timestamp;
+      if (age > result.ttl + graceMs) {
+        await this.delete(key);
+        return null;
+      }
+
+      return {
+        value: JSON.parse(result.value) as T,
+        age,
+        isStale: age > result.ttl,
+      };
+    } catch (error) {
+      console.warn('CacheService.getWithMeta error:', error);
       return null;
     }
   }

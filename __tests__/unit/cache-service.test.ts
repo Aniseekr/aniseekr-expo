@@ -49,4 +49,32 @@ describe('CacheService', () => {
     const got = await CacheService.get<{ ok: boolean }>('after_multi_init');
     expect(got?.ok).toBe(true);
   });
+
+  it('CACHE-006 getWithMeta returns isStale=false within ttl', async () => {
+    await CacheService.set('swr_fresh', { v: 1 }, 60_000);
+    const meta = await CacheService.getWithMeta<{ v: number }>('swr_fresh');
+    expect(meta).not.toBeNull();
+    expect(meta?.value.v).toBe(1);
+    expect(meta?.isStale).toBe(false);
+  });
+
+  it('CACHE-007 getWithMeta returns isStale=true past ttl but within grace', async () => {
+    // ttl=-1 → instantly expired by ttl boundary, but grace of 60s keeps it usable.
+    await CacheService.set('swr_stale', { v: 2 }, -1);
+    const meta = await CacheService.getWithMeta<{ v: number }>('swr_stale', 60_000);
+    expect(meta).not.toBeNull();
+    expect(meta?.value.v).toBe(2);
+    expect(meta?.isStale).toBe(true);
+  });
+
+  it('CACHE-008 getWithMeta returns null past ttl + grace', async () => {
+    await CacheService.set('swr_dead', { v: 3 }, -1);
+    const meta = await CacheService.getWithMeta<{ v: number }>('swr_dead', 0);
+    expect(meta).toBeNull();
+  });
+
+  it('CACHE-009 getWithMeta returns null for an unknown key', async () => {
+    const meta = await CacheService.getWithMeta('does-not-exist', 60_000);
+    expect(meta).toBeNull();
+  });
 });
