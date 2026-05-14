@@ -189,6 +189,16 @@ export default function RatingScreen() {
   // Shared Value for the ACTIVE card's translation X
   const activeTranslationX = useSharedValue(0);
 
+  const deckRef = useRef<DeckItem[]>([]);
+  const currentIndexRef = useRef(0);
+  const animeIdRef = useRef<string | undefined>(undefined);
+  const swipeModeRef = useRef<SwipeMode>(DEFAULT_SWIPE_PREFS.mode);
+
+  deckRef.current = deck;
+  currentIndexRef.current = currentIndex;
+  animeIdRef.current = params.animeId;
+  swipeModeRef.current = swipePrefs.mode;
+
   // Ref for the top card (shared shape between PhotoCard and NativeAdCard)
   const topCardRef = useRef<PhotoCardRef | NativeAdCardRef>(null);
   // When a bottom-button is tapped, the desired rating is stashed here so the
@@ -401,7 +411,10 @@ export default function RatingScreen() {
         .slice(currentIndex + 1, currentIndex + 6)
         .map((item) => (item.kind === 'photo' ? item.photo.url : undefined))
         .filter(Boolean) as string[];
-      ImagePreloader.preload(nextPhotos);
+      const task = InteractionManager.runAfterInteractions(() => {
+        ImagePreloader.preload(nextPhotos);
+      });
+      return () => task.cancel();
     }
   }, [currentIndex, deck]);
 
@@ -456,11 +469,13 @@ export default function RatingScreen() {
 
   const handleSwipe = useCallback(
     (direction: 'left' | 'right') => {
-      const item = deck[currentIndex];
+      const index = currentIndexRef.current;
+      const deckSnapshot = deckRef.current;
+      const item = deckSnapshot[index];
       if (item?.kind === 'photo') {
         const pending = pendingRatingRef.current;
         const rating: RatingType =
-          pending ?? deriveRatingFromDirection(direction, swipePrefs.mode);
+          pending ?? deriveRatingFromDirection(direction, swipeModeRef.current);
         // Persist that we've shown this card, regardless of action. The next
         // session's deck filters by this set so the user resumes where they
         // left off instead of re-seeing the same items.
@@ -469,8 +484,8 @@ export default function RatingScreen() {
       }
       pendingRatingRef.current = null;
 
-      const isLastCard = currentIndex >= deck.length - 1;
-      if (isLastCard && params.animeId) {
+      const isLastCard = index >= deckSnapshot.length - 1;
+      if (isLastCard && animeIdRef.current) {
         // Single-anime rating flow: nothing else queued, exit back to caller.
         router.back();
         return;
@@ -481,7 +496,7 @@ export default function RatingScreen() {
       // net for slow networks.
       setCurrentIndex((prev) => prev + 1);
     },
-    [currentIndex, deck, params.animeId, router, swipePrefs.mode]
+    [router]
   );
 
   // Bottom-button taps: stash the desired rating then animate the card out in

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AIRecommendation, Anime, Genre, Recommendation, ViewMode } from './types';
+import { Anime, Genre, PersonalizedPickState, Recommendation, ViewMode } from './types';
 import { AnimeRepository } from '../../libs/repositories/anime-repository';
+import { pickPersonalized } from '../../libs/services/recommendation/personalized-pick';
 
 type DiscoveryMode = 'genres' | 'mood' | 'duration';
 
@@ -12,9 +13,13 @@ export function useRateData() {
   const [weeklyTrendAnime, setWeeklyTrendAnime] = useState<Anime[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [seasonalAnime, setSeasonalAnime] = useState<Anime[]>([]); // [NEW]
-  const [aiRecommendation, setAIRecommendation] = useState<AIRecommendation>({
+  const [personalizedPick, setPersonalizedPick] = useState<PersonalizedPickState>({
     anime: null,
     loading: false,
+    reason: null,
+    sourceTitles: [],
+    matchedTags: [],
+    coldStart: false,
   });
 
   // These were for direct API rate limiting visibility,
@@ -79,18 +84,39 @@ export function useRateData() {
     }
   }, [seasonalAnime.length]);
 
-  const loadAIRecommendation = useCallback(async () => {
-    setAIRecommendation({ anime: null, loading: true });
+  const loadPersonalizedPick = useCallback(async () => {
+    setPersonalizedPick((prev) => ({ ...prev, loading: true }));
     try {
-      const animeList = await AnimeRepository.getTopAnime(Math.floor(Math.random() * 3) + 1);
-      const randomAnime = animeList[Math.floor(Math.random() * animeList.length)];
-      setAIRecommendation({
+      const result = await pickPersonalized();
+      if (!result) {
+        setPersonalizedPick({
+          anime: null,
+          loading: false,
+          reason: null,
+          sourceTitles: [],
+          matchedTags: [],
+          coldStart: true,
+        });
+        return;
+      }
+      setPersonalizedPick({
+        anime: result.anime,
         loading: false,
-        anime: randomAnime,
+        reason: result.reason,
+        sourceTitles: result.sourceTitles,
+        matchedTags: result.matchedTags,
+        coldStart: false,
       });
     } catch (error) {
-      console.error('Failed to load AI recommendation:', error);
-      setAIRecommendation({ anime: null, loading: false });
+      console.error('Failed to load personalized pick:', error);
+      setPersonalizedPick({
+        anime: null,
+        loading: false,
+        reason: null,
+        sourceTitles: [],
+        matchedTags: [],
+        coldStart: false,
+      });
     }
   }, []);
 
@@ -119,12 +145,12 @@ export function useRateData() {
       weeklyTrendAnime,
       recommendations,
       seasonalAnime,
-      aiRecommendation,
+      personalizedPick,
       queueSize,
       nextAvailableAt,
     }),
     [
-      aiRecommendation,
+      personalizedPick,
       availableGenres,
       discoveryMode,
       nextAvailableAt,
@@ -146,10 +172,10 @@ export function useRateData() {
       loadWeeklyTrend,
       loadRecommendations,
       loadSeasonal,
-      loadAIRecommendation,
+      loadPersonalizedPick,
     }),
     [
-      loadAIRecommendation,
+      loadPersonalizedPick,
       loadGenres,
       loadRecommendations,
       loadSeasonal,

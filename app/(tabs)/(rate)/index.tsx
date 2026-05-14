@@ -21,7 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Skeleton, readableTextOn } from '../../../components/themed';
 import { GenreCarousel } from '../../../components/rate/GenreCarousel';
 import { SeasonalView } from '../../../components/rate/seasonal/SeasonalView';
-import { AIRecommendationSheet } from '../../../components/rate/AIRecommendationSheet';
+import { PersonalizedPickSheet } from '../../../components/rate/PersonalizedPickSheet';
 import { ModeSelector } from '../../../components/rate/ModeSelector';
 import { ImageDisplaySettingsSheet } from '../../../components/rate/ImageDisplaySettingsSheet';
 import { useRateData } from '../../../components/rate/useRateData';
@@ -160,8 +160,16 @@ export default function HomeRateScreen() {
 
   const handlePullAI = useCallback(async () => {
     setShowAI(true);
-    await actions.loadAIRecommendation();
+    await actions.loadPersonalizedPick();
   }, [actions]);
+
+  const handlePickAnimeSelect = useCallback(() => {
+    const picked = state.personalizedPick.anime;
+    setShowAI(false);
+    if (picked) {
+      router.push({ pathname: `/anime/${picked.id}` });
+    }
+  }, [router, state.personalizedPick.anime]);
 
   const onRefresh = useCallback(() => {
     if (state.viewMode === 'discovery') {
@@ -253,11 +261,12 @@ export default function HomeRateScreen() {
           onChange={handleSwipePrefsChange}
         />
 
-        <AIRecommendationSheet
+        <PersonalizedPickSheet
           visible={showAI}
-          data={state.aiRecommendation}
+          data={state.personalizedPick}
           onClose={() => setShowAI(false)}
-          onSelect={() => setShowAI(false)}
+          onSelect={handlePickAnimeSelect}
+          onRefresh={actions.loadPersonalizedPick}
         />
 
         {state.viewMode === 'trend' ? (

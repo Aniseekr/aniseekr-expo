@@ -55,7 +55,15 @@ export type Photo = {
 
 export type DeckItem = { kind: 'photo'; photo: Photo } | { kind: 'ad'; id: string };
 
-export type AIRecommendation = {
+export type PersonalizedPickState = {
   anime: Anime | null;
   loading: boolean;
+  /** Human-readable explanation, e.g. "Because you liked X & Y". Null when loading / cold start. */
+  reason: string | null;
+  /** Anime titles from the user's library that drove this pick (max 2). */
+  sourceTitles: string[];
+  /** Genre tags shared between the pick and the user's positive signals. */
+  matchedTags: string[];
+  /** True when the user has no positive signals yet → render onboarding state. */
+  coldStart: boolean;
 };
