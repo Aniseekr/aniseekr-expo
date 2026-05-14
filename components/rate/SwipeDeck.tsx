@@ -14,6 +14,7 @@ import type { DeckItem } from './types';
 import { OUTGOING_CARD_LIFETIME_MS } from '../../libs/services/rate/swipe-animation';
 import {
   computeDeckWindow,
+  deckWindowEntryKey,
   expireOutgoing,
   shouldLoadMore,
   type OutgoingCard,
@@ -61,6 +62,7 @@ export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
     const [outgoing, setOutgoing] = useState<OutgoingCard[]>([]);
     const topTranslationX = useSharedValue(0);
     const topCardRef = useRef<SwipeDeckCardRef>(null);
+    const outgoingKeysRef = useRef<Set<string>>(new Set());
 
     const itemsRef = useRef(items);
     itemsRef.current = items;
@@ -77,10 +79,17 @@ export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
       if (!committed) return;
 
       const now = Date.now();
-      setOutgoing((prev) => [
-        ...expireOutgoing({ outgoing: prev, now, lifetimeMs: OUTGOING_CARD_LIFETIME_MS }),
-        { item: committed, direction, committedAt: now },
-      ]);
+      const committedKey = deckWindowEntryKey(committed, idx);
+      if (outgoingKeysRef.current.has(committedKey)) return;
+      outgoingKeysRef.current.add(committedKey);
+      setOutgoing((prev) => {
+        const next = [
+          ...expireOutgoing({ outgoing: prev, now, lifetimeMs: OUTGOING_CARD_LIFETIME_MS }),
+          { item: committed, key: committedKey, direction, committedAt: now },
+        ];
+        outgoingKeysRef.current = new Set(next.map((card) => card.key));
+        return next;
+      });
       setTopIndex((prev) => prev + 1);
       // Snap the shared driver back so background slots base on the new top's
       // identity transform. The outgoing card's own translateX continues the
@@ -92,13 +101,15 @@ export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
       if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
       expiryTimerRef.current = setTimeout(() => {
         expiryTimerRef.current = null;
-        setOutgoing((prev) =>
-          expireOutgoing({
+        setOutgoing((prev) => {
+          const next = expireOutgoing({
             outgoing: prev,
             now: Date.now(),
             lifetimeMs: OUTGOING_CARD_LIFETIME_MS,
-          })
-        );
+          });
+          outgoingKeysRef.current = new Set(next.map((card) => card.key));
+          return next;
+        });
       }, OUTGOING_CARD_LIFETIME_MS);
     }, [topTranslationX]);
 
@@ -116,6 +127,7 @@ export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
     useEffect(() => {
       return () => {
         if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+        outgoingKeysRef.current.clear();
       };
     }, []);
 
