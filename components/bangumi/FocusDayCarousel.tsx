@@ -2,7 +2,7 @@
 // The active day takes ~88% of screen width; neighbor cards peek at the edges.
 // Off-center cards scale to 0.94 + fade and shift slightly downward.
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   GestureResponderEvent,
   Platform,
@@ -27,7 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../rate/types';
 import { NearbyPilgrimageBadge } from '../pilgrimage/NearbyPilgrimageBadge';
-import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
+import { useIsAnimeScheduled } from '../../modules/notifications/animeNotificationService';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
@@ -327,9 +327,7 @@ const FocusDayRow = memo(function FocusDayRow({
   const router = useRouter();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const [isScheduled, setIsScheduled] = useState(() =>
-    animeNotificationService.isAnimeScheduled(anime.id)
-  );
+  const isScheduled = useIsAnimeScheduled(anime.id);
 
   const canRemind = !!anime.nextAiringEpisode && !!onToggleReminder;
 
@@ -338,9 +336,7 @@ const FocusDayRow = memo(function FocusDayRow({
       e.stopPropagation();
       if (!canRemind) return;
       hapticsBridge.selection();
-      const wasScheduled = isScheduled;
-      setIsScheduled((p) => !p);
-      onToggleReminder!(anime, wasScheduled);
+      onToggleReminder!(anime, isScheduled);
     },
     [anime, canRemind, isScheduled, onToggleReminder]
   );

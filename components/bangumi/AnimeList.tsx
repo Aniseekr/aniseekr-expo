@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
@@ -12,9 +12,13 @@ import Animated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { Anime } from '../rate/types';
-import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
+import {
+  animeNotificationService,
+  useIsAnimeScheduled,
+} from '../../modules/notifications/animeNotificationService';
 import { NearbyPilgrimageBadge } from '../pilgrimage/NearbyPilgrimageBadge';
-import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
 interface AnimeListProps {
@@ -23,6 +27,8 @@ interface AnimeListProps {
 }
 
 export function AnimeList({ listViewData, renderAnimeCard }: AnimeListProps) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   return (
     <View className="px-5">
       {listViewData.map((group) => (
@@ -58,7 +64,9 @@ export function AnimeRowCard({
   onToggleReminder?: (anime: Anime, currentlyScheduled: boolean) => void;
 }) {
   const router = useRouter();
-  const [isScheduled, setIsScheduled] = useState(false);
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const isScheduled = useIsAnimeScheduled(anime.id);
   const [isLoading, setIsLoading] = useState(false);
   const swipeRef = useRef<SwipeableMethods>(null);
 
@@ -68,10 +76,8 @@ export function AnimeRowCard({
     try {
       if (isScheduled) {
         await animeNotificationService.cancelAnimeNotification(anime.id);
-        setIsScheduled(false);
       } else {
-        const notificationId = await animeNotificationService.scheduleAnimeNotification(anime);
-        if (notificationId) setIsScheduled(true);
+        await animeNotificationService.scheduleAnimeNotification(anime);
       }
     } catch (error) {
       console.error('Error toggling notification:', error);
@@ -79,10 +85,6 @@ export function AnimeRowCard({
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    setIsScheduled(animeNotificationService.isAnimeScheduled(anime.id));
-  }, [anime.id]);
 
   const hasReminderSlot = !!anime.nextAiringEpisode && !!onToggleReminder;
   const hasWishlistSlot = !!onQuickWishlist;
@@ -96,7 +98,7 @@ export function AnimeRowCard({
           dragX={dragX}
           icon={isTracked ? 'check-circle' : 'bookmark-add'}
           label={isTracked ? 'Tracking' : 'Wishlist'}
-          tint={Colors.primary}
+          tint={theme.accent}
         />
       )
     : undefined;
@@ -108,7 +110,7 @@ export function AnimeRowCard({
           dragX={dragX}
           icon={isScheduled ? 'notifications-off' : 'notifications-active'}
           label={isScheduled ? 'Cancel' : 'Remind'}
-          tint={isScheduled ? Colors.warning : Colors.info ?? Colors.primary}
+          tint={isScheduled ? theme.status.warning : theme.status.info}
         />
       )
     : undefined;
@@ -120,10 +122,9 @@ export function AnimeRowCard({
       onQuickWishlist(anime);
     } else if (direction === 'right' && hasReminderSlot) {
       hapticsBridge.selection();
-      const wasScheduled = isScheduled;
-      // Optimistic flip — the service stub returns immediately anyway.
-      setIsScheduled((prev) => !prev);
-      onToggleReminder!(anime, wasScheduled);
+      // Service notifies subscribers when the OS-scheduled set changes, so the
+      // bell icon updates automatically — no local optimistic flip needed.
+      onToggleReminder!(anime, isScheduled);
       void handleRemindMe();
     }
   };
@@ -194,7 +195,7 @@ export function AnimeRowCard({
                   <MaterialIcons
                     name={isScheduled ? 'notifications-active' : 'notifications-none'}
                     size={16}
-                    color={isScheduled ? Colors.primary : Colors.text.primary}
+                    color={isScheduled ? theme.accent : theme.text.primary}
                     style={{ marginRight: 6 }}
                   />
                   <Text
@@ -214,7 +215,7 @@ export function AnimeRowCard({
                   <MaterialIcons
                     name={isTracked ? 'check' : 'add'}
                     size={16}
-                    color={isTracked ? Colors.primary : Colors.text.primary}
+                    color={isTracked ? theme.accent : theme.text.primary}
                     style={{ marginRight: 4 }}
                   />
                   <Text
@@ -240,6 +241,8 @@ interface SwipeActionPanelProps {
 }
 
 function SwipeActionPanel({ side, dragX, icon, label, tint }: SwipeActionPanelProps) {
+  const { theme } = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const animatedStyle = useAnimatedStyle(() => {
     const raw = dragX.value;
     const distance = side === 'left' ? raw : -raw;
@@ -276,139 +279,140 @@ function SwipeActionPanel({ side, dragX, icon, label, tint }: SwipeActionPanelPr
   );
 }
 
-const styles = StyleSheet.create({
-  sectionTitle: {
-    ...Typography.headlineSmall,
-    color: Colors.text.primary,
-    fontFamily: FontFamily.rounded,
-    marginBottom: Spacing.md,
-    paddingLeft: Spacing.xs,
-  },
-  cardPressable: {
-    marginBottom: Spacing.md,
-    borderRadius: Radius.card,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-  cardContainer: {
-    backgroundColor: Colors.glass.dark,
-    borderRadius: Radius.card,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  cardImage: {
-    width: 96,
-    height: 144,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  cardTitle: {
-    ...Typography.headlineSmall,
-    color: Colors.text.primary,
-    fontFamily: FontFamily.rounded,
-    marginBottom: Spacing.xs,
-  },
-  tagContainer: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 5,
-    backgroundColor: Colors.glass.medium,
-    borderRadius: Radius.chip,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  tagText: {
-    ...Typography.captionSmall,
-    color: Colors.text.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  remindButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    backgroundColor: Colors.glass.medium,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    backgroundColor: Colors.glass.dark,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  addButtonActive: {
-    backgroundColor: 'rgba(255, 159, 10, 0.18)',
-    borderColor: Colors.primary,
-  },
-  addButtonText: {
-    ...Typography.captionSmall,
-    color: Colors.text.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  addButtonTextActive: {
-    color: Colors.primary,
-  },
-  remindButtonActive: {
-    backgroundColor: 'rgba(255, 159, 10, 0.18)',
-    borderColor: Colors.primary,
-  },
-  remindButtonText: {
-    ...Typography.captionSmall,
-    color: Colors.text.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  remindButtonTextActive: {
-    color: Colors.primary,
-  },
-  actionPanel: {
-    width: SWIPE_ACTION_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: Radius.card,
-  },
-  actionPanelLeft: {
-    marginRight: -Spacing.sm,
-  },
-  actionPanelRight: {
-    marginLeft: -Spacing.sm,
-  },
-  actionPanelInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  actionPanelLabel: {
-    ...Typography.captionSmall,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-});
+const makeStyles = (theme: ThemePalette) =>
+  StyleSheet.create({
+    sectionTitle: {
+      ...Typography.headlineSmall,
+      color: theme.text.primary,
+      fontFamily: FontFamily.rounded,
+      marginBottom: Spacing.md,
+      paddingLeft: Spacing.xs,
+    },
+    cardPressable: {
+      marginBottom: Spacing.md,
+      borderRadius: Radius.card,
+      overflow: 'hidden',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+        },
+        android: { elevation: 2 },
+      }),
+    },
+    cardContainer: {
+      backgroundColor: theme.background.secondary,
+      borderRadius: Radius.card,
+      padding: Spacing.md,
+      flexDirection: 'row',
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    cardImage: {
+      width: 96,
+      height: 144,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    cardTitle: {
+      ...Typography.headlineSmall,
+      color: theme.text.primary,
+      fontFamily: FontFamily.rounded,
+      marginBottom: Spacing.xs,
+    },
+    tagContainer: {
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 5,
+      backgroundColor: theme.background.tertiary,
+      borderRadius: Radius.chip,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    tagText: {
+      ...Typography.captionSmall,
+      color: theme.text.secondary,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: Spacing.xs,
+    },
+    remindButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs + 2,
+      backgroundColor: theme.background.tertiary,
+      borderRadius: Radius.full,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs + 2,
+      backgroundColor: theme.background.secondary,
+      borderRadius: Radius.full,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    addButtonActive: {
+      backgroundColor: `${theme.accent}2E`,
+      borderColor: theme.accent,
+    },
+    addButtonText: {
+      ...Typography.captionSmall,
+      color: theme.text.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    addButtonTextActive: {
+      color: theme.accent,
+    },
+    remindButtonActive: {
+      backgroundColor: `${theme.accent}2E`,
+      borderColor: theme.accent,
+    },
+    remindButtonText: {
+      ...Typography.captionSmall,
+      color: theme.text.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    remindButtonTextActive: {
+      color: theme.accent,
+    },
+    actionPanel: {
+      width: SWIPE_ACTION_WIDTH,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: Radius.card,
+    },
+    actionPanelLeft: {
+      marginRight: -Spacing.sm,
+    },
+    actionPanelRight: {
+      marginLeft: -Spacing.sm,
+    },
+    actionPanelInner: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    actionPanelLabel: {
+      ...Typography.captionSmall,
+      fontWeight: '700',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+  });

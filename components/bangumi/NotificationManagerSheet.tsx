@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,8 @@ import { Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { EmptyStateView } from '../common/EmptyStateView';
+import { notificationService } from '../../libs/services/notifications/notification-service';
+import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
 
 interface PendingNotification {
   identifier: string;
@@ -29,10 +32,13 @@ interface NotificationManagerSheetProps {
   onClose: () => void;
 }
 
+const TEST_REMINDER_DELAY_SECONDS = 5;
+
 function NotificationManagerSheetComponent({ visible, onClose }: NotificationManagerSheetProps) {
   const { theme } = useTheme();
   const [pending, setPending] = useState<PendingNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const fetchPending = useCallback(async () => {
     setLoading(true);
@@ -71,16 +77,57 @@ function NotificationManagerSheetComponent({ visible, onClose }: NotificationMan
     try {
       await Notifications.cancelScheduledNotificationAsync(id);
       setPending((prev) => prev.filter((p) => p.identifier !== id));
+      // Keep facade mirror in sync so the bell icon on cards reflects OS state.
+      await animeNotificationService.rehydrate();
     } catch (e) {
       console.warn('[NotificationManager] cancel failed:', e);
       hapticsBridge.error();
     }
   };
 
+  const handleSendTest = useCallback(async () => {
+    if (testing) return;
+    setTesting(true);
+    hapticsBridge.tap();
+    try {
+      await notificationService.initialize();
+      const perm = await notificationService.getPermission();
+      if (!perm.granted) {
+        const requested = await notificationService.requestPermission();
+        if (!requested.granted) {
+          hapticsBridge.warning();
+          console.warn('[NotificationManager] permission denied for test reminder');
+          return;
+        }
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Test reminder',
+          body: `Fires ${TEST_REMINDER_DELAY_SECONDS}s after you tap — leave the app to see the banner.`,
+          data: { kind: 'test_reminder' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: TEST_REMINDER_DELAY_SECONDS,
+          repeats: false,
+          channelId: Platform.OS === 'android' ? 'default' : undefined,
+        },
+      });
+      hapticsBridge.success();
+      // Refresh pending list so user sees it queued before it fires.
+      await fetchPending();
+    } catch (e) {
+      console.warn('[NotificationManager] test reminder failed:', e);
+      hapticsBridge.error();
+    } finally {
+      setTesting(false);
+    }
+  }, [testing, fetchPending]);
+
   const handleClearAll = async () => {
     hapticsBridge.warning();
     try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      await animeNotificationService.cancelAllNotifications();
       setPending([]);
       hapticsBridge.success();
     } catch (e) {
@@ -97,7 +144,7 @@ function NotificationManagerSheetComponent({ visible, onClose }: NotificationMan
         style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <Animated.View
-          entering={FadeInUp.springify().damping(18)}
+          entering={FadeInUp.duration(220)}
           style={[
             styles.sheet,
             {
@@ -118,6 +165,27 @@ function NotificationManagerSheetComponent({ visible, onClose }: NotificationMan
                 <MaterialIcons name="close" size={22} color={theme.text.secondary} />
               </Pressable>
             </View>
+
+            <Pressable
+              onPress={handleSendTest}
+              disabled={testing}
+              style={({ pressed }) => [
+                styles.testButton,
+                {
+                  backgroundColor: theme.accent + '1A',
+                  borderColor: theme.accent + '55',
+                  opacity: testing ? 0.6 : pressed ? 0.7 : 1,
+                },
+              ]}>
+              {testing ? (
+                <ActivityIndicator size="small" color={theme.accent} />
+              ) : (
+                <MaterialIcons name="notifications-active" size={18} color={theme.accent} />
+              )}
+              <Text style={[styles.testLabel, { color: theme.accent }]}>
+                {testing ? 'Scheduling…' : `Send test reminder (${TEST_REMINDER_DELAY_SECONDS}s)`}
+              </Text>
+            </Pressable>
 
             {loading ? (
               <View style={styles.loaderWrap}>
@@ -271,6 +339,20 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     marginTop: Spacing.sm,
+  },
+  testButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  testLabel: {
+    ...Typography.titleSmall,
+    fontWeight: '700',
   },
   clearAllLabel: {
     ...Typography.titleSmall,

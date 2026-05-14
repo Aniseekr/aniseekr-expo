@@ -29,6 +29,10 @@ import { AddToCollectionSheet } from '../../components/collection/AddToCollectio
 import { trackingService } from '../../libs/services/tracking/tracking-service';
 import { collectionService } from '../../libs/services/collection/collection-service';
 import { loadUserPrefs, patchUserPrefs } from '../../libs/services/user-prefs';
+import {
+  animeNotificationService,
+  useIsAnimeScheduled,
+} from '../../modules/notifications/animeNotificationService';
 
 type RatingEntry = { platform: PlatformType; data: PlatformRatingData };
 
@@ -58,6 +62,7 @@ export default function AnimeDetailScreen() {
   const [favorite, setFavorite] = useState(false);
   const [inCollection, setInCollection] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const reminderScheduled = useIsAnimeScheduled(id);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +264,21 @@ export default function AnimeDetailScreen() {
     }
   }, [favorite, anime]);
 
+  const handleToggleReminder = useCallback(async () => {
+    if (!anime) return;
+    Haptics.selectionAsync();
+    try {
+      if (reminderScheduled) {
+        await animeNotificationService.cancelAnimeNotification(anime.id);
+      } else {
+        await animeNotificationService.scheduleAnimeNotification(anime);
+      }
+    } catch (e) {
+      console.warn('[AnimeDetail] reminder toggle failed', e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+  }, [anime, reminderScheduled]);
+
   const handleShare = useCallback(async () => {
     if (!anime) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -277,6 +297,15 @@ export default function AnimeDetailScreen() {
         <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }}>
           <Skeleton.HeroDetail showEpisodes={true} />
         </ScrollView>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={{ top: insets.top + 10, left: 20 }}
+          className="absolute z-10 h-10 w-10 items-center justify-center rounded-full bg-black/40">
+          <Ionicons name="chevron-back" size={24} color="white" />
+        </Pressable>
       </View>
     );
   }
@@ -301,9 +330,12 @@ export default function AnimeDetailScreen() {
           />
           <Pressable
             onPress={() => router.back()}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
             style={{ top: insets.top + 10, left: 20 }}
             className="absolute z-10 h-10 w-10 items-center justify-center rounded-full bg-black/40">
-            <Ionicons name="arrow-back" size={24} color="white" />
+            <Ionicons name="chevron-back" size={24} color="white" />
           </Pressable>
         </View>
 
@@ -367,6 +399,20 @@ export default function AnimeDetailScreen() {
                 color={inCollection ? '#34d399' : 'white'}
               />
             </Pressable>
+            {anime.nextAiringEpisode ? (
+              <Pressable
+                onPress={handleToggleReminder}
+                accessibilityLabel={
+                  reminderScheduled ? 'Cancel episode reminder' : 'Set episode reminder'
+                }
+                className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-zinc-800">
+                <Ionicons
+                  name={reminderScheduled ? 'notifications' : 'notifications-outline'}
+                  size={22}
+                  color={reminderScheduled ? '#fbbf24' : 'white'}
+                />
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={handleFavoriteToggle}
               accessibilityLabel={favorite ? 'Remove from favorites' : 'Add to favorites'}
