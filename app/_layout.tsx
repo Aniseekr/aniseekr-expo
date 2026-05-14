@@ -3,6 +3,7 @@ import '../global.css';
 import { useEffect, useState } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider } from '../context/ThemeContext';
@@ -65,20 +66,23 @@ export default function RootLayout() {
   void onboardingChecked;
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <SubscriptionProvider>
-          <StatusBar style="light" translucent={Platform.OS === 'android'} />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="(setting)" />
-            <Stack.Screen name="anime/[id]" />
-            <Stack.Screen name="search" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="index" />
-          </Stack>
-        </SubscriptionProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <SubscriptionProvider>
+            <StatusBar style="light" translucent={Platform.OS === 'android'} />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="(setting)" />
+              <Stack.Screen name="anime/[id]" />
+              <Stack.Screen name="search" />
+              <Stack.Screen name="trending" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="index" />
+            </Stack>
+          </SubscriptionProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
