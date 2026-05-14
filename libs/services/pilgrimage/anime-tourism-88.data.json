@@ -154,13 +154,13 @@
       "city": "大洗町",
       "regionEn": "Ibaraki Pref. / Oarai Town",
       "externalIds": {
-        "bangumi": 191302,
-        "anilist": 132420,
-        "mal": 39167
+        "bangumi": 40310,
+        "anilist": 14131,
+        "mal": 14131
       },
-      "anilistPopularity": 9293,
-      "anilistMeanScore": 83,
-      "anilistReviewNote": "match=substring_native; anilist={\"romaji\":\"Girls und Panzer: Saishuushou 4\",\"english\":\"Girls und Panzer das Finale - Part 4\",\"native\":\"ガールズ＆パンツァー 最終章 第4話\"}"
+      "anilistPopularity": 82707,
+      "anilistMeanScore": 74,
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"Girls und Panzer\",\"english\":\"Girls und Panzer\",\"native\":\"ガールズ&パンツァー\"}"
     },
     {
       "id": 10,
@@ -533,13 +533,13 @@
       "city": "",
       "regionEn": "Tokyo",
       "externalIds": {
-        "bangumi": 23686,
+        "bangumi": 148099,
         "anilist": 21403,
         "mal": 31765
       },
       "anilistPopularity": 186467,
       "anilistMeanScore": 74,
-      "anilistReviewNote": "match=substring_native; anilist={\"romaji\":\"Sword Art Online: Ordinal Scale\",\"english\":\"Sword Art Online the Movie: Ordinal Scale\",\"native\":\"ソードアート・オンライン -オーディナル・スケール-\"}"
+      "anilistReviewNote": "match=manual_exact_subject; anilist={\"romaji\":\"Sword Art Online: Ordinal Scale\",\"english\":\"Sword Art Online the Movie: Ordinal Scale\",\"native\":\"ソードアート・オンライン -オーディナル・スケール-\"}"
     },
     {
       "id": 32,
@@ -935,12 +935,13 @@
       "city": "武蔵野市",
       "regionEn": "Tokyo / Musashino City",
       "externalIds": {
-        "bangumi": 244761,
-        "anilist": 101574,
-        "mal": 37804
+        "bangumi": 110467,
+        "anilist": 20812,
+        "mal": 25835
       },
-      "anilistPopularity": 19938,
-      "anilistMeanScore": 76
+      "anilistPopularity": 109716,
+      "anilistMeanScore": 81,
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"SHIROBAKO\",\"english\":\"SHIROBAKO\",\"native\":\"SHIROBAKO\"}"
     },
     {
       "id": 55,
@@ -1192,13 +1193,13 @@
       "city": "箱根町",
       "regionEn": "Kanagawa Pref. / Hakone Town",
       "externalIds": {
-        "bangumi": 235701,
+        "bangumi": 265,
         "anilist": 30,
         "mal": 30
       },
       "anilistPopularity": 464837,
       "anilistMeanScore": 83,
-      "anilistReviewNote": "match=top1_fallback; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
     },
     {
       "id": 70,
@@ -1434,13 +1435,13 @@
       "city": "白川村",
       "regionEn": "Gifu Pref. / Shirakawa Village",
       "externalIds": {
-        "bangumi": 297969,
-        "anilist": 114446,
-        "mal": 41006
+        "bangumi": 289,
+        "anilist": 934,
+        "mal": 934
       },
-      "anilistPopularity": 80034,
-      "anilistMeanScore": 69,
-      "anilistReviewNote": "match=manual_retry; anilist={\"romaji\":\"Higurashi no Naku Koro ni Gou\",\"english\":\"Higurashi: When They Cry - GOU\",\"native\":\"ひぐらしのなく頃に業\"}"
+      "anilistPopularity": 170712,
+      "anilistMeanScore": 76,
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"Higurashi no Naku Koro ni\",\"english\":\"When They Cry\",\"native\":\"ひぐらしのなく頃に\"}"
     },
     {
       "id": 84,
@@ -1469,13 +1470,13 @@
       "city": "浜松市",
       "regionEn": "Shizuoka Pref. / Hamamatsu City",
       "externalIds": {
-        "bangumi": 235701,
+        "bangumi": 265,
         "anilist": 30,
         "mal": 30
       },
       "anilistPopularity": 464837,
       "anilistMeanScore": 83,
-      "anilistReviewNote": "match=top1_fallback; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
     },
     {
       "id": 86,
@@ -1800,13 +1801,13 @@
       "city": "宇部市",
       "regionEn": "Yamaguchi Pref. / Ube City",
       "externalIds": {
-        "bangumi": 235701,
+        "bangumi": 265,
         "anilist": 30,
         "mal": 30
       },
       "anilistPopularity": 464837,
       "anilistMeanScore": 83,
-      "anilistReviewNote": "match=top1_fallback; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
+      "anilistReviewNote": "match=manual_anitabi_prefer_main_series; anilist={\"romaji\":\"Shin Seiki Evangelion\",\"english\":\"Neon Genesis Evangelion\",\"native\":\"新世紀エヴァンゲリオン\"}"
     },
     {
       "id": 105,

@@ -27,10 +27,7 @@ import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const ROOT = resolve(import.meta.dir, '..');
-const OUTPUT_PATH = resolve(
-  ROOT,
-  'libs/services/pilgrimage/anime-tourism-88.data.json'
-);
+const OUTPUT_PATH = resolve(ROOT, 'libs/services/pilgrimage/anime-tourism-88.data.json');
 
 const YEAR = parseYear();
 const JP_URL = `https://animetourism88.com/animespot88/${YEAR}edition/`;
@@ -92,9 +89,7 @@ const PREFECTURE_TO_REGION: Record<string, AnimeTourism88Region> = {
   鹿児島県: 'kyushu_okinawa',
   沖縄県: 'kyushu_okinawa',
 };
-const PREFECTURE_PREFIXES = Object.keys(PREFECTURE_TO_REGION).sort(
-  (a, b) => b.length - a.length
-);
+const PREFECTURE_PREFIXES = Object.keys(PREFECTURE_TO_REGION).sort((a, b) => b.length - a.length);
 
 // Top-1 Bangumi search misfires we patched by hand. Keyed by canonical JP title
 // as it appears in the 88 table. Update when the JP table text changes.
@@ -102,7 +97,12 @@ const BANGUMI_OVERRIDES: Record<
   string,
   { bangumiId: number; name?: string; nameCn?: string; date?: string; note?: string }
 > = {
-  '映画『トラペジウム』': { bangumiId: 469877, name: 'トラペジウム', nameCn: '四重星', date: '2024-05-10' },
+  '映画『トラペジウム』': {
+    bangumiId: 469877,
+    name: 'トラペジウム',
+    nameCn: '四重星',
+    date: '2024-05-10',
+  },
   'GAMERA -Rebirth-': {
     bangumiId: 418289,
     name: 'GAMERA -Rebirth-',
@@ -114,6 +114,41 @@ const BANGUMI_OVERRIDES: Record<
     name: 'Do It Yourself!! -どぅー・いっと・ゆあせるふ-',
     nameCn: '少女手工',
     date: '2022-10-05',
+  },
+  'ガールズ＆パンツァー 最終章': {
+    bangumiId: 40310,
+    name: 'ガールズ＆パンツァー',
+    nameCn: '少女与战车',
+    date: '2012-10-08',
+    note: 'Prefer the Anitabi-rich main series over Saishuushou episode subjects.',
+  },
+  '『エヴァンゲリオン』シリーズ': {
+    bangumiId: 265,
+    name: '新世紀エヴァンゲリオン',
+    nameCn: '新世纪福音战士',
+    date: '1995-10-04',
+    note: 'Canonical TV series; Bangumi search top-1 can misfire to EVANGELION THE REAL 4D.',
+  },
+  '劇場版 ソードアート・オンライン -オーディナル・スケール-': {
+    bangumiId: 148099,
+    name: '劇場版 ソードアート・オンライン -オーディナル・スケール-',
+    nameCn: '刀剑神域 序列之争',
+    date: '2017-02-18',
+    note: 'Exact film subject; cleaned query can fall back to SAO TV.',
+  },
+  '劇場版「SHIROBAKO」': {
+    bangumiId: 110467,
+    name: 'SHIROBAKO',
+    nameCn: '白箱',
+    date: '2014-10-09',
+    note: 'Prefer the Anitabi-rich TV series over the movie subject.',
+  },
+  'ひぐらしのなく頃に業・卒': {
+    bangumiId: 289,
+    name: 'ひぐらしのなく頃に',
+    nameCn: '寒蝉鸣泣之时',
+    date: '2006-04-04',
+    note: 'Prefer the Anitabi-rich original series over Gou/Sotsu subjects.',
   },
   'ウルトラマンシリーズ（円谷英二氏生誕の地）': {
     bangumiId: 38650,
@@ -171,7 +206,9 @@ function parseYear(): number {
   if (flagIdx > -1 && process.argv[flagIdx + 1]) {
     const n = Number(process.argv[flagIdx + 1]);
     if (Number.isFinite(n) && n >= 2018 && n <= 2099) return n;
-    throw new Error(`--year argument must be a valid edition year, got ${process.argv[flagIdx + 1]}`);
+    throw new Error(
+      `--year argument must be a valid edition year, got ${process.argv[flagIdx + 1]}`
+    );
   }
   return 2025;
 }
@@ -323,7 +360,9 @@ async function main(): Promise<void> {
     const override = BANGUMI_OVERRIDES[title];
     if (override) {
       titleToBangumi.set(title, override.bangumiId);
-      console.log(`[${i + 1}/${uniqueTitles.length}] ${title} -> override bgm#${override.bangumiId}`);
+      console.log(
+        `[${i + 1}/${uniqueTitles.length}] ${title} -> override bgm#${override.bangumiId}`
+      );
       continue;
     }
     const query = cleanBangumiQuery(title) || title;
