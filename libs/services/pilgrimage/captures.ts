@@ -31,6 +31,16 @@ export interface SensorSnapshot {
   headingDeltaDeg: number | null;
   /** signed degrees from level (pitch beta); null if motion unavailable */
   tilt: number | null;
+  /**
+   * 0..1 frame-match score (image vs anime reference). Optional — older
+   * captures stored before this field was added will be missing it; the UI
+   * must treat undefined and null identically.
+   */
+  frameMatch?: number | null;
+  /** false → frame-match validity gate tripped (lens covered, flat, etc.). */
+  frameValid?: boolean | null;
+  /** Why the validity gate tripped; null/undefined when valid. */
+  frameReason?: 'dark' | 'lowDetail' | 'lowContrast' | 'analysisFailed' | null;
 }
 
 export interface PilgrimageCapture {

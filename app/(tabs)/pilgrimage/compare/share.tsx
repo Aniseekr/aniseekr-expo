@@ -18,6 +18,7 @@ import { ThemedText, readableTextOn } from '../../../../components/themed';
 import {
   formatShareLocation,
   getShareEpisode,
+  getShareFrameValid,
   getShareMatchScore,
   getShareSceneName,
 } from '../../../../libs/services/pilgrimage/share-card';
@@ -54,6 +55,7 @@ export default function ShareComparisonScreen() {
   const animeTitle = getStringParam(params, 'animeTitle');
   const ep = getShareEpisode(params);
   const matchScore = getShareMatchScore(params);
+  const frameValid = getShareFrameValid(params);
   const locationText = formatShareLocation(params);
   const imageUrl = getStringParam(params, 'imageUrl') ?? '';
   const shotUri = getStringParam(params, 'shotUri') ?? '';
@@ -212,6 +214,7 @@ export default function ShareComparisonScreen() {
                 animeTitle={animeTitle}
                 episode={ep}
                 matchScore={showScore ? matchScore : null}
+                frameValid={frameValid}
                 locationText={showLocation ? locationText : null}
                 date={today}
                 accent={accent}

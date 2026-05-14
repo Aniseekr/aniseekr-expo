@@ -27,7 +27,14 @@ export type ShareCardProps = {
   sceneName: string;
   animeTitle?: string | null;
   episode?: string | null;
+  /** Frame match (image similarity) 0–100. Shown as "Match X%". */
   matchScore?: number | null;
+  /**
+   * Frame-match validity gate. `false` → suppress the score badge regardless
+   * of `showScore`, because the underlying photo failed an integrity check
+   * (lens covered, flat, no detail). Don't publish a misleading number.
+   */
+  frameValid?: boolean | null;
   locationText?: string | null;
   date: string;
   accent: string;
@@ -213,6 +220,7 @@ function PolaroidTemplate(props: TemplateProps) {
     accent,
     theme,
     showScore,
+    frameValid,
     showDate,
     showLocation,
     locationText,
@@ -313,7 +321,7 @@ function PolaroidTemplate(props: TemplateProps) {
         ) : null}
       </View>
 
-      {showScore && matchScore !== null && matchScore !== undefined ? (
+      {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
         <View
           style={{
             position: 'absolute',
@@ -361,6 +369,7 @@ function ClassicTemplate(props: TemplateProps) {
     accent,
     theme,
     showScore,
+    frameValid,
     showDate,
     showLocation,
     locationText,
@@ -396,7 +405,7 @@ function ClassicTemplate(props: TemplateProps) {
                 : 'Pilgrimage'}
           </ThemedText>
         </View>
-        {showScore && matchScore !== null && matchScore !== undefined ? (
+        {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
           <View
             style={{
               flexDirection: 'row',
@@ -494,6 +503,7 @@ function MinimalTemplate(props: TemplateProps) {
     accent,
     theme,
     showScore,
+    frameValid,
     showDate,
     showLocation,
     locationText,
@@ -539,7 +549,7 @@ function MinimalTemplate(props: TemplateProps) {
             style={{ color: '#fff', flex: 1 }}>
             {sceneName}
           </ThemedText>
-          {showScore && matchScore !== null && matchScore !== undefined ? (
+          {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
             <ThemedText
               variant="titleSmall"
               weight="700"
@@ -593,6 +603,7 @@ function ComicTemplate(props: TemplateProps) {
     accent,
     theme,
     showScore,
+    frameValid,
     showDate,
     showLocation,
     locationText,
@@ -634,7 +645,7 @@ function ComicTemplate(props: TemplateProps) {
             {sceneName.toUpperCase()}
           </ThemedText>
         </View>
-        {showScore && matchScore !== null && matchScore !== undefined ? (
+        {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
           <SpeechBubble color="#FF4F8F">{`${matchScore}%`}</SpeechBubble>
         ) : null}
       </View>
@@ -757,6 +768,7 @@ function MangaTemplate(props: TemplateProps) {
     date,
     theme,
     showScore,
+    frameValid,
     showDate,
     showLocation,
     locationText,
@@ -807,7 +819,7 @@ function MangaTemplate(props: TemplateProps) {
             </ThemedText>
           ) : null}
         </View>
-        {showScore && matchScore !== null && matchScore !== undefined ? (
+        {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
           <View
             style={{
               borderWidth: 2,

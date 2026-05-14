@@ -743,7 +743,7 @@ export default function CompareCaptureScreen() {
                 variant="captionSmall"
                 weight="700"
                 style={{ color: themeColor, letterSpacing: 0.5 }}>
-                Alignment {totalPct}%
+                Position {totalPct}%
               </ThemedText>
               {totalPct >= 90 ? (
                 <>
@@ -1001,7 +1001,7 @@ export default function CompareCaptureScreen() {
             ]}>
             <Ionicons name="checkmark-circle" size={18} color="#fff" />
             <ThemedText variant="bodySmall" weight="700" style={{ color: '#fff' }}>
-              Perfect alignment
+              Position locked — shoot now
             </ThemedText>
           </RNAnimated.View>
         ) : null}

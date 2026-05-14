@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   formatShareLocation,
+  getShareFrameValid,
   getShareMatchScore,
   getShareSceneName,
 } from '../../../libs/services/pilgrimage/share-card';
@@ -24,5 +25,15 @@ describe('share card metadata', () => {
     );
     expect(formatShareLocation({ spotLat: '35.0316' })).toBeNull();
     expect(formatShareLocation({ spotLat: 'not-a-number', spotLng: '135.7721' })).toBeNull();
+  });
+
+  it('parses frameValid as a tri-state (true / false / unknown)', () => {
+    expect(getShareFrameValid({ frameValid: '1' })).toBe(true);
+    expect(getShareFrameValid({ frameValid: 'true' })).toBe(true);
+    expect(getShareFrameValid({ frameValid: '0' })).toBe(false);
+    expect(getShareFrameValid({ frameValid: 'false' })).toBe(false);
+    expect(getShareFrameValid({})).toBeNull();
+    expect(getShareFrameValid({ frameValid: '' })).toBeNull();
+    expect(getShareFrameValid({ frameValid: 'maybe' })).toBeNull();
   });
 });

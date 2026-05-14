@@ -14,19 +14,12 @@ import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../../components/themed';
 import { recordCapture, type SensorSnapshot } from '../../../../libs/services/pilgrimage/captures';
 import { toFullResImageUrl } from '../../../../libs/services/pilgrimage/anitabi-image';
+import { scoreSnapshot } from '../../../../libs/services/pilgrimage/alignment-scoring';
+import {
+  computeFrameMatch,
+  type FrameMatch,
+} from '../../../../libs/services/pilgrimage/frame-match';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
-
-// Real-data alignment helpers — inline so this screen has no dependency on
-// services that aren't yet in place. See CLAUDE.md Rule 8: numbers shown to
-// the user must come from real sensor input, never a hash/seed.
-function overallScore(s: SensorSnapshot): number | null {
-  const { distanceMeters, headingDeltaDeg, tilt } = s;
-  if (distanceMeters == null || headingDeltaDeg == null || tilt == null) return null;
-  const pos = Math.max(0, 1 - distanceMeters / 30);
-  const head = 1 - Math.abs(headingDeltaDeg) / 180;
-  const tlt = Math.max(0, 1 - Math.abs(tilt) / 45);
-  return 0.4 * pos + 0.4 * head + 0.2 * tlt;
-}
 
 function getRetakeTip(s: SensorSnapshot | null): string | null {
   if (!s) return null;
@@ -95,19 +88,82 @@ export default function ComparePreviewScreen() {
     return { distanceMeters: dist, headingDeltaDeg: head, tilt: tlt };
   }, [params]);
 
-  const overall = useMemo(
-    () => (sensorSnapshot ? overallScore(sensorSnapshot) : null),
+  // Position lock from sensors — what the live camera badge measured. cos²
+  // falloff via the shared scoreSnapshot helper so this screen, the live
+  // badge, and the share card all use one formula.
+  const positionScore = useMemo(
+    () => (sensorSnapshot ? scoreSnapshot(sensorSnapshot) : null),
     [sensorSnapshot]
   );
 
+  // Frame match — does the photo actually look like the anime reference?
+  // Computed on mount via Skia (one decode per side at 64×64). Loading state
+  // is honest: we show "—" rather than a fake placeholder.
+  const [frameMatch, setFrameMatch] = useState<FrameMatch | null>(null);
+  const [frameLoading, setFrameLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFrameLoading(true);
+    setFrameMatch(null);
+    if (!imageUrl || !shotUri) {
+      setFrameLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void computeFrameMatch(imageUrl, shotUri)
+      .then((m) => {
+        if (cancelled) return;
+        setFrameMatch(m);
+      })
+      .catch((err) => {
+        console.warn('frame match failed', err);
+        if (cancelled) return;
+        setFrameMatch({
+          histogram: null,
+          edge: null,
+          lighting: null,
+          total: null,
+          valid: false,
+          reason: 'analysisFailed',
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setFrameLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl, shotUri]);
+
   const retakeTip = useMemo(() => getRetakeTip(sensorSnapshot), [sensorSnapshot]);
 
-  const overallTone = useMemo(() => {
-    if (overall == null) return theme.accent;
-    if (overall >= 0.8) return theme.status.success;
-    if (overall >= 0.5) return theme.accent;
+  // The big number = frame match (what the user perceives as "did my photo
+  // match"). Position lock is shown alongside but smaller.
+  const frameTone = useMemo(() => {
+    if (frameMatch?.total == null) return theme.accent;
+    if (!frameMatch.valid) return theme.status.error;
+    if (frameMatch.total >= 0.8) return theme.status.success;
+    if (frameMatch.total >= 0.5) return theme.accent;
     return theme.status.warning;
-  }, [overall, theme.accent, theme.status.success, theme.status.warning]);
+  }, [frameMatch, theme.accent, theme.status.error, theme.status.success, theme.status.warning]);
+
+  const frameBannerText = useMemo<string | null>(() => {
+    if (!frameMatch || frameMatch.valid) return null;
+    switch (frameMatch.reason) {
+      case 'dark':
+        return 'This photo looks completely dark — lens may be covered. Try again.';
+      case 'lowDetail':
+        return 'This photo has no detail — check focus and lens cover.';
+      case 'lowContrast':
+        return 'This photo is very flat — check exposure or pick a more textured scene.';
+      case 'analysisFailed':
+        return 'Could not analyze this photo. Frame match is unavailable.';
+      default:
+        return null;
+    }
+  }, [frameMatch]);
 
   const stageRef = useRef<View>(null);
 
@@ -150,16 +206,24 @@ export default function ComparePreviewScreen() {
 
   const persistCapture = useCallback(
     async (compositeUri?: string) => {
+      const enrichedSnapshot: SensorSnapshot | undefined = sensorSnapshot
+        ? {
+            ...sensorSnapshot,
+            frameMatch: frameMatch?.total ?? null,
+            frameValid: frameMatch ? frameMatch.valid : null,
+            frameReason: frameMatch?.reason ?? null,
+          }
+        : undefined;
       await recordCapture({
         spotId,
         uri: shotUri,
         compositeUri,
         capturedAt: Date.now(),
         heading: heading ?? undefined,
-        sensorSnapshot: sensorSnapshot ?? undefined,
+        sensorSnapshot: enrichedSnapshot,
       });
     },
-    [spotId, shotUri, heading, sensorSnapshot]
+    [spotId, shotUri, heading, sensorSnapshot, frameMatch]
   );
 
   const snapshotComposite = useCallback(async (): Promise<string | null> => {
@@ -221,8 +285,18 @@ export default function ComparePreviewScreen() {
       spotLat: spotLat ?? '',
       spotLng: spotLng ?? '',
     };
-    if (overall != null) {
-      shareParams.matchScore = String(Math.round(overall * 100));
+    // matchScore is now the *frame* match (what the user perceives as "did my
+    // photo match the anime"). The position lock travels separately so the
+    // share card can show both honestly.
+    if (frameMatch?.total != null) {
+      shareParams.matchScore = String(Math.round(frameMatch.total * 100));
+    }
+    if (frameMatch) {
+      shareParams.frameValid = frameMatch.valid ? '1' : '0';
+      if (frameMatch.reason) shareParams.frameReason = frameMatch.reason;
+    }
+    if (positionScore?.total != null) {
+      shareParams.positionScore = String(Math.round(positionScore.total * 100));
     }
     router.push({
       pathname: '/pilgrimage/compare/share',
@@ -240,7 +314,8 @@ export default function ComparePreviewScreen() {
     themeColor,
     spotLat,
     spotLng,
-    overall,
+    frameMatch,
+    positionScore,
   ]);
 
   const handleRetake = useCallback(() => {
@@ -290,7 +365,26 @@ export default function ComparePreviewScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {sensorSnapshot ? (
+          {frameBannerText ? (
+            <View
+              style={[
+                styles.invalidBanner,
+                {
+                  backgroundColor: `${theme.status.error}1F`,
+                  borderColor: theme.status.error,
+                },
+              ]}>
+              <Ionicons name="alert-circle" size={18} color={theme.status.error} />
+              <ThemedText
+                variant="bodySmall"
+                weight="600"
+                style={{ flex: 1, color: theme.status.error }}>
+                {frameBannerText}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {sensorSnapshot || frameLoading || frameMatch ? (
             <View
               style={[
                 styles.scoreCard,
@@ -301,75 +395,93 @@ export default function ComparePreviewScreen() {
               ]}>
               <View style={{ flex: 1, gap: 10 }}>
                 <ThemedText variant="captionSmall" tone="secondary" weight="600">
-                  Alignment Replay
+                  Frame Match
                 </ThemedText>
-                <View style={styles.pillRow}>
-                  {sensorSnapshot.distanceMeters != null ? (
-                    <View
-                      style={[
-                        styles.pill,
-                        {
-                          backgroundColor: theme.background.tertiary,
-                          borderColor: theme.glassBorder,
-                        },
-                      ]}>
-                      <ThemedText variant="bodySmall" weight="700">
-                        {`${sensorSnapshot.distanceMeters.toFixed(1)} m`}
-                      </ThemedText>
-                      <ThemedText variant="captionSmall" tone="secondary">
-                        Distance to spot
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                  {sensorSnapshot.headingDeltaDeg != null ? (
-                    <View
-                      style={[
-                        styles.pill,
-                        {
-                          backgroundColor: theme.background.tertiary,
-                          borderColor: theme.glassBorder,
-                        },
-                      ]}>
-                      <ThemedText variant="bodySmall" weight="700">
-                        {formatSignedDeg(sensorSnapshot.headingDeltaDeg)}
-                      </ThemedText>
-                      <ThemedText variant="captionSmall" tone="secondary">
-                        Heading offset
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                  {sensorSnapshot.tilt != null ? (
-                    <View
-                      style={[
-                        styles.pill,
-                        {
-                          backgroundColor: theme.background.tertiary,
-                          borderColor: theme.glassBorder,
-                        },
-                      ]}>
-                      <ThemedText variant="bodySmall" weight="700">
-                        {formatSignedDeg(sensorSnapshot.tilt)}
-                      </ThemedText>
-                      <ThemedText variant="captionSmall" tone="secondary">
-                        Tilt offset
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
+                {positionScore?.total != null ? (
+                  <ThemedText variant="captionSmall" tone="secondary">
+                    Position lock {Math.round(positionScore.total * 100)}%
+                  </ThemedText>
+                ) : null}
+                {sensorSnapshot ? (
+                  <View style={styles.pillRow}>
+                    {sensorSnapshot.distanceMeters != null ? (
+                      <View
+                        style={[
+                          styles.pill,
+                          {
+                            backgroundColor: theme.background.tertiary,
+                            borderColor: theme.glassBorder,
+                          },
+                        ]}>
+                        <ThemedText variant="bodySmall" weight="700">
+                          {`${sensorSnapshot.distanceMeters.toFixed(1)} m`}
+                        </ThemedText>
+                        <ThemedText variant="captionSmall" tone="secondary">
+                          Distance to spot
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                    {sensorSnapshot.headingDeltaDeg != null ? (
+                      <View
+                        style={[
+                          styles.pill,
+                          {
+                            backgroundColor: theme.background.tertiary,
+                            borderColor: theme.glassBorder,
+                          },
+                        ]}>
+                        <ThemedText variant="bodySmall" weight="700">
+                          {formatSignedDeg(sensorSnapshot.headingDeltaDeg)}
+                        </ThemedText>
+                        <ThemedText variant="captionSmall" tone="secondary">
+                          Heading offset
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                    {sensorSnapshot.tilt != null ? (
+                      <View
+                        style={[
+                          styles.pill,
+                          {
+                            backgroundColor: theme.background.tertiary,
+                            borderColor: theme.glassBorder,
+                          },
+                        ]}>
+                        <ThemedText variant="bodySmall" weight="700">
+                          {formatSignedDeg(sensorSnapshot.tilt)}
+                        </ThemedText>
+                        <ThemedText variant="captionSmall" tone="secondary">
+                          Tilt offset
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
-              {overall != null ? (
-                <View style={styles.overallWrap}>
+              <View style={styles.overallWrap}>
+                {frameLoading ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
+                ) : frameMatch?.total != null ? (
+                  <>
+                    <ThemedText
+                      variant="displayMedium"
+                      weight="700"
+                      style={{ color: frameTone, lineHeight: 36 }}>
+                      {Math.round(frameMatch.total * 100)}
+                    </ThemedText>
+                    <ThemedText variant="bodyMedium" weight="700" style={{ color: frameTone }}>
+                      %
+                    </ThemedText>
+                  </>
+                ) : (
                   <ThemedText
                     variant="displayMedium"
                     weight="700"
-                    style={{ color: overallTone, lineHeight: 36 }}>
-                    {Math.round(overall * 100)}
+                    style={{ color: theme.text.tertiary, lineHeight: 36 }}>
+                    —
                   </ThemedText>
-                  <ThemedText variant="bodyMedium" weight="700" style={{ color: overallTone }}>
-                    %
-                  </ThemedText>
-                </View>
-              ) : null}
+                )}
+              </View>
             </View>
           ) : null}
 
@@ -487,7 +599,7 @@ export default function ComparePreviewScreen() {
             </View>
           </View>
 
-          {sensorSnapshot ? (
+          {sensorSnapshot && positionScore ? (
             <View
               style={[
                 styles.analysisCard,
@@ -498,33 +610,78 @@ export default function ComparePreviewScreen() {
               ]}>
               <View style={styles.analysisHeader}>
                 <ThemedText variant="titleMedium" weight="700">
-                  Alignment Analysis
+                  Position Lock
                 </ThemedText>
-                <Ionicons name="sparkles" size={14} color={theme.accent} />
+                <Ionicons name="navigate" size={14} color={theme.accent} />
               </View>
-              {sensorSnapshot.distanceMeters != null ? (
+              {sensorSnapshot.distanceMeters != null && positionScore.position != null ? (
                 <AnalysisBar
                   label="Position"
-                  value={Math.max(0, 1 - sensorSnapshot.distanceMeters / 30) * 100}
+                  value={positionScore.position * 100}
                   rightLabel={`${sensorSnapshot.distanceMeters.toFixed(1)} m`}
                   theme={theme}
                   tone={theme.status.success}
                 />
               ) : null}
-              {sensorSnapshot.headingDeltaDeg != null ? (
+              {sensorSnapshot.headingDeltaDeg != null && positionScore.heading != null ? (
                 <AnalysisBar
                   label="Heading"
-                  value={(1 - Math.abs(sensorSnapshot.headingDeltaDeg) / 180) * 100}
+                  value={positionScore.heading * 100}
                   rightLabel={`±${Math.round(Math.abs(sensorSnapshot.headingDeltaDeg))}°`}
                   theme={theme}
                   tone={theme.status.info}
                 />
               ) : null}
-              {sensorSnapshot.tilt != null ? (
+              {sensorSnapshot.tilt != null && positionScore.tilt != null ? (
                 <AnalysisBar
                   label="Tilt"
-                  value={Math.max(0, 1 - Math.abs(sensorSnapshot.tilt) / 45) * 100}
+                  value={positionScore.tilt * 100}
                   rightLabel={formatSignedDeg(sensorSnapshot.tilt)}
+                  theme={theme}
+                  tone={theme.accent}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
+          {frameMatch && frameMatch.total != null ? (
+            <View
+              style={[
+                styles.analysisCard,
+                {
+                  backgroundColor: theme.background.secondary,
+                  borderColor: theme.glassBorder,
+                },
+              ]}>
+              <View style={styles.analysisHeader}>
+                <ThemedText variant="titleMedium" weight="700">
+                  Frame Match
+                </ThemedText>
+                <Ionicons name="image" size={14} color={theme.accent} />
+              </View>
+              {frameMatch.histogram != null ? (
+                <AnalysisBar
+                  label="Histogram"
+                  value={frameMatch.histogram * 100}
+                  rightLabel={`${Math.round(frameMatch.histogram * 100)}%`}
+                  theme={theme}
+                  tone={theme.status.success}
+                />
+              ) : null}
+              {frameMatch.edge != null ? (
+                <AnalysisBar
+                  label="Edge"
+                  value={frameMatch.edge * 100}
+                  rightLabel={`${Math.round(frameMatch.edge * 100)}%`}
+                  theme={theme}
+                  tone={theme.status.info}
+                />
+              ) : null}
+              {frameMatch.lighting != null ? (
+                <AnalysisBar
+                  label="Lighting"
+                  value={frameMatch.lighting * 100}
+                  rightLabel={`${Math.round(frameMatch.lighting * 100)}%`}
                   theme={theme}
                   tone={theme.accent}
                 />
@@ -720,6 +877,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 14,
     borderRadius: 16,
+    borderWidth: 1,
+  },
+  invalidBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
   },
   pillRow: {
