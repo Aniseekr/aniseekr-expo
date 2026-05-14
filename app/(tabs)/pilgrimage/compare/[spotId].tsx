@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DeviceMotion, Magnetometer } from 'expo-sensors';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Canvas, Image as SkiaImage } from '@shopify/react-native-skia';
@@ -106,6 +107,7 @@ export default function CompareCaptureScreen() {
   const [perfectFiredAt, setPerfectFiredAt] = useState<number | null>(null);
   const [showPerfectBanner, setShowPerfectBanner] = useState(false);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [portraitLocked, setPortraitLocked] = useState(false);
   const perfectOpacity = useRef(new RNAnimated.Value(0)).current;
   const hintOpacity = useRef(new RNAnimated.Value(1)).current;
   const [hintIconLandscape, setHintIconLandscape] = useState(false);
@@ -127,6 +129,27 @@ export default function CompareCaptureScreen() {
       requestPermission().catch(() => undefined);
     }
   }, [permission, requestPermission]);
+
+  // Allow auto-rotation on this screen so the user can frame in landscape;
+  // restore the app-wide portrait lock on unmount.
+  useEffect(() => {
+    ScreenOrientation.unlockAsync().catch(() => undefined);
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(
+        () => undefined
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (portraitLocked) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(
+        () => undefined
+      );
+    } else {
+      ScreenOrientation.unlockAsync().catch(() => undefined);
+    }
+  }, [portraitLocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -442,6 +465,12 @@ export default function CompareCaptureScreen() {
     setGrid((g) => !g);
   }, []);
 
+  const togglePortraitLock = useCallback(() => {
+    hapticsBridge.selection();
+    setPortraitLocked((v) => !v);
+    setHintDismissed(true);
+  }, []);
+
   const openInfo = useCallback(() => {
     hapticsBridge.tap();
     router.push({
@@ -514,7 +543,12 @@ export default function CompareCaptureScreen() {
     <GestureHandlerRootView style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.root}>
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          responsiveOrientationWhenOrientationLocked
+        />
 
         {grid ? <RuleOfThirdsGrid /> : null}
 
@@ -787,6 +821,30 @@ export default function CompareCaptureScreen() {
               ]}>
               <Ionicons name="camera-reverse-outline" size={16} color="#fff" />
             </Pressable>
+            <Pressable
+              onPress={togglePortraitLock}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityState={{ selected: portraitLocked }}
+              accessibilityLabel={
+                portraitLocked ? 'Allow rotation' : 'Lock portrait orientation'
+              }
+              style={({ pressed }) => [
+                styles.miniBtn,
+                {
+                  backgroundColor: portraitLocked
+                    ? themeColor + '33'
+                    : 'rgba(255,255,255,0.12)',
+                  borderColor: portraitLocked ? themeColor : 'rgba(255,255,255,0.22)',
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}>
+              <Ionicons
+                name={portraitLocked ? 'lock-closed' : 'lock-open-outline'}
+                size={16}
+                color={portraitLocked ? themeColor : '#fff'}
+              />
+            </Pressable>
           </View>
         </View>
 
@@ -808,7 +866,7 @@ export default function CompareCaptureScreen() {
           </RNAnimated.View>
         ) : null}
 
-        {!isLandscape && !hintDismissed ? (
+        {!isLandscape && !hintDismissed && !portraitLocked ? (
           <RNAnimated.View
             style={[styles.rotateHintWrap, { opacity: hintOpacity }]}
             pointerEvents="box-none">

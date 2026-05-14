@@ -835,6 +835,10 @@ export default function PilgrimageDetailScreen() {
         }
         setAnime(lite);
         setPoints(lite.litePoints ?? []);
+        // Lite payload is enough to render the screen — let the user interact
+        // immediately while the heavier /points/detail call runs in the
+        // background and upgrades the points when it lands.
+        setLoading(false);
         try {
           const detailed: AnitabiPointDetail[] = await anitabiService.getDetailedPoints(validBangumiId);
           if (!cancelled && detailed.length > 0) {
@@ -843,7 +847,6 @@ export default function PilgrimageDetailScreen() {
         } catch {
           // Lite data is enough; ignore.
         }
-        setLoading(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
