@@ -21,6 +21,7 @@ import { getCurrentSeason, getCurrentYear } from '../../utils/season-utils';
 import {
   type AnimeDataSource,
   type AnimeGenre,
+  type AnimePageOptions,
   type AnimeRelation,
   type AnimeStaff,
   type AnimeStreaming,
@@ -289,7 +290,8 @@ export class AniListDataSource implements AnimeDataSource {
   async fetchSeasonalAnime(
     page: number = 1,
     season?: string,
-    year?: number
+    year?: number,
+    options: AnimePageOptions = {}
   ): Promise<UnifiedAnimeItem[]> {
     const seasonUpper = (season ?? getCurrentSeason()).toUpperCase();
     const targetYear = year ?? getCurrentYear();
@@ -297,6 +299,9 @@ export class AniListDataSource implements AnimeDataSource {
       season: seasonUpper,
       year: targetYear,
       page,
+      // Required by the Bangumi screen's dynamic loader. Without this, AniList
+      // uses its 20-item GraphQL default while the repository expects 50.
+      perPage: normalizePerPage(options.perPage),
     };
     if (this.shouldFilterAdult()) vars.isAdult = false;
     const data = await this.client.query<PageWrapper<RawAniListMedia>>(SEASONAL_QUERY, vars);
@@ -596,6 +601,11 @@ function nextAiringDay(airingAt: number | null): string | null {
     'Saturdays',
   ];
   return days[date.getUTCDay()] ?? null;
+}
+
+function normalizePerPage(perPage: number | undefined): number {
+  if (perPage === undefined || !Number.isFinite(perPage)) return 20;
+  return Math.max(1, Math.min(Math.trunc(perPage), 50));
 }
 
 function humanizeRelation(relationType: string): string {

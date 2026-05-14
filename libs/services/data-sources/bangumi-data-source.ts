@@ -18,6 +18,7 @@ import type { PlatformType } from '../auth/types';
 import type {
   AnimeDataSource,
   AnimeGenre,
+  AnimePageOptions,
   AnimeRelation,
   AnimeStaff,
   AnimeStreaming,
@@ -135,10 +136,13 @@ export class BangumiDataSource implements AnimeDataSource {
   async fetchSeasonalAnime(
     page?: number,
     season?: string,
-    year?: number
+    year?: number,
+    options?: AnimePageOptions
   ): Promise<UnifiedAnimeItem[]> {
     const aniList = await this.getAniList();
-    const items = await aniList.fetchSeasonalAnime(page, season, year);
+    // Bangumi list views are AniList-backed. Keep pagination options intact so
+    // batched loaders can request page sizes beyond AniList's 20-item default.
+    const items = await aniList.fetchSeasonalAnime(page, season, year, options);
     return this.enrichWithChineseTitles(items);
   }
 

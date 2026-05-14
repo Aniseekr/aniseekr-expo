@@ -293,4 +293,19 @@ describe('BangumiDataSource (BGM-001..008)', () => {
     expect(result).toEqual([]);
     spy.mockRestore();
   });
+
+  it('BGM-008b fetchSeasonalAnime forwards pagination options to delegated AniList source', async () => {
+    const stub = buildStubAniList([]);
+    const { spy } = captureFetch(() => jsonResponse({ data: [] }));
+
+    const source = new BangumiDataSource({
+      aniListSource: stub.source,
+      skipRateLimit: true,
+    });
+    await (source.fetchSeasonalAnime as any)(2, 'WINTER', 2024, { perPage: 50 });
+
+    expect(stub.seasonal).toHaveBeenCalledTimes(1);
+    expect(stub.seasonal.mock.calls[0]).toEqual([2, 'WINTER', 2024, { perPage: 50 }]);
+    spy.mockRestore();
+  });
 });

@@ -49,6 +49,7 @@ import { AnnictClient } from '../clients/annict-client';
 import { expandSearchVariants } from '../utils/chinese-converter';
 import { Logger } from '../utils/logger';
 import { achievementService } from '../services/achievements/achievement-service';
+import { getOverrides as getGenreCoverOverrides } from '../services/rate/genre-cover-override';
 
 const SEASONAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const GENRES_STALE_TIME_MS = 60 * 60 * 1000; // 1 hour
@@ -58,6 +59,7 @@ const LEGACY_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 // Total per-page survival = TTL (1h) + grace (23h) so a stale-but-recent page
 // can render instantly while a background refresh runs.
 const SEASONAL_PAGE_GRACE_MS = 23 * 60 * 60 * 1000;
+const COMMON_SOURCE_PAGE_SIZES = new Set([20, 25]);
 
 interface SeasonalPageCacheEntry {
   media: AniListAnime[];
@@ -353,6 +355,12 @@ export class AnimeRepository {
    * and an optional `onPageReceived` callback so the UI can render each page
    * as it arrives instead of waiting for the full payload.
    *
+   * Dynamic-loading guardrail: every page request must pass `perPage` down to
+   * the source. If a source falls back to its own 20-item default, do not treat
+   * that short page as the end of the season; continue while it looks like a
+   * full fixed-size page. This protects the Bangumi screen from rendering only
+   * the first filtered page.
+   *
    * Cache lives at `seasonalpage_${platform}_${season}_${year}_p${page}_pp${perPage}_r${flag}`
    * (one row per page). Within ttl the page is fresh; within ttl + 23h grace
    * the page is returned immediately while a background refresh runs.
@@ -393,7 +401,7 @@ export class AnimeRepository {
         );
       }
 
-      const cacheKey = `seasonalpage_${requestPlatform}_${season}_${year}_p${currentPage}_pp${perPage}_r${r18Flag}`;
+      const cacheKey = `seasonalpage_v2_${requestPlatform}_${season}_${year}_p${currentPage}_pp${perPage}_r${r18Flag}`;
       const queryKey = makeKey('seasonalAnimeBatched', {
         source: requestPlatform,
         page: currentPage,
@@ -430,12 +438,13 @@ export class AnimeRepository {
 
       if (!pageItems) {
         const items = await this.queryClientImpl.fetch(queryKey, async () =>
-          source.fetchSeasonalAnime(currentPage, season, year)
+          source.fetchSeasonalAnime(currentPage, season, year, { perPage })
         );
         pageItems = items;
-        // AniList returns up to perPage items on a full page; a short page
-        // means we're at or past the end.
-        hasNextPage = items.length >= perPage;
+        // Some sources honor the requested perPage while others keep a fixed
+        // page size. Treat known fixed full pages as continuable, otherwise a
+        // 20-item source page would stop dynamic loading after page 1.
+        hasNextPage = inferSeasonalHasNextPage(items.length, perPage);
         if (pageItems.length > 0) {
           await this.cacheServiceImpl.set(
             cacheKey,
@@ -480,12 +489,15 @@ export class AnimeRepository {
     inFlightSeasonalRevalidations.add(cacheKey);
     try {
       const items = await this.queryClientImpl.fetch(queryKey, async () =>
-        source.fetchSeasonalAnime(page, season, year)
+        source.fetchSeasonalAnime(page, season, year, { perPage })
       );
       if (items.length > 0) {
         await this.cacheServiceImpl.set(
           cacheKey,
-          { items, hasNextPage: items.length >= perPage } satisfies SeasonalBatchedPageEntry,
+          {
+            items,
+            hasNextPage: inferSeasonalHasNextPage(items.length, perPage),
+          } satisfies SeasonalBatchedPageEntry,
           SEASONAL_CACHE_TTL_MS
         );
       }
@@ -807,13 +819,25 @@ export class AnimeRepository {
     AnimeRepository.instance = null;
   }
 
-  static async getTopAnime(page = 1): Promise<Anime[]> {
-    const cacheKey = `top_anime_${page}_r${r18CacheFlag()}`;
+  static async getTopAnime(page = 1, perPage = 20): Promise<Anime[]> {
+    const cacheKey = `top_anime_${page}_pp${perPage}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime[]>(cacheKey);
     if (cached) return cached.map(mapAniListToAnime);
 
     const data = filterAniListAnime(
-      await AniListClient.getTopAnime(page, 20, legacyAniListOptions())
+      await AniListClient.getTopAnime(page, perPage, legacyAniListOptions())
+    );
+    await CacheService.set(cacheKey, data, LEGACY_LIST_CACHE_TTL_MS);
+    return data.map(mapAniListToAnime);
+  }
+
+  static async getTrendingAnime(page = 1, perPage = 20): Promise<Anime[]> {
+    const cacheKey = `trending_anime_${page}_pp${perPage}_r${r18CacheFlag()}`;
+    const cached = await CacheService.get<AniListAnime[]>(cacheKey);
+    if (cached) return cached.map(mapAniListToAnime);
+
+    const data = filterAniListAnime(
+      await AniListClient.getTrendingAnime(page, perPage, legacyAniListOptions())
     );
     await CacheService.set(cacheKey, data, LEGACY_LIST_CACHE_TTL_MS);
     return data.map(mapAniListToAnime);
@@ -967,29 +991,27 @@ export class AnimeRepository {
 
   static async getGenres(): Promise<Genre[]> {
     const cacheKey = `genres_list_v2_r${r18CacheFlag()}`;
+    const overrides = await getGenreCoverOverrides();
     const cached = await CacheService.get<Genre[]>(cacheKey);
-    if (cached) return filterGenreCards(cached);
+    if (cached) return filterGenreCards(applyGenreCoverOverrides(cached, overrides));
 
     const genres = filterGenreNames(await AniListClient.getGenres());
 
-    const genresWithImages: Genre[] = await Promise.all(
+    const fetched: Genre[] = await Promise.all(
       genres.slice(0, 20).map(async (name) => {
         try {
           const anime = filterAniListAnime(
             await AniListClient.getAnimeByGenre(name, 1, 1, legacyAniListOptions())
           );
           const image = anime[0]?.coverImage?.extraLarge ?? anime[0]?.coverImage?.large ?? '';
-          return {
-            id: name,
-            displayName: name,
-            image,
-          };
+          return { id: name, displayName: name, image };
         } catch {
           return { id: name, displayName: name, image: '' };
         }
       })
     );
 
+    const genresWithImages = applyGenreCoverOverrides(fetched, overrides);
     await CacheService.set(cacheKey, genresWithImages, LEGACY_DETAIL_CACHE_TTL_MS);
     return genresWithImages;
   }
@@ -1166,6 +1188,11 @@ function filterGenreCards(genres: Genre[]): Genre[] {
   );
 }
 
+function applyGenreCoverOverrides(genres: Genre[], overrides: Record<string, string>): Genre[] {
+  if (Object.keys(overrides).length === 0) return genres;
+  return genres.map((g) => (g.image === '' && overrides[g.id] ? { ...g, image: overrides[g.id] } : g));
+}
+
 function isAniListAnimeSFW(item: AniListAnime): boolean {
   return !hasAdultContentSignal({
     isAdult: item.isAdult,
@@ -1176,6 +1203,12 @@ function isAniListAnimeSFW(item: AniListAnime): boolean {
 
 function makeKey(name: string, params: Record<string, string | number>): QueryKeyObject {
   return { name, params };
+}
+
+function inferSeasonalHasNextPage(itemCount: number, requestedPerPage: number): boolean {
+  if (itemCount <= 0) return false;
+  if (itemCount >= requestedPerPage) return true;
+  return requestedPerPage > itemCount && COMMON_SOURCE_PAGE_SIZES.has(itemCount);
 }
 
 // Re-exports kept for callers that imported `PlatformImageData` via the

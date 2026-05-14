@@ -2,7 +2,7 @@
  * Deterministic unit tests for the new `AnimeRepository` orchestrator.
  *
  * Spec cases: REPO-001..005, REPO-010..013, REPO-020, REPO-021..023, REPO-030,
- * REPO-031, REPO-032.
+ * REPO-031, REPO-032, REPO-050.
  *
  * All data sources are mocked via constructor injection. The shared
  * `QueryClient` and `CacheService` singletons are reset between tests so
@@ -316,6 +316,30 @@ describe('AnimeRepository', () => {
     // The cached value is rehydrated from JSON so it won't be the same
     // instance — assert via id.
     expect(result[0].id).toBe('cached');
+  });
+
+  it('REPO-050 batched seasonal fetch continues when a source returns smaller fixed-size pages', async () => {
+    const fetchSeasonal = mock(async (page?: number) => {
+      if (!page || page > 3) return [];
+      return Array.from({ length: 20 }, (_, idx) =>
+        makeItem({ id: `p${page}-${idx}`, source: 'bangumi' })
+      );
+    });
+    const source = buildMockSource({
+      type: 'bangumi',
+      fetchSeasonalAnime: fetchSeasonal,
+    });
+    const repo = new AnimeRepository({ bangumi: source });
+
+    const result = await repo.fetchSeasonalAnimeBatched('SPRING', 2026, {
+      perPage: 50,
+      maxItems: 60,
+      preferredSource: 'bangumi',
+    });
+
+    expect(result).toHaveLength(60);
+    expect(fetchSeasonal).toHaveBeenCalledTimes(3);
+    expect(fetchSeasonal.mock.calls.map((call) => call[0])).toEqual([1, 2, 3]);
   });
 
   // -------- Genres fallback (REPO-020) --------

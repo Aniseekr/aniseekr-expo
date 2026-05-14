@@ -37,6 +37,23 @@ export interface PilgrimageRow {
   expires_at: number;
 }
 
+export interface DeckStateRow {
+  genre_id: string;
+  photos_json: string;
+  deck_json: string;
+  current_index: number;
+  current_page: number;
+  has_more: number;
+  mode: string;
+  updated_at: number;
+}
+
+export interface GenreCoverOverrideRow {
+  id: string;
+  url: string;
+  updated_at: number;
+}
+
 export interface PilgrimageSaveInput {
   bangumiId: number;
   title: string;
@@ -264,6 +281,24 @@ const DDL = `
         seen_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_swipe_seen_at ON swipe_seen(seen_at);
+
+      CREATE TABLE IF NOT EXISTS deck_state (
+        genre_id TEXT PRIMARY KEY NOT NULL,
+        photos_json TEXT NOT NULL,
+        deck_json TEXT NOT NULL,
+        current_index INTEGER NOT NULL,
+        current_page INTEGER NOT NULL,
+        has_more INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_deck_state_updated ON deck_state(updated_at);
+
+      CREATE TABLE IF NOT EXISTS genre_cover_overrides (
+        id TEXT PRIMARY KEY NOT NULL,
+        url TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `;
 
 export const LocalDB = {
@@ -333,6 +368,61 @@ export const LocalDB = {
   async clearSwipeSeen(): Promise<void> {
     const db = await openDb();
     await db.runAsync('DELETE FROM swipe_seen');
+  },
+
+  async getDeckState(genreId: string): Promise<DeckStateRow | null> {
+    const db = await openDb();
+    const row = await db.getFirstAsync<DeckStateRow>(
+      'SELECT * FROM deck_state WHERE genre_id = ?',
+      genreId
+    );
+    return row ?? null;
+  },
+
+  async setDeckState(row: DeckStateRow): Promise<void> {
+    const db = await openDb();
+    await db.runAsync(
+      `INSERT OR REPLACE INTO deck_state (
+        genre_id, photos_json, deck_json, current_index,
+        current_page, has_more, mode, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      row.genre_id,
+      row.photos_json,
+      row.deck_json,
+      row.current_index,
+      row.current_page,
+      row.has_more,
+      row.mode,
+      row.updated_at
+    );
+  },
+
+  async deleteDeckState(genreId: string): Promise<void> {
+    const db = await openDb();
+    await db.runAsync('DELETE FROM deck_state WHERE genre_id = ?', genreId);
+  },
+
+  async clearAllDeckStates(): Promise<void> {
+    const db = await openDb();
+    await db.runAsync('DELETE FROM deck_state');
+  },
+
+  async getGenreCoverOverrides(): Promise<GenreCoverOverrideRow[]> {
+    const db = await openDb();
+    const rows = await db.getAllAsync<GenreCoverOverrideRow>(
+      'SELECT id, url, updated_at FROM genre_cover_overrides'
+    );
+    return rows ?? [];
+  },
+
+  async setGenreCoverOverride(id: string, url: string): Promise<void> {
+    const db = await openDb();
+    await db.runAsync(
+      'INSERT OR REPLACE INTO genre_cover_overrides (id, url, updated_at) VALUES (?, ?, ?)',
+      id,
+      url,
+      Date.now()
+    );
   },
 
   async getStats(): Promise<UserStats> {

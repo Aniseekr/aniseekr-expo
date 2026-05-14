@@ -13,6 +13,15 @@ export interface AnimeGenre {
   region?: string;
 }
 
+export interface AnimePageOptions {
+  /**
+   * Optional page size requested by batched/dynamic loaders. Implementations
+   * that can honor it should pass it to the upstream API; wrappers must forward
+   * it to their delegated source so later pages are not accidentally skipped.
+   */
+  perPage?: number;
+}
+
 /** A staff credit (director, character designer, etc). */
 export interface AnimeStaff {
   id: string;
@@ -57,7 +66,12 @@ export interface AnimeSearchable {
   fetchAnime(page: number, genreId?: number): Promise<UnifiedAnimeItem[]>;
   fetchGenres(): Promise<AnimeGenre[]>;
   fetchTopAnime(page?: number): Promise<UnifiedAnimeItem[]>;
-  fetchSeasonalAnime(page?: number, season?: string, year?: number): Promise<UnifiedAnimeItem[]>;
+  fetchSeasonalAnime(
+    page?: number,
+    season?: string,
+    year?: number,
+    options?: AnimePageOptions
+  ): Promise<UnifiedAnimeItem[]>;
 }
 
 export interface AnimeDetailProvider {

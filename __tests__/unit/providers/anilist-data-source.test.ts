@@ -2,7 +2,7 @@
  * Deterministic unit tests for `AniListDataSource`.
  *
  * Spec cases: ANIL-001, ANIL-002, ANIL-003, ANIL-004, ANIL-005, ANIL-006,
- * ANIL-007, ANIL-008.
+ * ANIL-007, ANIL-008, ANIL-009.
  *
  * All HTTP is mocked. Each test asserts both:
  *   - the GraphQL query/variables sent to AniList match the contract
@@ -323,5 +323,27 @@ describe('AniListDataSource', () => {
     const [item] = await ds.searchAnime('x', 1);
     expect(item.tags).toEqual(['Time Travel', 'School']);
     expect(item.tags).not.toContain('Sister Death');
+  });
+
+  it('ANIL-009 fetchSeasonalAnime forwards a perPage override to GraphQL variables', async () => {
+    const { ds, calls } = buildSubject(() =>
+      fakeJson({
+        data: {
+          Page: {
+            media: [],
+          },
+        },
+      })
+    );
+
+    await (ds.fetchSeasonalAnime as any)(1, 'SPRING', 2026, { perPage: 50 });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].parsedBody.variables).toMatchObject({
+      page: 1,
+      perPage: 50,
+      season: 'SPRING',
+      year: 2026,
+    });
   });
 });
