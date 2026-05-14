@@ -17,7 +17,8 @@ import { Photo } from './types';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   getStackRevealTranslation,
-  SWIPE_HANDOFF_DELAY_MS,
+  STACK_REVEAL_DISTANCE,
+  runSwipeHandoff,
 } from '../../libs/services/rate/swipe-animation';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -94,7 +95,7 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(
     const hasThresholdHaptic = useSharedValue(false);
     const handOffSwipe = useCallback(
       (direction: 'left' | 'right') => {
-        setTimeout(() => onSwipe(direction), SWIPE_HANDOFF_DELAY_MS);
+        runSwipeHandoff(direction, onSwipe);
       },
       [onSwipe]
     );
@@ -214,14 +215,28 @@ export const PhotoCard = forwardRef<PhotoCardRef, Props>(
             if (Math.abs(distance) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD) {
               const dir = distance > 0 ? 'right' : 'left';
 
-              // Velocity-based Haptics
+              const targetX = dir === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
+              translateX.value = withSpring(targetX, {
+                ...EXIT_SPRING_CONFIG,
+                velocity,
+              });
+              if (activeTranslation) {
+                activeTranslation.value = withSpring(
+                  dir === 'right' ? STACK_REVEAL_DISTANCE : -STACK_REVEAL_DISTANCE,
+                  EXIT_SPRING_CONFIG
+                );
+              }
+              rotate.value = withSpring(dir === 'right' ? 25 : -25, {
+                ...EXIT_SPRING_CONFIG,
+                velocity: velocity / 10,
+              });
+              translateY.value = withSpring(-50, EXIT_SPRING_CONFIG);
+              scheduleOnRN(handOffSwipe, dir);
               if (Math.abs(velocity) > 2000) {
                 scheduleOnRN(hapticsBridge.impact, 'heavy');
               } else {
                 scheduleOnRN(hapticsBridge.impact, 'medium');
               }
-
-              scheduleOnRN(flingOut, dir, velocity);
             } else {
               scheduleOnRN(hapticsBridge.swipeCancel);
               scheduleOnRN(resetPosition);

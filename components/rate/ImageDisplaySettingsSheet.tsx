@@ -25,6 +25,8 @@ interface ImageDisplaySettingsSheetProps {
   preferences: SwipePrefs;
   onClose: () => void;
   onChange: (next: SwipePrefs) => void;
+  restartGenreName?: string;
+  onRestartGenre?: () => void;
 }
 
 function ImageDisplaySettingsSheetComponent({
@@ -32,6 +34,8 @@ function ImageDisplaySettingsSheetComponent({
   preferences,
   onClose,
   onChange,
+  restartGenreName,
+  onRestartGenre,
 }: ImageDisplaySettingsSheetProps) {
   const { theme } = useTheme();
 
@@ -42,6 +46,13 @@ function ImageDisplaySettingsSheetComponent({
     },
     [preferences, onChange]
   );
+
+  const handleRestartGenre = useCallback(() => {
+    if (!onRestartGenre) return;
+    hapticsBridge.warning();
+    onClose();
+    setTimeout(onRestartGenre, 0);
+  }, [onClose, onRestartGenre]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -161,10 +172,67 @@ function ImageDisplaySettingsSheetComponent({
               value={preferences.showOriginalTitle}
               onChange={(v) => update('showOriginalTitle', v)}
             />
+
+            {onRestartGenre ? (
+              <>
+                <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>Deck</Text>
+                <ActionRow
+                  icon="refresh"
+                  label="Restart this genre"
+                  description={
+                    restartGenreName
+                      ? `Start ${restartGenreName} from the first card again`
+                      : 'Start this genre from the first card again'
+                  }
+                  onPress={handleRestartGenre}
+                  destructive
+                />
+              </>
+            ) : null}
           </SafeAreaView>
         </Animated.View>
       </Animated.View>
     </Modal>
+  );
+}
+
+function ActionRow({
+  icon,
+  label,
+  description,
+  onPress,
+  destructive = false,
+}: {
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  label: string;
+  description: string;
+  onPress: () => void;
+  destructive?: boolean;
+}) {
+  const { theme } = useTheme();
+  const tint = destructive ? theme.status.error : theme.accent;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.actionRow,
+        {
+          borderColor: theme.glassBorder,
+          backgroundColor: theme.background.tertiary,
+          opacity: pressed ? 0.82 : 1,
+        },
+      ]}>
+      <MaterialIcons name={icon} size={22} color={tint} />
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.actionLabel, { color: tint }]}>{label}</Text>
+        <Text style={[styles.toggleDescription, { color: theme.text.secondary }]}>
+          {description}
+        </Text>
+      </View>
+      <MaterialIcons name="chevron-right" size={22} color={theme.text.tertiary} />
+    </Pressable>
   );
 }
 
@@ -279,6 +347,20 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     ...Typography.titleMedium,
+  },
+  actionRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  actionLabel: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
   },
   toggleDescription: {
     ...Typography.bodySmall,

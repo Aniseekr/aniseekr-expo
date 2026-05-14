@@ -13,7 +13,8 @@ import { useSubscription } from '../../context/SubscriptionContext';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import {
   getStackRevealTranslation,
-  SWIPE_HANDOFF_DELAY_MS,
+  STACK_REVEAL_DISTANCE,
+  runSwipeHandoff,
 } from '../../libs/services/rate/swipe-animation';
 
 type BannerProps = {
@@ -67,7 +68,7 @@ export const NativeAdCard = forwardRef<NativeAdCardRef, Props>(
     const rotate = useSharedValue(0);
     const handOffSwipe = useCallback(
       (direction: 'left' | 'right') => {
-        setTimeout(() => onSwipe(direction), SWIPE_HANDOFF_DELAY_MS);
+        runSwipeHandoff(direction, onSwipe);
       },
       [onSwipe]
     );
@@ -132,7 +133,30 @@ export const NativeAdCard = forwardRef<NativeAdCardRef, Props>(
             const velocity = event.velocityX;
             if (Math.abs(distance) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD) {
               const dir = distance > 0 ? 'right' : 'left';
-              scheduleOnRN(flingOut, dir, velocity);
+              const targetX = dir === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
+              translateX.value = withSpring(targetX, {
+                velocity,
+                damping: 20,
+                stiffness: 120,
+                overshootClamping: true,
+              });
+              if (activeTranslation) {
+                activeTranslation.value = withSpring(
+                  dir === 'right' ? STACK_REVEAL_DISTANCE : -STACK_REVEAL_DISTANCE,
+                  {
+                    damping: 20,
+                    stiffness: 120,
+                    overshootClamping: true,
+                  }
+                );
+              }
+              rotate.value = withSpring(dir === 'right' ? 25 : -25, {
+                velocity: velocity / 10,
+                damping: 20,
+                stiffness: 120,
+              });
+              translateY.value = withSpring(-50, { damping: 20, stiffness: 120 });
+              scheduleOnRN(handOffSwipe, dir);
             } else {
               scheduleOnRN(resetPosition);
             }
