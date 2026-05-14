@@ -13,6 +13,7 @@ import { isOnboardingComplete } from '../libs/services/onboarding-service';
 import { dataSourceConfig } from '../libs/services/data-source-config';
 import { loadUserPrefs } from '../libs/services/user-prefs';
 import { idMappingService } from '../libs/services/sync/id-mapping-service';
+import { hydrateAllPilgrimageData } from '../libs/services/pilgrimage/anitabi-data-service';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -27,14 +28,18 @@ export default function RootLayout() {
     // content choice into dataSourceConfig so the read pipeline filters
     // even when the toggle was last touched on a previous launch.
     void dataSourceConfig.init().then(() => loadUserPrefs());
-    // Refresh the cross-platform ID mapping table on a tick after the first
-    // render. The service itself short-circuits when the local copy is < 14d
-    // old, so this is cheap on warm launches. Errors are swallowed (the next
-    // launch retries) so a flaky network can never block boot.
+    // Refresh long-lived data on a tick after the first render. Each service
+    // short-circuits when its local copy is still fresh (mappings: 14d,
+    // anitabi data: 7d) so this is cheap on warm launches. Errors are
+    // swallowed (the next launch retries) so a flaky network can never block
+    // boot — the bundled fallbacks keep both features working offline.
     setTimeout(() => {
       void idMappingService
         .updateMappings()
         .catch((e) => console.warn('[updateMappings]', e));
+      void hydrateAllPilgrimageData().catch((e) =>
+        console.warn('[hydratePilgrimage]', e)
+      );
     }, 0);
   }, []);
 

@@ -1,13 +1,18 @@
-// L2 cross-index: maps each Anitabi (Bangumi-keyed) entry to its AniList and
-// MyAnimeList ids so the pilgrimage feature can resolve `bangumiId` for users
-// who browse with AniList or MAL as their source platform — without going
-// through the slower SQLite-backed IDMappingService (L1).
+// L3 cross-index: Bangumi → AniList + MyAnimeList ids so the pilgrimage
+// feature can resolve `bangumiId` for users who browse with AniList or MAL
+// as their source platform — without going through the slower SQLite-backed
+// IDMappingService (L1).
 //
-// Built offline by `scripts/build-anitabi-cross-index.ts` (rate-limited
-// AniList GraphQL search). At runtime this module is pure: no network, no
-// SQLite, just three lookup Maps populated at module load.
+// Two-tier loading:
+//   1. Cold start: bundled JSON below (small fallback seed, always offline).
+//   2. Runtime hydration: anitabi-data-service downloads the latest version
+//      from Aniseekr-source's `anitabi-cross-index` GitHub Release alias
+//      asset (built daily from L2 + AniList GraphQL) and calls
+//      `hydrateFromRuntime()` to swap in the larger payload.
 //
-// Regenerate with: `bun run scripts/build-anitabi-cross-index.ts`.
+// Lookup APIs stay sync — they always read whichever file is currently
+// active. Callers don't need to know whether they're seeing the bundled or
+// runtime payload; the only difference is coverage.
 
 import data from './anitabi-cross-index.data.json';
 
@@ -51,24 +56,47 @@ interface CrossIndexFile {
   generatedAt: number;
   source: string;
   entries: AnitabiCrossIndexEntry[];
+  /** Optional. Present on Aniseekr-source release-asset payloads. */
+  seedSize?: number;
 }
 
-const FILE = data as unknown as CrossIndexFile;
+let FILE = data as unknown as CrossIndexFile;
+let byBangumi = new Map<number, AnitabiCrossIndexEntry>();
+let byAnilist = new Map<number, AnitabiCrossIndexEntry>();
+let byMal = new Map<number, AnitabiCrossIndexEntry>();
 
-const byBangumi = new Map<number, AnitabiCrossIndexEntry>();
-const byAnilist = new Map<number, AnitabiCrossIndexEntry>();
-const byMal = new Map<number, AnitabiCrossIndexEntry>();
+function rebuildIndices(file: CrossIndexFile): void {
+  const nextByBangumi = new Map<number, AnitabiCrossIndexEntry>();
+  const nextByAnilist = new Map<number, AnitabiCrossIndexEntry>();
+  const nextByMal = new Map<number, AnitabiCrossIndexEntry>();
+  for (const entry of file.entries) {
+    if (typeof entry.bangumiId === 'number' && entry.bangumiId > 0) {
+      nextByBangumi.set(entry.bangumiId, entry);
+    }
+    if (typeof entry.anilistId === 'number' && entry.anilistId > 0) {
+      nextByAnilist.set(entry.anilistId, entry);
+    }
+    if (typeof entry.malId === 'number' && entry.malId > 0) {
+      nextByMal.set(entry.malId, entry);
+    }
+  }
+  FILE = file;
+  byBangumi = nextByBangumi;
+  byAnilist = nextByAnilist;
+  byMal = nextByMal;
+}
 
-for (const entry of FILE.entries) {
-  if (typeof entry.bangumiId === 'number' && entry.bangumiId > 0) {
-    byBangumi.set(entry.bangumiId, entry);
-  }
-  if (typeof entry.anilistId === 'number' && entry.anilistId > 0) {
-    byAnilist.set(entry.anilistId, entry);
-  }
-  if (typeof entry.malId === 'number' && entry.malId > 0) {
-    byMal.set(entry.malId, entry);
-  }
+// Build initial maps from bundled cold-start payload.
+rebuildIndices(FILE);
+
+/**
+ * Replace the in-memory cross-index with a freshly-downloaded payload. Called
+ * by anitabi-data-service after `_layout.tsx` startup hydration. Existing
+ * sync callers automatically see the new entries on their next call.
+ */
+export function hydrateFromRuntime(file: CrossIndexFile): void {
+  if (!file || !Array.isArray(file.entries)) return;
+  rebuildIndices(file);
 }
 
 /** Generated-at timestamp of the shipped cross-index (epoch ms). */

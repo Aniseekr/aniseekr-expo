@@ -1,15 +1,16 @@
-// Offline-built index of pre-fetched Anitabi anime centres.
+// Index of anime centres anitabi.cn has pilgrimage data for.
 //
-// Anitabi's public API (api.anitabi.cn) has no spatial query — both documented
-// endpoints (`/bangumi/{id}/lite`, `/bangumi/{id}/points/detail`) are keyed by
-// Bangumi subject id. To support "show pilgrimage anime near me" / "expand as
-// I pan the map", we ship a static index built by
-// `scripts/build-anitabi-index.ts` from the same public per-anime endpoint.
+// Two-tier loading:
+//   1. Cold start: bundled JSON below (small fallback seed, always available
+//      offline).
+//   2. Runtime hydration: anitabi-data-service downloads the latest version
+//      from Aniseekr-source's `anitabi-index` GitHub Release alias asset
+//      (built daily from api.anitabi.cn/bangumi) and calls
+//      `hydrateFromRuntime()` to swap in the larger payload (~781 entries).
 //
-// At runtime this module is pure: no network, no SQLite, just bounds and
-// radius filters over the bundled JSON.
-//
-// Regenerate with: `bun run scripts/build-anitabi-index.ts`.
+// Lookup APIs stay sync — they always read whichever file is currently
+// active. Callers don't need to know whether they're seeing the bundled or
+// runtime payload; the only difference is coverage.
 
 import indexJson from './anitabi-index.data.json';
 
@@ -53,9 +54,22 @@ interface IndexFile {
   generatedAt: number;
   source: string;
   entries: AnitabiIndexEntry[];
+  /** True when this payload came from the runtime fallback path (smaller). Optional for backwards compat with bundled JSON. */
+  fallbackUsed?: boolean;
 }
 
-const INDEX = indexJson as unknown as IndexFile;
+// Mutable so anitabi-data-service can replace it after runtime fetch.
+let INDEX = indexJson as unknown as IndexFile;
+
+/**
+ * Replace the in-memory index with a freshly-downloaded payload. Called by
+ * anitabi-data-service after `_layout.tsx` startup hydration. Existing sync
+ * callers automatically see the new entries on their next call.
+ */
+export function hydrateFromRuntime(file: IndexFile): void {
+  if (!file || !Array.isArray(file.entries)) return;
+  INDEX = file;
+}
 
 /** Map bounding box (Leaflet-style: north > south, east > west except across antimeridian). */
 export interface BoundingBox {
