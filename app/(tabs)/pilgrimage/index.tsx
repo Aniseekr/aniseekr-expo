@@ -1,7 +1,13 @@
 // Pilgrimage hub. Matches japanwalker.pen Screen 1 (q3N3pG):
-// Header (聖地巡禮 + map/list segmented + search) → Plan your day intro →
-// Nearby hero (170h with grid + scatter pins) → Popular Animes rail (128x200)
-// → Featured Spots list (72 photo + info + 56 mini map).
+// Header (聖地巡禮 + album + search) → Plan your day intro →
+// Nearby hero (170h with grid + scatter pins; opens the See All map) →
+// Popular Animes rail (128x200) → Featured Spots list (72 photo + info +
+// 56 mini map).
+//
+// The hub is list-only. Map view lives on the See All screen
+// (app/(tabs)/pilgrimage/map.tsx) so users land on a navigable card list
+// first and tap into the map deliberately — see Issue: "see all 應該優先是
+// list 才讓人點進 map".
 //
 // Data priority (matches "collection 優先, 不夠再補 featured" requirement):
 //   1. The user's collection (user_anime + favorites) joined to Anitabi via
@@ -13,13 +19,12 @@
 // representative spot (image preferred, geo required), then we shuffle so
 // the list rotates between launches instead of always anchoring on Tokyo.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
@@ -29,26 +34,18 @@ import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/c
 import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
 import { loadVisitedSpots, type VisitedMap } from '../../../libs/services/pilgrimage/visited-prefs';
 import {
-  LEAFLET_CSS,
-  LEAFLET_JS,
-  LEAFLET_MARKERCLUSTER_CSS,
-  LEAFLET_MARKERCLUSTER_JS,
-} from '../../../libs/services/pilgrimage/leaflet-assets';
-import {
-  MAP_BASE_BODY,
-  MAP_BASE_CSS,
-  MAP_BASE_JS,
-  MAP_BASE_URL,
-  TILE_ATTRIBUTION,
-  TILE_MAX_ZOOM,
-  TILE_SUBDOMAINS,
-  TILE_URL,
-  TOKYO_STATION,
-} from '../../../libs/services/pilgrimage/leaflet-map';
+  getPilgrimageHubSnapshot,
+  updatePilgrimageHubSnapshot,
+  type PilgrimageHubSnapshot,
+} from '../../../libs/services/pilgrimage/pilgrimage-hub-cache';
 import { Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
 import { Tourism88Rail } from '../../../components/pilgrimage/Tourism88Rail';
 import { getUnique88AnimeByPopularity } from '../../../libs/services/pilgrimage/anime88-repository';
-import { getAllIndexed } from '../../../libs/services/pilgrimage/anitabi-index';
+import {
+  getAllIndexed,
+  getIndexVersion,
+  subscribeAnitabiIndex,
+} from '../../../libs/services/pilgrimage/anitabi-index';
 import {
   formatPilgrimageSubtitle,
   getPilgrimageAnimeTitles,
@@ -148,303 +145,11 @@ function pickCityRepresentatives(
   return picked;
 }
 
-interface HubMapMarker {
-  bangumiId: number;
-  lat: number;
-  lng: number;
-  cover: string;
-  title: string;
-  city: string;
-  pointsLength: number;
-  ringColor: string;
-}
-
-function buildHubMapHtml(initial: {
-  center: { lat: number; lng: number; zoom: number };
-  user: { lat: number; lng: number } | null;
-  ringColor: string;
-  /** Distance from the WebView bottom to lift map controls. */
-  controlsBottom: number;
-}): string {
-  const initialJson = JSON.stringify(initial).replace(/</g, '\\u003c');
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<style>${LEAFLET_CSS}</style>
-<style>${LEAFLET_MARKERCLUSTER_CSS}</style>
-<style>${MAP_BASE_CSS}</style>
-<style>
-  :root {
-    --mc-bottom: ${initial.controlsBottom}px;
-    --attr-bottom: ${Math.max(0, initial.controlsBottom - 32)}px;
-  }
-  .anime-marker {
-    width: 44px; height: 44px; border-radius: 12px;
-    border: 2px solid var(--ring, #FF9F0A);
-    background: #1c1c1e; overflow: hidden; position: relative;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.45);
-    transition: transform .15s ease;
-  }
-  .anime-marker:active { transform: scale(0.92); }
-  .anime-marker img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .anime-marker .pts {
-    position: absolute; bottom: -6px; right: -8px;
-    background: #1c1c1e; color: #fff;
-    border: 2px solid var(--ring, #FF9F0A);
-    border-radius: 8px; padding: 1px 5px;
-    font: 700 9px -apple-system, system-ui, sans-serif;
-    line-height: 1.2;
-  }
-</style>
-</head>
-<body>
-${MAP_BASE_BODY}
-<script>${LEAFLET_JS}</script>
-<script>${LEAFLET_MARKERCLUSTER_JS}</script>
-<script>${MAP_BASE_JS}</script>
-<script>
-(function(){
-  var initial = ${initialJson};
-  var map = L.map('map', { zoomControl: false, attributionControl: true, fadeAnimation: true })
-    .setView([initial.center.lat, initial.center.lng], initial.center.zoom);
-  new window.CachedTileLayer(${JSON.stringify(TILE_URL)}, {
-    maxZoom: ${TILE_MAX_ZOOM}, minZoom: 3,
-    subdomains: ${JSON.stringify(TILE_SUBDOMAINS)},
-    attribution: ${JSON.stringify(TILE_ATTRIBUTION)},
-    keepBuffer: 4, updateWhenIdle: false
-  }).addTo(map);
-
-  // User location can arrive after the WebView is constructed (the native side
-  // resolves it async). Centralise pin management so the React side can push
-  // updates via window.__updateUser without us re-mounting the page (which
-  // would blow away the tile cache).
-  var userMarker = null;
-  var didSnapToUser = false;
-  function applyUser(user) {
-    if (userMarker) { try { map.removeLayer(userMarker); } catch (e) {} userMarker = null; }
-    if (user && typeof user.lat === 'number' && typeof user.lng === 'number') {
-      var userIcon = L.divIcon({ className: '', html: '<div class="user-pulse"></div>', iconSize: [16,16], iconAnchor: [8,8] });
-      userMarker = L.marker([user.lat, user.lng], { icon: userIcon, interactive: false, keyboard: false }).addTo(map);
-      // Snap to user on the first location fix. Permission usually resolves
-      // after mount, so the initial setView is Tokyo Station; once we know
-      // where the user actually is, frame ~10 km around them so the hub
-      // feels like "around me" instead of "all of Tokyo". One-shot — later
-      // GPS jitter shouldn't yank the camera.
-      if (!didSnapToUser) {
-        didSnapToUser = true;
-        try { map.flyTo([user.lat, user.lng], 13, { duration: 0.4 }); } catch (e) {}
-      }
-    }
-    // Mutate initial.user so the recentre closure sees the freshest value.
-    initial.user = user;
-  }
-  applyUser(initial.user);
-  window.__updateUser = applyUser;
-
-  var initialCenter = L.latLng(initial.center.lat, initial.center.lng);
-  var initialZoom = initial.center.zoom;
-  var lastBounds = null;
-  // Tapping the recentre button: if we have a user fix, zoom tight to it
-  // (~2 km on screen) so the user sees a walkable patch around their pin,
-  // not the whole country. Anime markers inside that patch render naturally.
-  // No user fix → fall back to flying home (Tokyo Station).
-  window.__bindMap(map, function recenter() {
-    if (initial.user) {
-      var did = window.__fitNearby(map, initial.user, null, {
-        zoom: 14,
-        home: { lat: initial.center.lat, lng: initial.center.lng, zoom: initial.center.zoom },
-      });
-      if (did) return;
-    }
-    if (lastBounds) {
-      try { map.flyToBounds(lastBounds, { padding: [40, 40], maxZoom: 11, duration: 0.4 }); return; } catch (e) {}
-    }
-    map.flyTo(initialCenter, initialZoom, { duration: 0.4 });
-  });
-
-  var clusterLayer = window.__makeClusterGroup({ ringColor: initial.ringColor, disableAt: 12 });
-  clusterLayer.addTo(map);
-  var didFit = false;
-
-  window.__updateMarkers = function(markers) {
-    clusterLayer.clearLayers();
-    var bounds = [];
-    var batch = [];
-    for (var i = 0; i < markers.length; i++) {
-      (function(m){
-        var html = '<div class="anime-marker" style="--ring:' + m.ringColor + '">' +
-          (m.cover ? '<img src="' + m.cover + '" loading="lazy" />' : '') +
-          '<span class="pts">' + m.pointsLength + '</span>' +
-        '</div>';
-        var icon = L.divIcon({ className: '', html: html, iconSize: [44,44], iconAnchor: [22,22] });
-        var marker = L.marker([m.lat, m.lng], { icon: icon, regionColor: m.ringColor });
-        marker.__appId = m.bangumiId;
-        marker.on('click', function() { window.__post({ type: 'animePress', id: m.bangumiId }); });
-        batch.push(marker);
-        bounds.push([m.lat, m.lng]);
-      })(markers[i]);
-    }
-    if (typeof clusterLayer.addLayers === 'function') clusterLayer.addLayers(batch);
-    else for (var k = 0; k < batch.length; k++) clusterLayer.addLayer(batch[k]);
-
-    if (bounds.length > 0) {
-      try { lastBounds = L.latLngBounds(bounds); } catch (e) { lastBounds = null; }
-    }
-    // Do NOT auto fit-to-all-markers. Featured + collection anime span the
-    // whole archipelago — fitting them all zoomed out to ~country scale,
-    // which is exactly what the user complained about. We keep the initial
-    // setView (user via applyUser, otherwise Tokyo Station at zoom 12) so
-    // the hub map opens at a ~10–15 km framing that feels local. lastBounds
-    // is still recorded so the recenter button can show the wider view if
-    // the user asks for it.
-    didFit = true;
-  };
-
-  // Native side calls this when the user taps the Nearby hero — we slide
-  // the map to that anime's center so they get spatial context, but we do
-  // NOT auto-open the detail page (that surprised users; they expected the
-  // tap to open the map, not jump screens).
-  window.__focusAnime = function(target) {
-    if (!target || typeof target.lat !== 'number') return;
-    try { map.flyTo([target.lat, target.lng], 11, { duration: 0.6 }); } catch (e) {}
-  };
-
-  window.__post({ type: 'ready' });
-})();
-</script>
-</body>
-</html>`;
-}
-
-interface HubMapViewProps {
-  markers: readonly HubMapMarker[];
-  userLocation: LatLng | null;
-  ringColor: string;
-  theme: ThemePalette;
-  focusBangumiId: number | null;
-  /**
-   * Pixels by which to lift the in-WebView map controls off the bottom edge.
-   * The hub passes the floating tab bar's effective height so the +/-/locate
-   * buttons stay tappable instead of getting buried under the dock.
-   */
-  controlsBottomOffset: number;
-  onAnimePress: (bangumiId: number) => void;
-}
-
-function HubMapView({
-  markers,
-  userLocation,
-  ringColor,
-  theme,
-  focusBangumiId,
-  controlsBottomOffset,
-  onAnimePress,
-}: HubMapViewProps) {
-  const webviewRef = useRef<WebView>(null);
-  const [ready, setReady] = useState(false);
-  const styles = useMemo(() => makeMapStyles(theme), [theme]);
-
-  // The HTML shell uses the cached origin so OSM tiles persist between
-  // mounts. Re-rendering the HTML on every prop change destroys that cache,
-  // so we capture once and push markers via injectJavaScript instead.
-  //
-  // Default center is Tokyo Station — Japan owns ~all pilgrimage data, and
-  // users opening the map from Taipei/HK don't want to land on their home
-  // city with zero markers and assume the feature is broken. The user's
-  // pin is rendered the moment permission resolves, and applyUser() then
-  // snaps the camera to the user at zoom 13 (≈10 km wide).
-  //
-  // We override TOKYO_STATION.zoom (11, ≈30 km wide / "all of Tokyo") with
-  // 12 (≈15 km wide / "central Tokyo") so the no-location fallback already
-  // feels local rather than overview-y.
-  const html = useMemo(() => {
-    const center = { lat: TOKYO_STATION.lat, lng: TOKYO_STATION.lng, zoom: 12 };
-    const user = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
-    return buildHubMapHtml({ center, user, ringColor, controlsBottom: controlsBottomOffset });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!ready || !webviewRef.current) return;
-    const json = JSON.stringify(markers).replace(/</g, '\\u003c');
-    webviewRef.current.injectJavaScript(`
-      try { window.__updateMarkers && window.__updateMarkers(${json}); } catch(e) {}
-      true;
-    `);
-  }, [markers, ready]);
-
-  // Push user-location changes into the WebView so the pin and locate-me
-  // bounds-fit stay accurate when permission is granted after mount.
-  useEffect(() => {
-    if (!ready || !webviewRef.current) return;
-    const payload = userLocation
-      ? JSON.stringify({ lat: userLocation.latitude, lng: userLocation.longitude })
-      : 'null';
-    webviewRef.current.injectJavaScript(`
-      try { window.__updateUser && window.__updateUser(${payload}); } catch(e) {}
-      true;
-    `);
-  }, [userLocation, ready]);
-
-  // Fly to a specific anime when the hero asks us to.
-  useEffect(() => {
-    if (!ready || !webviewRef.current || focusBangumiId === null) return;
-    const target = markers.find((m) => m.bangumiId === focusBangumiId);
-    if (!target) return;
-    const payload = JSON.stringify({ lat: target.lat, lng: target.lng });
-    webviewRef.current.injectJavaScript(`
-      try { window.__focusAnime && window.__focusAnime(${payload}); } catch(e) {}
-      true;
-    `);
-  }, [focusBangumiId, ready, markers]);
-
-  const handleMessage = (event: WebViewMessageEvent) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data) as { type: string; id?: number };
-      if (data.type === 'ready') {
-        setReady(true);
-        return;
-      }
-      if (data.type === 'animePress' && typeof data.id === 'number') {
-        onAnimePress(data.id);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  return (
-    <View style={styles.container} testID="pilgrimage-hub-map">
-      <WebView
-        ref={webviewRef}
-        originWhitelist={['*']}
-        source={{ html, baseUrl: MAP_BASE_URL }}
-        javaScriptEnabled
-        domStorageEnabled
-        cacheEnabled
-        cacheMode={Platform.OS === 'android' ? 'LOAD_DEFAULT' : undefined}
-        allowsInlineMediaPlayback
-        androidLayerType="hardware"
-        onMessage={handleMessage}
-        style={styles.webview}
-        renderError={() => (
-          <View style={styles.fallback}>
-            <Ionicons name="map-outline" size={32} color={theme.text.secondary} />
-            <ThemedText variant="titleMedium" weight="600" align="center">
-              Map unavailable
-            </ThemedText>
-            <ThemedText variant="bodySmall" tone="secondary" align="center">
-              Couldn&apos;t load the map. Check your connection and try again.
-            </ThemedText>
-          </View>
-        )}
-        startInLoadingState
-      />
-    </View>
-  );
+function hasSnapshotSlice<K extends keyof PilgrimageHubSnapshot>(
+  snapshot: PilgrimageHubSnapshot | null,
+  key: K
+): boolean {
+  return !!snapshot && Object.prototype.hasOwnProperty.call(snapshot, key);
 }
 
 export default function PilgrimageHubScreen() {
@@ -453,21 +158,29 @@ export default function PilgrimageHubScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const accentFg = readableTextOn(theme.accent);
+  const [initialSnapshot] = useState(() => getPilgrimageHubSnapshot());
+  const hasInitialCollection = hasSnapshotSlice(initialSnapshot, 'collectionAnimes');
+  const hasInitialFeatured = hasSnapshotSlice(initialSnapshot, 'featuredAnimes');
 
-  const [collectionAnimes, setCollectionAnimes] = useState<AnitabiBangumi[]>([]);
-  const [featuredAnimes, setFeaturedAnimes] = useState<AnitabiBangumi[]>([]);
-  const [collectionLoading, setCollectionLoading] = useState(true);
-  const [featuredLoading, setFeaturedLoading] = useState(true);
-  const [visited, setVisited] = useState<VisitedMap>({});
-  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const [collectionAnimes, setCollectionAnimes] = useState<AnitabiBangumi[]>(
+    () => initialSnapshot?.collectionAnimes ?? []
+  );
+  const [featuredAnimes, setFeaturedAnimes] = useState<AnitabiBangumi[]>(
+    () => initialSnapshot?.featuredAnimes ?? []
+  );
+  const [collectionLoading, setCollectionLoading] = useState(!hasInitialCollection);
+  const [featuredLoading, setFeaturedLoading] = useState(!hasInitialFeatured);
+  const [visited, setVisited] = useState<VisitedMap>(() => initialSnapshot?.visited ?? {});
+  const [userLocation, setUserLocation] = useState<LatLng | null>(
+    () => initialSnapshot?.userLocation ?? null
+  );
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'map' | 'list'>('list');
 
   const loading = collectionLoading || featuredLoading;
 
   useEffect(() => {
     let cancelled = false;
-    setCollectionLoading(true);
+    setCollectionLoading(!hasInitialCollection);
     collectionPilgrimageService
       .getEntries()
       .then((entries) => {
@@ -477,6 +190,7 @@ export default function PilgrimageHubScreen() {
           .filter((a): a is AnitabiBangumi => !!a)
           .sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
         setCollectionAnimes(animes);
+        updatePilgrimageHubSnapshot({ collectionAnimes: animes });
         setCollectionLoading(false);
       })
       .catch((err: unknown) => {
@@ -484,17 +198,17 @@ export default function PilgrimageHubScreen() {
         // Collection failures shouldn't block the hub — featured backfill is
         // enough to render something useful.
         console.warn('[PilgrimageHub] collection load failed:', err);
-        setCollectionAnimes([]);
+        if (!hasInitialCollection) setCollectionAnimes([]);
         setCollectionLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasInitialCollection]);
 
   useEffect(() => {
     let cancelled = false;
-    setFeaturedLoading(true);
+    setFeaturedLoading(!hasInitialFeatured);
     Promise.allSettled(
       FEATURED_PILGRIMAGE_ANIME.map(({ bangumiId }) =>
         pilgrimageRepository.getSpotsByBangumiId(bangumiId)
@@ -510,22 +224,27 @@ export default function PilgrimageHubScreen() {
           .filter((v): v is AnitabiBangumi => v !== null)
           .sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
         setFeaturedAnimes(fulfilled);
+        updatePilgrimageHubSnapshot({ featuredAnimes: fulfilled });
+        setError(null);
         setFeaturedLoading(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load');
+        if (!hasInitialFeatured) setError(err instanceof Error ? err.message : 'Failed to load');
         setFeaturedLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasInitialFeatured]);
 
   useEffect(() => {
     let cancelled = false;
     loadVisitedSpots().then((m) => {
-      if (!cancelled) setVisited(m);
+      if (!cancelled) {
+        setVisited(m);
+        updatePilgrimageHubSnapshot({ visited: m });
+      }
     });
     return () => {
       cancelled = true;
@@ -537,9 +256,14 @@ export default function PilgrimageHubScreen() {
     locationService
       .getCurrentLocation()
       .then((loc) => {
-        if (!cancelled && loc) setUserLocation(loc);
+        if (!cancelled) {
+          setUserLocation(loc ?? null);
+          updatePilgrimageHubSnapshot({ userLocation: loc ?? null });
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) updatePilgrimageHubSnapshot({ userLocation: null });
+      });
     return () => {
       cancelled = true;
     };
@@ -621,40 +345,10 @@ export default function PilgrimageHubScreen() {
     return pickCityRepresentatives(allSpots, FEATURED_SPOT_LIMIT, seed);
   }, [allSpots]);
 
-  const mapMarkers = useMemo<HubMapMarker[]>(() => {
-    const seen = new Set<number>();
-    const out: HubMapMarker[] = [];
-    for (const card of animeCards) {
-      if (seen.has(card.anime.id)) continue;
-      if (!isValidGeo(card.anime.geo)) continue;
-      seen.add(card.anime.id);
-      const titles = getPilgrimageAnimeTitles(card.anime);
-      out.push({
-        bangumiId: card.anime.id,
-        lat: card.anime.geo[0],
-        lng: card.anime.geo[1],
-        cover: card.anime.cover ?? '',
-        title: titles.primary,
-        city: card.anime.city ?? '',
-        pointsLength: card.anime.pointsLength ?? 0,
-        ringColor: card.anime.color || theme.accent,
-      });
-    }
-    return out;
-  }, [animeCards, theme.accent]);
-
   const handleAnimePress = useCallback(
     (anime: AnitabiBangumi) => {
       Haptics.selectionAsync().catch(() => undefined);
       router.push(buildPilgrimageDetailRoute(anime.id, { returnTo: 'hub' }));
-    },
-    [router]
-  );
-
-  const handleAnimeIdPress = useCallback(
-    (bangumiId: number) => {
-      Haptics.selectionAsync().catch(() => undefined);
-      router.push(buildPilgrimageDetailRoute(bangumiId, { returnTo: 'hub' }));
     },
     [router]
   );
@@ -672,43 +366,29 @@ export default function PilgrimageHubScreen() {
     router.push('/pilgrimage/album');
   }, [router]);
 
-  // "See all" next to the Popular Animes rail — opens the fullscreen map at
-  // a whole-Japan framing so the user can pick a region first, instead of
-  // landing at a city zoom. The fullscreen map has the region picker chips.
-  // It does NOT open the photo album: that's a separate header action.
+  // "See all" next to the Popular Animes rail — opens the See All screen in
+  // its default list mode. The user can toggle to map view inside that screen.
   const handleSeeAllAnimes = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
     router.push('/pilgrimage/map');
   }, [router]);
 
-  const handleToggleMode = useCallback((next: 'map' | 'list') => {
-    Haptics.selectionAsync().catch(() => undefined);
-    setMode(next);
-  }, []);
-
   // True fullscreen has to leave the Tabs container — pushing to a sibling
   // route registered with `tabBarStyle: { display: 'none' }` is the only way
   // to actually hide the bottom dock. Back from there returns to the hub.
-  const openFullscreenMap = useCallback(
-    (focusBangumiId?: number | null) => {
-      Haptics.selectionAsync().catch(() => undefined);
-      router.push({
-        pathname: '/pilgrimage/map',
-        params: focusBangumiId ? { focus: String(focusBangumiId) } : {},
-      });
-    },
-    [router]
-  );
-
+  // The hero card is the sole map entry point on the hub now; it opens the
+  // See All screen directly in map mode and centres on the nearest anime.
   const handleHeroPress = useCallback(() => {
-    // Hero opens the (true-fullscreen) map and centres on the nearest anime
-    // if we have one. It does NOT jump into an anime detail page.
-    openFullscreenMap(nearestAnime?.anime.id ?? null);
-  }, [nearestAnime, openFullscreenMap]);
-
-  const handleExpandInlineMap = useCallback(() => {
-    openFullscreenMap(null);
-  }, [openFullscreenMap]);
+    Haptics.selectionAsync().catch(() => undefined);
+    const focus = nearestAnime?.anime.id ?? null;
+    router.push({
+      pathname: '/pilgrimage/map',
+      params: {
+        mode: 'map',
+        ...(focus ? { focus: String(focus) } : {}),
+      },
+    });
+  }, [nearestAnime, router]);
 
   const popularList = useMemo(() => animeCards.slice(0, POPULAR_LIMIT), [animeCards]);
 
@@ -716,13 +396,18 @@ export default function PilgrimageHubScreen() {
   // rebuilt from anitabi-index (drops to placeholder when an entry isn't in
   // the offline Anitabi cache yet).
   const tourism88Entries = useMemo(() => getUnique88AnimeByPopularity(), []);
+  const anitabiIndexVersion = useSyncExternalStore(
+    subscribeAnitabiIndex,
+    getIndexVersion,
+    getIndexVersion
+  );
   const tourism88Covers = useMemo(() => {
     const m = new Map<number, string>();
     for (const e of getAllIndexed()) {
       if (e.cover) m.set(e.id, e.cover);
     }
     return m;
-  }, []);
+  }, [anitabiIndexVersion]);
   const collectionBangumiIds = useMemo(
     () => new Set(collectionAnimes.map((a) => a.id)),
     [collectionAnimes]
@@ -736,8 +421,8 @@ export default function PilgrimageHubScreen() {
   );
   const handleSee88All = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
-    setMode('map');
-  }, []);
+    router.push({ pathname: '/pilgrimage/map', params: { mode: 'map' } });
+  }, [router]);
 
   return (
     <View style={styles.root}>
@@ -747,54 +432,6 @@ export default function PilgrimageHubScreen() {
             Pilgrimage
           </ThemedText>
           <View style={styles.headerRight}>
-            <View style={styles.segment}>
-              <Pressable
-                onPress={() => handleToggleMode('list')}
-                hitSlop={4}
-                accessibilityRole="button"
-                accessibilityLabel="List view"
-                style={[
-                  styles.segmentBtn,
-                  mode === 'list' && { backgroundColor: theme.background.tertiary },
-                ]}>
-                <Ionicons
-                  name="list"
-                  size={13}
-                  color={mode === 'list' ? theme.text.primary : theme.text.tertiary}
-                />
-                <ThemedText
-                  variant="captionSmall"
-                  weight="600"
-                  style={{
-                    color: mode === 'list' ? theme.text.primary : theme.text.tertiary,
-                  }}>
-                  List
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => handleToggleMode('map')}
-                hitSlop={4}
-                accessibilityRole="button"
-                accessibilityLabel="Map view"
-                style={[
-                  styles.segmentBtn,
-                  mode === 'map' && { backgroundColor: theme.background.tertiary },
-                ]}>
-                <Ionicons
-                  name="map"
-                  size={13}
-                  color={mode === 'map' ? theme.text.primary : theme.text.tertiary}
-                />
-                <ThemedText
-                  variant="captionSmall"
-                  weight="600"
-                  style={{
-                    color: mode === 'map' ? theme.text.primary : theme.text.tertiary,
-                  }}>
-                  Map
-                </ThemedText>
-              </Pressable>
-            </View>
             <Pressable
               onPress={handleOpenAlbum}
               hitSlop={10}
@@ -814,147 +451,105 @@ export default function PilgrimageHubScreen() {
           </View>
         </View>
 
-        {mode === 'map' ? (
-          <View style={styles.mapWrap}>
-            {loading ? (
-              <Skeleton.MapList mapHeight={420} listCount={0} />
-            ) : mapMarkers.length === 0 ? (
-              <View style={styles.emptyMap}>
-                <Ionicons name="map-outline" size={32} color={theme.text.tertiary} />
-                <ThemedText variant="bodyMedium" tone="secondary" align="center">
-                  No anime with mapped pilgrimage locations yet.
-                </ThemedText>
-              </View>
-            ) : (
-              <HubMapView
-                markers={mapMarkers}
-                userLocation={userLocation}
-                ringColor={theme.accent}
-                theme={theme}
-                focusBangumiId={null}
-                // FloatingTabBar pill height (62) + bottom inset + ~14 breathing
-                // room. The WebView is inside mapWrap with marginBottom 8, so
-                // we subtract that to get the effective lift in WebView coords.
-                controlsBottomOffset={Math.max(96, insets.bottom + 62 + 14 - 8)}
-                onAnimePress={handleAnimeIdPress}
-              />
-            )}
-            {mapMarkers.length > 0 ? (
-              <Pressable
-                onPress={handleExpandInlineMap}
-                accessibilityRole="button"
-                accessibilityLabel="Open fullscreen map"
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.mapInlineFab,
-                  { backgroundColor: `${theme.background.primary}E0` },
-                  pressed && { opacity: 0.8 },
-                ]}>
-                <Ionicons name="expand" size={16} color={theme.text.primary} />
-              </Pressable>
-            ) : null}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.intro}>
+            <ThemedText
+              variant="captionSmall"
+              weight="700"
+              style={[styles.introCaps, { color: theme.accent }]}>
+              PLAN YOUR DAY
+            </ThemedText>
+            <ThemedText variant="bodySmall" style={styles.introBody}>
+              {collectionAnimes.length > 0
+                ? 'Anime from your collection, plus picks near you.'
+                : 'Choose an anime and find walkable spots near you.'}
+            </ThemedText>
           </View>
-        ) : (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}>
-            <View style={styles.intro}>
-              <ThemedText
-                variant="captionSmall"
-                weight="700"
-                style={[styles.introCaps, { color: theme.accent }]}>
-                PLAN YOUR DAY
-              </ThemedText>
-              <ThemedText variant="bodySmall" style={styles.introBody}>
-                {collectionAnimes.length > 0
-                  ? 'Anime from your collection, plus picks near you.'
-                  : 'Choose an anime and find walkable spots near you.'}
+
+          <NearbyHero
+            theme={theme}
+            nearestAnime={nearestAnime}
+            nearbyCount={nearbyAnime.length}
+            tierLabel={nearby.tierLabel}
+            hasLocation={!!userLocation}
+            onPress={handleHeroPress}
+          />
+
+          {loading ? <Skeleton.AnimeCardList count={6} paddingHorizontal={0} /> : null}
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="warning-outline" size={20} color={theme.status.warning} />
+              <ThemedText variant="bodySmall" tone="secondary" align="center">
+                {error}
               </ThemedText>
             </View>
+          ) : null}
 
-            <NearbyHero
-              theme={theme}
-              nearestAnime={nearestAnime}
-              nearbyCount={nearbyAnime.length}
-              tierLabel={nearby.tierLabel}
-              hasLocation={!!userLocation}
-              onPress={handleHeroPress}
-            />
+          <Tourism88Rail
+            entries={tourism88Entries}
+            collectionBangumiIds={collectionBangumiIds}
+            coversById={tourism88Covers}
+            onPressEntry={handle88EntryPress}
+            onSeeAll={handleSee88All}
+          />
 
-            {loading ? <Skeleton.AnimeCardList count={6} paddingHorizontal={0} /> : null}
+          {popularList.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader
+                title={collectionAnimes.length > 0 ? 'Your Animes & More' : 'Popular Animes'}
+                cta="See all"
+                onCta={handleSeeAllAnimes}
+                theme={theme}
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.popularRow}>
+                {popularList.map((card) => (
+                  <PopularCard
+                    key={card.anime.id}
+                    anime={card.anime}
+                    visited={visited}
+                    accent={theme.accent}
+                    accentFg={accentFg}
+                    theme={theme}
+                    fromCollection={card.fromCollection}
+                    distanceKm={card.distanceKm}
+                    onPress={() => handleAnimePress(card.anime)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
-            {error ? (
-              <View style={styles.errorBox}>
-                <Ionicons name="warning-outline" size={20} color={theme.status.warning} />
-                <ThemedText variant="bodySmall" tone="secondary" align="center">
-                  {error}
-                </ThemedText>
+          {featuredSpots.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader
+                title="Featured Spots"
+                cta="View map"
+                onCta={handleHeroPress}
+                theme={theme}
+              />
+              <View style={styles.spotList}>
+                {featuredSpots.map(({ spot, anime, distanceKm, fromCollection }) => (
+                  <FeaturedSpotRow
+                    key={`${anime.id}:${spot.id}`}
+                    spot={spot}
+                    anime={anime}
+                    distanceKm={distanceKm}
+                    fromCollection={fromCollection}
+                    theme={theme}
+                    onPress={() => handleAnimePress(anime)}
+                  />
+                ))}
               </View>
-            ) : null}
-
-            <Tourism88Rail
-              entries={tourism88Entries}
-              collectionBangumiIds={collectionBangumiIds}
-              coversById={tourism88Covers}
-              onPressEntry={handle88EntryPress}
-              onSeeAll={handleSee88All}
-            />
-
-            {popularList.length > 0 ? (
-              <View style={styles.section}>
-                <SectionHeader
-                  title={collectionAnimes.length > 0 ? 'Your Animes & More' : 'Popular Animes'}
-                  cta="See all"
-                  onCta={handleSeeAllAnimes}
-                  theme={theme}
-                />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.popularRow}>
-                  {popularList.map((card) => (
-                    <PopularCard
-                      key={card.anime.id}
-                      anime={card.anime}
-                      visited={visited}
-                      accent={theme.accent}
-                      accentFg={accentFg}
-                      theme={theme}
-                      fromCollection={card.fromCollection}
-                      distanceKm={card.distanceKm}
-                      onPress={() => handleAnimePress(card.anime)}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {featuredSpots.length > 0 ? (
-              <View style={styles.section}>
-                <SectionHeader
-                  title="Featured Spots"
-                  cta="View map"
-                  onCta={() => handleToggleMode('map')}
-                  theme={theme}
-                />
-                <View style={styles.spotList}>
-                  {featuredSpots.map(({ spot, anime, distanceKm, fromCollection }) => (
-                    <FeaturedSpotRow
-                      key={`${anime.id}:${spot.id}`}
-                      spot={spot}
-                      anime={anime}
-                      distanceKm={distanceKm}
-                      fromCollection={fromCollection}
-                      theme={theme}
-                      onPress={() => handleAnimePress(anime)}
-                    />
-                  ))}
-                </View>
-              </View>
-            ) : null}
-          </ScrollView>
-        )}
+            </View>
+          ) : null}
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -1291,23 +886,6 @@ function makeStyles(theme: ThemePalette) {
     },
     headerTitle: { fontSize: 22 },
     headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    segment: {
-      flexDirection: 'row',
-      borderRadius: 16,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-      padding: 4,
-      gap: 2,
-    },
-    segmentBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-    },
     iconBtn: {
       width: 40,
       height: 40,
@@ -1387,7 +965,6 @@ function makeStyles(theme: ThemePalette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    loadingBox: { alignItems: 'center', paddingVertical: 24 },
     errorBox: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1497,54 +1074,5 @@ function makeStyles(theme: ThemePalette) {
       borderColor: theme.glassBorder,
     },
     miniMapPin: { width: 10, height: 10, borderRadius: 5 },
-    mapWrap: {
-      flex: 1,
-      marginHorizontal: 16,
-      marginTop: 12,
-      marginBottom: 8,
-      borderRadius: 18,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-      backgroundColor: theme.background.secondary,
-    },
-    emptyMap: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      padding: 20,
-    },
-    mapInlineFab: {
-      position: 'absolute',
-      top: 12,
-      left: 12,
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-      shadowColor: '#000',
-      shadowOpacity: 0.35,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 6,
-    },
-  });
-}
-
-function makeMapStyles(theme: ThemePalette) {
-  return StyleSheet.create({
-    container: { flex: 1, overflow: 'hidden', backgroundColor: theme.background.secondary },
-    webview: { flex: 1, backgroundColor: theme.background.secondary },
-    fallback: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      padding: 20,
-    },
   });
 }
