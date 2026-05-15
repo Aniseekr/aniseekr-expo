@@ -77,25 +77,82 @@ export interface PilgrimageSaveInput {
 // later runAsync on the orphan throws `NativeDatabase.prepareAsync … NullPointerException`
 // on Android.
 let rawDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let activeRawDb: SQLite.SQLiteDatabase | null = null;
+let reopenRawDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-function openRawDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!rawDbPromise) {
-    rawDbPromise = (async () => {
-      try {
-        const opened = await SQLite.openDatabaseAsync(DB_NAME);
-        // WAL must be set on its own statement (some Android builds choke on it
-        // when bundled with DDL in one execAsync).
-        await opened.execAsync('PRAGMA journal_mode = WAL');
-        await opened.execAsync(DDL);
-        console.log('[LocalDB] Initialized');
-        return opened;
-      } catch (err) {
-        rawDbPromise = null;
+async function initializeOpenedDb(opened: SQLite.SQLiteDatabase): Promise<void> {
+  try {
+    await opened.execAsync('PRAGMA journal_mode = WAL');
+  } catch (err) {
+    if (isStaleHandleError(err)) throw err;
+    // WAL is a performance optimization, not a correctness requirement.
+    console.warn('[LocalDB] WAL PRAGMA failed, continuing without:', err);
+  }
+  await opened.execAsync(DDL);
+}
+
+async function closeQuietly(db: SQLite.SQLiteDatabase): Promise<void> {
+  try {
+    await db.closeAsync();
+  } catch {
+    // The handle may already be torn down on the native side.
+  }
+}
+
+async function createRawDb(useNewConnection: boolean): Promise<SQLite.SQLiteDatabase> {
+  let opened: SQLite.SQLiteDatabase | null = null;
+  try {
+    opened = await SQLite.openDatabaseAsync(
+      DB_NAME,
+      useNewConnection ? { useNewConnection: true } : undefined
+    );
+    await initializeOpenedDb(opened);
+    console.log('[LocalDB] Initialized');
+    return opened;
+  } catch (err) {
+    if (opened) await closeQuietly(opened);
+    if (useNewConnection || !isStaleHandleError(err)) throw err;
+    console.warn('[LocalDB] cached native handle is stale, reopening with a new connection:', err);
+  }
+
+  const fresh = await SQLite.openDatabaseAsync(DB_NAME, { useNewConnection: true });
+  await initializeOpenedDb(fresh);
+  console.log('[LocalDB] Initialized');
+  return fresh;
+}
+
+function openRawDb(options: { useNewConnection?: boolean } = {}): Promise<SQLite.SQLiteDatabase> {
+  if (!rawDbPromise || options.useNewConnection) {
+    const opening = createRawDb(!!options.useNewConnection)
+      .then((db) => {
+        activeRawDb = db;
+        return db;
+      })
+      .catch((err) => {
+        if (rawDbPromise === opening) {
+          rawDbPromise = null;
+          activeRawDb = null;
+        }
         throw err;
-      }
-    })();
+      });
+    rawDbPromise = opening;
   }
   return rawDbPromise;
+}
+
+async function reopenRawDb(staleRaw: SQLite.SQLiteDatabase): Promise<SQLite.SQLiteDatabase> {
+  if (activeRawDb && activeRawDb !== staleRaw) {
+    return activeRawDb;
+  }
+  if (!reopenRawDbPromise) {
+    void closeQuietly(staleRaw);
+    rawDbPromise = null;
+    activeRawDb = null;
+    reopenRawDbPromise = openRawDb({ useNewConnection: true }).finally(() => {
+      reopenRawDbPromise = null;
+    });
+  }
+  return reopenRawDbPromise;
 }
 
 // expo-sqlite on Android can leave the JS wrapper pointing at a torn-down
@@ -135,22 +192,24 @@ function wrapDb(db: SQLite.SQLiteDatabase): SQLite.SQLiteDatabase {
       if (typeof value !== 'function') continue;
       if (SELF_HEALING_METHODS.has(name)) {
         wrapped[name] = async (...args: unknown[]) => {
+          const raw = await openRawDb();
           try {
-            return await (value as (...a: unknown[]) => Promise<unknown>).apply(db, args);
+            return await callRawMethod(raw, name, args);
           } catch (err) {
             if (!isStaleHandleError(err)) throw err;
             console.warn('[LocalDB] stale native handle, reopening:', err);
-            rawDbPromise = null;
-            cachedWrappedDb = null;
-            cachedWrappedRawTarget = null;
-            const fresh = await openRawDb();
-            return await (
-              (fresh as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[name]
-            ).apply(fresh, args);
+            const fresh = await reopenRawDb(raw);
+            return await callRawMethod(fresh, name, args);
           }
         };
       } else {
-        wrapped[name] = (value as (...a: unknown[]) => unknown).bind(db);
+        wrapped[name] = (...args: unknown[]) => {
+          const raw = activeRawDb ?? db;
+          return (raw as unknown as Record<string, (...a: unknown[]) => unknown>)[name].apply(
+            raw,
+            args
+          );
+        };
       }
     }
     proto = Object.getPrototypeOf(proto);
@@ -158,17 +217,22 @@ function wrapDb(db: SQLite.SQLiteDatabase): SQLite.SQLiteDatabase {
   return wrapped as unknown as SQLite.SQLiteDatabase;
 }
 
+function callRawMethod(db: SQLite.SQLiteDatabase, name: string, args: unknown[]): Promise<unknown> {
+  return (db as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[name].apply(
+    db,
+    args
+  );
+}
+
 // Cache the wrapper so identity is stable across `getDatabase()` calls: tests
 // pin spies on the object returned from the first call and expect later calls
 // from production code to hit the same wrapper.
 let cachedWrappedDb: SQLite.SQLiteDatabase | null = null;
-let cachedWrappedRawTarget: SQLite.SQLiteDatabase | null = null;
 
 async function openDb(): Promise<SQLite.SQLiteDatabase> {
   const raw = await openRawDb();
-  if (cachedWrappedDb === null || cachedWrappedRawTarget !== raw) {
+  if (cachedWrappedDb === null) {
     cachedWrappedDb = wrapDb(raw);
-    cachedWrappedRawTarget = raw;
   }
   return cachedWrappedDb;
 }
@@ -377,6 +441,13 @@ const DDL = `
     `;
 
 export const LocalDB = {
+  __resetForTests(): void {
+    rawDbPromise = null;
+    activeRawDb = null;
+    reopenRawDbPromise = null;
+    cachedWrappedDb = null;
+  },
+
   async init(): Promise<void> {
     await openDb();
   },

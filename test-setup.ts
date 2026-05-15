@@ -28,34 +28,75 @@ mock.module('@react-native-async-storage/async-storage', () => ({
 
 // expo-sqlite minimal in-memory shim
 type Row = Record<string, unknown>;
+type FakeSqliteMethod =
+  | 'execAsync'
+  | 'runAsync'
+  | 'getFirstAsync'
+  | 'getAllAsync'
+  | 'prepareAsync'
+  | 'withTransactionAsync'
+  | 'withExclusiveTransactionAsync';
+type FakeSqliteFailureCount = number | 'always';
+interface FakeDatabaseOptions {
+  fail?: Partial<Record<FakeSqliteMethod, FakeSqliteFailureCount>>;
+  rows?: Row[];
+}
+interface FakeOpenCall {
+  name: string;
+  options?: Record<string, unknown>;
+}
+
+const sqliteTestState = {
+  queuedDatabases: [] as FakeDatabaseOptions[],
+  openCalls: [] as FakeOpenCall[],
+};
+
+const staleHandleError = (method: string) =>
+  new Error(
+    `Call to function 'NativeDatabase.${method}' has been rejected.\n` +
+      '→ Caused by: java.lang.NullPointerException: java.lang.NullPointerException'
+  );
+
 class FakeDatabase {
   private cache = new Map<string, Row>();
   private pilgrimage = new Map<number, Row>();
 
+  constructor(private readonly options: FakeDatabaseOptions = {}) {}
+
   async execAsync(_sql: string): Promise<void> {
+    this.maybeFail('execAsync');
     return;
   }
   async runAsync(
     sql: string,
     ...params: unknown[]
   ): Promise<{ changes: number; lastInsertRowId: number }> {
+    this.maybeFail('runAsync');
     const r = this.run(sql, params);
     return { changes: r.changes, lastInsertRowId: r.lastInsertRowId };
   }
   async getFirstAsync<T>(sql: string, ...params: unknown[]): Promise<T | null> {
+    this.maybeFail('getFirstAsync');
     const rows = this.run(sql, params).rows as T[];
     return rows[0] ?? null;
   }
   async getAllAsync<T>(sql: string, ...params: unknown[]): Promise<T[]> {
+    this.maybeFail('getAllAsync');
     return (this.run(sql, params).rows ?? []) as T[];
   }
   async closeAsync(): Promise<void> {
     return;
   }
   async withTransactionAsync(fn: () => Promise<void>): Promise<void> {
+    this.maybeFail('withTransactionAsync');
     await fn();
   }
+  async withExclusiveTransactionAsync(fn: (txn: FakeDatabase) => Promise<void>): Promise<void> {
+    this.maybeFail('withExclusiveTransactionAsync');
+    await fn(this);
+  }
   async prepareAsync(sql: string) {
+    this.maybeFail('prepareAsync');
     const self = this;
     return {
       async executeAsync(params: unknown[] | unknown) {
@@ -69,6 +110,18 @@ class FakeDatabase {
     };
   }
 
+  private maybeFail(method: FakeSqliteMethod): void {
+    const current = this.options.fail?.[method];
+    if (!current) return;
+    if (current === 'always') {
+      throw staleHandleError(method === 'execAsync' ? 'execAsync' : 'prepareAsync');
+    }
+    if (current > 0) {
+      this.options.fail![method] = current - 1;
+      throw staleHandleError(method === 'execAsync' ? 'execAsync' : 'prepareAsync');
+    }
+  }
+
   /**
    * Tiny pattern-matched SQL evaluator. Only the queries our tests need are
    * implemented; everything else (CREATE/PRAGMA/DROP/BEGIN/COMMIT) is a no-op.
@@ -76,6 +129,11 @@ class FakeDatabase {
   private run(sql: string, params: unknown[]) {
     const upper = sql.trim().toUpperCase();
     const result = { changes: 0, lastInsertRowId: 0, rows: [] as Row[] };
+
+    if (this.options.rows && upper.startsWith('SELECT')) {
+      result.rows = this.options.rows;
+      return result;
+    }
 
     if (
       upper.startsWith('CREATE') ||
@@ -233,7 +291,22 @@ class FakeDatabase {
 }
 
 mock.module('expo-sqlite', () => ({
-  openDatabaseAsync: async (_name: string) => new FakeDatabase(),
+  openDatabaseAsync: async (name: string, options?: Record<string, unknown>) => {
+    sqliteTestState.openCalls.push({ name, options });
+    return new FakeDatabase(sqliteTestState.queuedDatabases.shift());
+  },
+  __sqliteTestHooks: {
+    queueDatabase(options: FakeDatabaseOptions) {
+      sqliteTestState.queuedDatabases.push(options);
+    },
+    reset() {
+      sqliteTestState.queuedDatabases = [];
+      sqliteTestState.openCalls = [];
+    },
+    getOpenCalls(): FakeOpenCall[] {
+      return [...sqliteTestState.openCalls];
+    },
+  },
 }));
 
 // expo-file-system new API (SDK 54 Paths/File/Directory). cache-manager and
