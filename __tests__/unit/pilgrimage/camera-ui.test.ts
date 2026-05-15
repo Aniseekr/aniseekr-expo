@@ -3,6 +3,11 @@ import {
   cameraOrientationLockIntent,
   formatCameraHeader,
   isCameraCapturePath,
+  LANDSCAPE_TOOL_MENU_BOTTOM_OFFSET,
+  LANDSCAPE_TOOL_MENU_MIN_PANEL_WIDTH,
+  LANDSCAPE_TOOL_MENU_PANEL_GAP,
+  LANDSCAPE_TOOL_MENU_PANEL_WIDTH,
+  LANDSCAPE_TOOL_MENU_TRIGGER_SIZE,
   resolveCameraActive,
   roundExposureValue,
 } from '../../../libs/services/pilgrimage/camera-ui';
@@ -50,5 +55,17 @@ describe('camera UI helpers', () => {
     expect(resolveCameraActive({ appIsForeground: true, settingsOpen: false })).toBe(true);
     expect(resolveCameraActive({ appIsForeground: false, settingsOpen: false })).toBe(false);
     expect(resolveCameraActive({ appIsForeground: true, settingsOpen: true })).toBe(false);
+  });
+
+  it('keeps the expanded landscape tool menu wide enough for nested camera panels', () => {
+    expect(LANDSCAPE_TOOL_MENU_PANEL_WIDTH).toBeGreaterThanOrEqual(
+      LANDSCAPE_TOOL_MENU_MIN_PANEL_WIDTH
+    );
+  });
+
+  it('treats the landscape tool menu as a bottom drawer above its circular trigger', () => {
+    expect(LANDSCAPE_TOOL_MENU_PANEL_WIDTH).toBeGreaterThan(LANDSCAPE_TOOL_MENU_TRIGGER_SIZE);
+    expect(LANDSCAPE_TOOL_MENU_PANEL_GAP).toBeGreaterThanOrEqual(8);
+    expect(LANDSCAPE_TOOL_MENU_BOTTOM_OFFSET).toBeGreaterThanOrEqual(12);
   });
 });
