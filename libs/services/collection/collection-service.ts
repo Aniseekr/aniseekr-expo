@@ -163,6 +163,18 @@ export class CollectionService {
   async getFolders(): Promise<CollectionFolder[]> {
     const db = await LocalDB.getDatabase();
 
+    const getCount = async (sql: string, ...args: unknown[]): Promise<number> => {
+      const res = await db.getFirstAsync<{ count: number }>(sql, ...(args as never[]));
+      return res?.count || 0;
+    };
+    const getCover = async <T extends { image_url?: string | null; image?: string | null }>(
+      sql: string,
+      ...args: unknown[]
+    ): Promise<string | undefined> => {
+      const res = await db.getFirstAsync<T>(sql, ...(args as never[]));
+      return res?.image_url ?? res?.image ?? undefined;
+    };
+
     const customRows = await db.getAllAsync<{
       id: string;
       name: string;
@@ -174,11 +186,11 @@ export class CollectionService {
 
     const customFolders: CollectionFolder[] = await Promise.all(
       customRows.map(async (row) => {
-        const countRes = await db.getFirstAsync<{ count: number }>(
+        const count = await getCount(
           'SELECT COUNT(*) as count FROM collection_folder_items WHERE folder_id = ?',
           row.id
         );
-        const coverRes = await db.getFirstAsync<{ image_url: string | null }>(
+        const coverUrl = await getCover<{ image_url: string | null }>(
           `SELECT ua.image_url
              FROM collection_folder_items cfi
              JOIN user_anime ua ON ua.anime_id = cfi.anime_id
@@ -197,9 +209,9 @@ export class CollectionService {
           isR18: !!row.is_r18,
           folderType: 'custom',
           createdAt: new Date(row.created_at),
-          animeCount: countRes?.count || 0,
+          animeCount: count,
           sharedBy: 0,
-          coverUrl: coverRes?.image_url ?? undefined,
+          coverUrl,
         };
       })
     );
@@ -209,23 +221,15 @@ export class CollectionService {
         let count = 0;
         let coverUrl: string | undefined;
         if (folder.folderType === 'favorites') {
-          const res = await db.getFirstAsync<{ count: number }>(
-            'SELECT COUNT(*) as count FROM favorites'
-          );
-          count = res?.count || 0;
-          const cover = await db.getFirstAsync<{ image: string | null }>(
+          count = await getCount('SELECT COUNT(*) as count FROM favorites');
+          coverUrl = await getCover<{ image: string | null }>(
             'SELECT image FROM favorites WHERE image IS NOT NULL ORDER BY addedAt DESC LIMIT 1'
           );
-          coverUrl = cover?.image ?? undefined;
         } else if (folder.id === 'system_all') {
-          const res = await db.getFirstAsync<{ count: number }>(
-            'SELECT COUNT(*) as count FROM user_anime'
-          );
-          count = res?.count || 0;
-          const cover = await db.getFirstAsync<{ image_url: string | null }>(
+          count = await getCount('SELECT COUNT(*) as count FROM user_anime');
+          coverUrl = await getCover<{ image_url: string | null }>(
             'SELECT image_url FROM user_anime WHERE image_url IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 1'
           );
-          coverUrl = cover?.image_url ?? undefined;
         } else {
           const statusMap: Record<string, string> = {
             watching: 'watching',
@@ -235,16 +239,14 @@ export class CollectionService {
           };
           const status = statusMap[folder.folderType];
           if (status) {
-            const res = await db.getFirstAsync<{ count: number }>(
+            count = await getCount(
               'SELECT COUNT(*) as count FROM user_anime WHERE status = ?',
               status
             );
-            count = res?.count || 0;
-            const cover = await db.getFirstAsync<{ image_url: string | null }>(
+            coverUrl = await getCover<{ image_url: string | null }>(
               'SELECT image_url FROM user_anime WHERE status = ? AND image_url IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 1',
               status
             );
-            coverUrl = cover?.image_url ?? undefined;
           }
         }
 
