@@ -8,6 +8,28 @@
 // where the user actually frames a real-world shot against the anime still
 // and pixelation is visible. Everywhere else keeps the thumbnail.
 
+import { normalizeBangumiImage } from '../../clients/bangumi-client';
+
+const ANITABI_IMAGE_BASE = 'https://image.anitabi.cn';
+const DEFAULT_THUMBNAIL_PLAN = 'h160';
+
+export function normalizeAnitabiImageUrl(
+  url: string | null | undefined,
+  bangumiId: number
+): string {
+  const normalized = normalizeBangumiImage(url);
+  if (!normalized) return withDefaultPlan(`${ANITABI_IMAGE_BASE}/bangumi/${bangumiId}.jpg`);
+  if (normalized.startsWith('//')) return withDefaultPlan(`https:${normalized}`);
+  if (normalized.startsWith('/images/')) {
+    return withDefaultPlan(`${ANITABI_IMAGE_BASE}${normalized.slice('/images'.length)}`);
+  }
+  if (normalized.startsWith('/')) {
+    return withDefaultPlan(`${ANITABI_IMAGE_BASE}${normalized}`);
+  }
+  if (normalized.startsWith(ANITABI_IMAGE_BASE)) return withDefaultPlan(normalized);
+  return normalized;
+}
+
 export function toFullResImageUrl(url: string): string {
   if (!url) return url;
   const idx = url.search(/[?&]plan=/);
@@ -20,4 +42,10 @@ export function toFullResImageUrl(url: string): string {
     return tail ? head + '?' + tail.slice(1) : head;
   }
   return head + tail;
+}
+
+function withDefaultPlan(url: string): string {
+  if (!url || /[?&]plan=/.test(url)) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}plan=${DEFAULT_THUMBNAIL_PLAN}`;
 }

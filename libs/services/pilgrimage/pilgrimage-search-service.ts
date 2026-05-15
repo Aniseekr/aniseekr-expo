@@ -1,11 +1,11 @@
 import {
   BangumiClient,
-  normalizeBangumiImage,
   type BangumiV0SearchResponse,
   type BangumiV0Subject,
 } from '../../clients/bangumi-client';
 import { getAllIndexed, type AnitabiIndexEntry } from './anitabi-index';
 import { lookupByBangumiId, type AnitabiCrossIndexEntry } from './anitabi-cross-index';
+import { normalizeAnitabiImageUrl } from './anitabi-image';
 import { pilgrimageRepository } from './pilgrimage-repository';
 import type { AnitabiBangumi } from './types';
 
@@ -49,7 +49,6 @@ interface ScoredEntry {
   score: number;
 }
 
-const IMAGE_BASE = 'https://image.anitabi.cn';
 const DEFAULT_LIMIT = 20;
 const FALLBACK_CANDIDATE_LIMIT = 10;
 
@@ -222,16 +221,6 @@ function resultFromAnitabi(
     pointsLength: anime.pointsLength ?? 0,
     source,
   };
-}
-
-export function normalizeAnitabiImageUrl(
-  url: string | null | undefined,
-  bangumiId: number
-): string {
-  if (!url) return `${IMAGE_BASE}/bangumi/${bangumiId}.jpg?plan=h160`;
-  if (url.startsWith('/')) return `${IMAGE_BASE}${url}`;
-  if (url.startsWith('//')) return `https:${url}`;
-  return normalizeBangumiImage(url) ?? url;
 }
 
 function normalizeSearchKey(value: string): string {

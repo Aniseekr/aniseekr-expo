@@ -320,16 +320,16 @@ function FeaturedTripCard({ candidate, theme, onPress }: FeaturedTripCardProps) 
       accessibilityRole="button"
       accessibilityLabel={`Featured trip: ${anime.title}`}
       style={({ pressed }) => [styles.featuredCard, pressed && { opacity: 0.92 }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background.secondary }]} />
       {anime.cover ? (
         <Image
-          source={{ uri: anime.cover.replace('?plan=h160', '?plan=h720') }}
+          // Anitabi CDN serves bangumi covers only at h160/h360/full — h720 404s.
+          source={{ uri: anime.cover.replace('?plan=h160', '?plan=h360') }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={300}
         />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background.secondary }]} />
-      )}
+      ) : null}
       <LinearGradient
         colors={['rgba(8,8,8,0)', `${theme.background.primary}C4`, `${theme.background.primary}F2`]}
         locations={[0, 0.5, 1]}

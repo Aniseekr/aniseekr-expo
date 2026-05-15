@@ -13,6 +13,7 @@
 // runtime payload; the only difference is coverage.
 
 import indexJson from './anitabi-index.data.json';
+import { normalizeAnitabiImageUrl } from './anitabi-image';
 
 export interface AnitabiIndexEntry {
   /** Bangumi subject id. */
@@ -59,7 +60,9 @@ interface IndexFile {
 }
 
 // Mutable so anitabi-data-service can replace it after runtime fetch.
-let INDEX = indexJson as unknown as IndexFile;
+let INDEX = normalizeIndexFile(indexJson as unknown as IndexFile);
+let indexVersion = 0;
+const listeners = new Set<() => void>();
 
 /**
  * Replace the in-memory index with a freshly-downloaded payload. Called by
@@ -68,7 +71,20 @@ let INDEX = indexJson as unknown as IndexFile;
  */
 export function hydrateFromRuntime(file: IndexFile): void {
   if (!file || !Array.isArray(file.entries)) return;
-  INDEX = file;
+  INDEX = normalizeIndexFile(file);
+  indexVersion += 1;
+  for (const listener of listeners) listener();
+}
+
+export function getIndexVersion(): number {
+  return indexVersion;
+}
+
+export function subscribeAnitabiIndex(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /** Map bounding box (Leaflet-style: north > south, east > west except across antimeridian). */
@@ -199,4 +215,19 @@ function sanitiseLimit(limit: number | undefined): number | null {
   if (typeof limit !== 'number') return null;
   if (!Number.isFinite(limit) || limit <= 0) return null;
   return Math.floor(limit);
+}
+
+function normalizeIndexFile(file: IndexFile): IndexFile {
+  const entries = file.entries
+    .map((entry) => {
+      const id = Number(entry.id);
+      if (!Number.isFinite(id) || id <= 0) return null;
+      return {
+        ...entry,
+        id,
+        cover: normalizeAnitabiImageUrl(entry.cover, id),
+      } satisfies AnitabiIndexEntry;
+    })
+    .filter((entry): entry is AnitabiIndexEntry => entry !== null);
+  return { ...file, entries };
 }

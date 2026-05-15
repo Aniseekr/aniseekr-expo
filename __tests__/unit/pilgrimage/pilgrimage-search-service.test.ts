@@ -65,7 +65,7 @@ describe('PilgrimageSearchService', () => {
       city: '山梨县',
       source: 'anitabi-index',
     });
-    expect(results[0].cover).toBe('https://image.anitabi.cn/images/bangumi/485936.jpg');
+    expect(results[0].cover).toBe('https://image.anitabi.cn/bangumi/485936.jpg?plan=h160');
   });
 
   it('matches Chinese titles from the local Anitabi index', async () => {

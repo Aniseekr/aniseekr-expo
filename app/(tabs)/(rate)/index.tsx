@@ -666,18 +666,18 @@ function TrendingPilgrimageCard({ pilgrim, rank, onPress }: TrendingPilgrimageCa
       style={({ pressed }) => [trendStyles.pilgrimageCard, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
       accessibilityLabel={`Trending pilgrimage ${rank}: ${pilgrim.title}`}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background.secondary }]} />
       {pilgrim.cover ? (
         <Image
-          source={{ uri: pilgrim.cover.replace('?plan=h160', '?plan=h720') }}
+          // Anitabi CDN serves bangumi covers only at h160/h360/full — h720 404s.
+          source={{ uri: pilgrim.cover.replace('?plan=h160', '?plan=h360') }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          transition={100}
+          transition={180}
           cachePolicy="memory-disk"
           recyclingKey={String(pilgrim.id)}
         />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background.secondary }]} />
-      )}
+      ) : null}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.92)']}
         locations={[0.3, 1]}

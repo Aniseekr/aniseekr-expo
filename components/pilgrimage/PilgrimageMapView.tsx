@@ -118,7 +118,8 @@ function buildMarkers(
       lat,
       lng,
       title: anime.title || anime.cn || '',
-      cover: (anime.cover ?? '').replace('?plan=h160', '?plan=h120') || null,
+      // Keep Anitabi's h160 thumb (~6 KB) — h120 404s on the CDN.
+      cover: anime.cover || null,
       ringColor,
       pointsLength: anime.pointsLength,
       city: anime.city || null,
@@ -474,7 +475,8 @@ interface ClusterPickerRowProps {
 function ClusterPickerRow({ anime, theme, onPress }: ClusterPickerRowProps) {
   const styles = useMemo(() => makePickerStyles(theme), [theme]);
   const ring = anime.color || theme.accent;
-  const cover = (anime.cover ?? '').replace('?plan=h160', '?plan=h120');
+  // Keep Anitabi's h160 thumb — the CDN does not serve h120.
+  const cover = anime.cover ?? '';
   const meta = `${anime.pointsLength} spot${anime.pointsLength === 1 ? '' : 's'}${anime.city ? ` · ${anime.city}` : ''}`;
   return (
     <Pressable

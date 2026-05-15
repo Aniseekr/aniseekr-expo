@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { toFullResImageUrl } from '../../../libs/services/pilgrimage/anitabi-image';
+import {
+  normalizeAnitabiImageUrl,
+  toFullResImageUrl,
+} from '../../../libs/services/pilgrimage/anitabi-image';
 
 describe('toFullResImageUrl', () => {
   it('strips a sole `?plan=h160` query', () => {
@@ -37,5 +40,31 @@ describe('toFullResImageUrl', () => {
 
   it('handles empty input', () => {
     expect(toFullResImageUrl('')).toBe('');
+  });
+});
+
+describe('normalizeAnitabiImageUrl', () => {
+  it('normalizes runtime /images/bangumi cover paths to the Anitabi image CDN', () => {
+    expect(normalizeAnitabiImageUrl('/images/bangumi/10380.jpg', 10380)).toBe(
+      'https://image.anitabi.cn/bangumi/10380.jpg?plan=h160'
+    );
+  });
+
+  it('normalizes root-relative image paths and appends the thumbnail plan', () => {
+    expect(normalizeAnitabiImageUrl('/user/0/bangumi/10380/points/a.jpg', 10380)).toBe(
+      'https://image.anitabi.cn/user/0/bangumi/10380/points/a.jpg?plan=h160'
+    );
+  });
+
+  it('uses the bangumi cover fallback when runtime data has an empty cover', () => {
+    expect(normalizeAnitabiImageUrl('', 265)).toBe(
+      'https://image.anitabi.cn/bangumi/265.jpg?plan=h160'
+    );
+  });
+
+  it('preserves existing Anitabi plan parameters', () => {
+    expect(
+      normalizeAnitabiImageUrl('https://image.anitabi.cn/bangumi/240038.jpg?plan=h360', 240038)
+    ).toBe('https://image.anitabi.cn/bangumi/240038.jpg?plan=h360');
   });
 });
