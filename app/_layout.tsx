@@ -1,11 +1,11 @@
-import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import '../global.css';
 import { useEffect, useState } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { Platform } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { ThemeProvider } from '../context/ThemeContext';
 import { SubscriptionProvider } from '../context/SubscriptionContext';
 import { notificationService } from '../libs/services/notifications/notification-service';
@@ -16,6 +16,7 @@ import { loadUserPrefs } from '../libs/services/user-prefs';
 import { idMappingService } from '../libs/services/sync/id-mapping-service';
 import { hydrateAllPilgrimageData } from '../libs/services/pilgrimage/anitabi-data-service';
 import { CacheManager } from '../libs/services/cache/cache-manager';
+import { isCameraCapturePath } from '../libs/services/pilgrimage/camera-ui';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -36,12 +37,8 @@ export default function RootLayout() {
     // swallowed (the next launch retries) so a flaky network can never block
     // boot — the bundled fallbacks keep both features working offline.
     setTimeout(() => {
-      void idMappingService
-        .updateMappings()
-        .catch((e) => console.warn('[updateMappings]', e));
-      void hydrateAllPilgrimageData().catch((e) =>
-        console.warn('[hydratePilgrimage]', e)
-      );
+      void idMappingService.updateMappings().catch((e) => console.warn('[updateMappings]', e));
+      void hydrateAllPilgrimageData().catch((e) => console.warn('[hydratePilgrimage]', e));
       // Drop expired cache rows once per cold launch. Bucket failures are
       // logged inside pruneAll, so a broken bucket can never block boot.
       void CacheManager.getInstance()
@@ -54,6 +51,13 @@ export default function RootLayout() {
         .catch((e) => console.warn('[CacheManager.pruneAll]', e));
     }, 0);
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || isCameraCapturePath(pathname)) return;
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(
+      () => undefined
+    );
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
