@@ -39,7 +39,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
 import { Radius, Spacing } from '../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
+import { ON_DARK, Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import { anitabiService } from '../../../libs/services/pilgrimage/anitabi-service';
 import { listCaptures, type PilgrimageCapture } from '../../../libs/services/pilgrimage/captures';
@@ -114,6 +114,12 @@ function formatDistanceKm(km: number): string {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 10) return `${km.toFixed(1)} km`;
   return `${Math.round(km)} km`;
+}
+
+function chunkPairs<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += 2) out.push(items.slice(i, i + 2));
+  return out;
 }
 
 function buildBrowseUrl(platform: PlatformType, bangumiId: number): string | null {
@@ -505,7 +511,7 @@ function SpotMapView({
   );
 }
 
-interface SpotRowProps {
+interface SceneTileProps {
   spot: AnitabiPoint;
   themeColor: string;
   themeColorFg: string;
@@ -515,10 +521,9 @@ interface SpotRowProps {
   theme: ThemePalette;
   onPress: (spot: AnitabiPoint) => void;
   onToggleVisited: (spot: AnitabiPoint) => void;
-  onOpenMaps: (spot: AnitabiPoint) => void;
 }
 
-function SpotRow({
+function SceneTile({
   spot,
   themeColor,
   themeColorFg,
@@ -528,128 +533,75 @@ function SpotRow({
   theme,
   onPress,
   onToggleVisited,
-  onOpenMaps,
-}: SpotRowProps) {
-  const styles = useMemo(() => makeRowStyles(theme), [theme]);
-  const hasGeo = hasValidGeo(spot.geo);
+}: SceneTileProps) {
+  const styles = useMemo(() => makeTileStyles(theme), [theme]);
   const titles = getPilgrimageSpotTitles(spot);
+  const metaLine =
+    distanceKm != null ? `EP ${spot.ep} · ${formatDistanceKm(distanceKm)}` : `EP ${spot.ep}`;
   return (
     <Pressable
       onPress={() => onPress(spot)}
+      onLongPress={() => {
+        Haptics.selectionAsync().catch(() => undefined);
+        onToggleVisited(spot);
+      }}
+      delayLongPress={280}
       style={({ pressed }) => [
-        styles.card,
-        visited && {
-          borderColor: `${theme.status.success}66`,
-          backgroundColor: `${theme.status.success}0D`,
-        },
-        pressed && { opacity: 0.94 },
+        styles.tile,
+        visited && { borderColor: `${theme.status.success}80` },
+        pressed && { opacity: 0.92 },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${titles.primary}`}>
-      <View style={styles.imageRow}>
-        <View style={styles.imageHalf}>
-          <Image
-            source={{ uri: spot.image }}
-            style={styles.imgFull}
-            contentFit="cover"
-            transition={150}
-          />
-          <View style={styles.labelChip}>
-            <ThemedText variant="captionSmall" weight="800" style={styles.labelText}>
-              REAL
-            </ThemedText>
-          </View>
+      accessibilityLabel={`Open ${titles.primary}`}
+      accessibilityHint="Long press to toggle visited">
+      <Image
+        source={{ uri: spot.image }}
+        style={styles.image}
+        contentFit="cover"
+        transition={160}
+      />
+      <View style={styles.baseMask} pointerEvents="none" />
+      <LinearGradient
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.62)']}
+        locations={[0, 1]}
+        style={styles.captionGradient}
+        pointerEvents="none"
+      />
+      {hasCapture ? (
+        <View
+          style={[
+            styles.cornerBadge,
+            styles.cornerLeft,
+            { backgroundColor: `${themeColor}E6` },
+          ]}>
+          <Ionicons name="camera" size={10} color={themeColorFg} />
         </View>
-        <View style={styles.imageHalf}>
-          <Image
-            source={{ uri: spot.image }}
-            style={[styles.imgFull, { opacity: 0.92 }]}
-            contentFit="cover"
-            transition={150}
-          />
-          <View style={[styles.labelChip, { backgroundColor: `${themeColor}E6` }]}>
-            <ThemedText
-              variant="captionSmall"
-              weight="800"
-              style={[styles.labelText, { color: themeColorFg }]}>
-              ANIME
-            </ThemedText>
-          </View>
-          {hasCapture ? (
-            <View style={[styles.captureDot, { borderColor: theme.background.primary }]}>
-              <Ionicons name="camera" size={9} color="#000" />
-            </View>
-          ) : null}
+      ) : null}
+      {visited ? (
+        <View
+          style={[
+            styles.cornerBadge,
+            styles.cornerRight,
+            { backgroundColor: theme.status.success },
+          ]}>
+          <Ionicons name="checkmark" size={11} color={readableTextOn(theme.status.success)} />
         </View>
-      </View>
-      <View style={styles.infoRow}>
-        <View style={styles.infoCol}>
-          <ThemedText variant="bodyMedium" weight="700" numberOfLines={1}>
-            {titles.primary}
-          </ThemedText>
-          <View style={styles.epRow}>
-            <Ionicons name="film-outline" size={11} color={theme.text.tertiary} />
-            <ThemedText variant="captionSmall" tone="tertiary" numberOfLines={1}>
-              EP {spot.ep} {titles.secondary ? `· ${titles.secondary}` : ''}
-            </ThemedText>
-            {distanceKm != null ? (
-              <>
-                <View style={[styles.dot, { backgroundColor: theme.text.tertiary }]} />
-                <ThemedText variant="captionSmall" weight="600" style={{ color: themeColor }}>
-                  {formatDistanceKm(distanceKm)}
-                </ThemedText>
-              </>
-            ) : null}
-          </View>
-        </View>
-        <View style={styles.actionsCol}>
-          <Pressable
-            onPress={() => onToggleVisited(spot)}
-            style={({ pressed }) => [
-              styles.visitPill,
-              {
-                backgroundColor: visited ? theme.background.tertiary : theme.background.secondary,
-                borderColor: visited ? `${theme.status.success}66` : theme.glassBorder,
-              },
-              pressed && { opacity: 0.75 },
-            ]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: visited }}
-            accessibilityLabel={visited ? 'Mark as not visited' : 'Mark as visited'}
-            hitSlop={4}>
-            <Ionicons
-              name={visited ? 'checkmark' : 'ellipse-outline'}
-              size={12}
-              color={visited ? theme.status.success : theme.text.secondary}
-            />
-            <ThemedText
-              variant="captionSmall"
-              weight="700"
-              style={{
-                color: visited ? theme.status.success : theme.text.secondary,
-              }}>
-              {visited ? 'Visited' : 'Visit'}
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => onOpenMaps(spot)}
-            disabled={!hasGeo}
-            style={({ pressed }) => [
-              styles.iconPill,
-              { backgroundColor: theme.background.tertiary },
-              !hasGeo && { opacity: 0.4 },
-              pressed && hasGeo && { opacity: 0.75 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={`Directions to ${titles.primary}`}
-            hitSlop={4}>
-            <MaterialIcons
-              name="directions"
-              size={16}
-              color={hasGeo ? theme.status.info : theme.text.tertiary}
-            />
-          </Pressable>
-        </View>
+      ) : null}
+      <View style={styles.captionWrap} pointerEvents="none">
+        <ThemedText
+          variant="bodySmall"
+          weight="700"
+          numberOfLines={1}
+          style={styles.captionTitle}>
+          {titles.primary}
+        </ThemedText>
+        <ThemedText
+          variant="captionSmall"
+          weight="600"
+          numberOfLines={1}
+          style={styles.captionMeta}>
+          {metaLine}
+        </ThemedText>
       </View>
     </Pressable>
   );
@@ -1489,16 +1441,16 @@ export default function PilgrimageDetailScreen() {
                   />
                 </ScrollView>
 
-                <View style={styles.sectionHeader}>
-                  <ThemedText variant="titleLarge" weight="700">
-                    {viewMode === 'list' ? 'Scene list' : 'Map view'}
-                  </ThemedText>
-                  <ThemedText variant="bodySmall" tone="tertiary">
-                    {viewMode === 'list'
-                      ? `${filteredPoints.length} ${filteredPoints.length === 1 ? 'scene' : 'scenes'} · ${stats.visitedCount} visited`
-                      : 'Tap a marker to view the scene'}
-                  </ThemedText>
-                </View>
+                {viewMode === 'map' ? (
+                  <View style={styles.sectionHeader}>
+                    <ThemedText variant="titleLarge" weight="700">
+                      Map view
+                    </ThemedText>
+                    <ThemedText variant="bodySmall" tone="tertiary">
+                      Tap a marker to view the scene
+                    </ThemedText>
+                  </View>
+                ) : null}
               </>
             ) : null}
 
@@ -1529,7 +1481,7 @@ export default function PilgrimageDetailScreen() {
                 </Pressable>
               </View>
             ) : viewMode === 'list' ? (
-              <View style={styles.list}>
+              <View style={styles.gridList}>
                 {filteredPoints.length === 0 ? (
                   <View style={styles.emptyCard}>
                     <ThemedText variant="bodyMedium" tone="secondary" align="center">
@@ -1537,23 +1489,28 @@ export default function PilgrimageDetailScreen() {
                     </ThemedText>
                   </View>
                 ) : (
-                  filteredPoints.map((spot) => (
-                    <SpotRow
-                      key={spot.id}
-                      spot={spot}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      distanceKm={distanceFor(spot)}
-                      visited={visited[spot.id] === true}
-                      hasCapture={!!captures[spot.id]}
-                      theme={theme}
-                      onPress={(s) => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setActiveSpot(s);
-                      }}
-                      onToggleVisited={handleToggleVisited}
-                      onOpenMaps={handleOpenMaps}
-                    />
+                  chunkPairs(filteredPoints).map((pair) => (
+                    <View key={pair[0].id + (pair[1]?.id ?? '_solo')} style={styles.gridRow}>
+                      {pair.map((spot) => (
+                        <View key={spot.id} style={styles.gridCell}>
+                          <SceneTile
+                            spot={spot}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            distanceKm={distanceFor(spot)}
+                            visited={visited[spot.id] === true}
+                            hasCapture={!!captures[spot.id]}
+                            theme={theme}
+                            onPress={(s) => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setActiveSpot(s);
+                            }}
+                            onToggleVisited={handleToggleVisited}
+                          />
+                        </View>
+                      ))}
+                      {pair.length === 1 ? <View style={styles.gridCell} /> : null}
+                    </View>
                   ))
                 )}
               </View>
@@ -2114,6 +2071,18 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       gap: Spacing.sm,
       paddingTop: Spacing.xs,
     },
+    gridList: {
+      paddingHorizontal: Spacing.screenPadding,
+      gap: 10,
+      paddingTop: Spacing.sm,
+    },
+    gridRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    gridCell: {
+      flex: 1,
+    },
     mapWrap: {
       height: 480,
       marginHorizontal: Spacing.screenPadding,
@@ -2250,100 +2219,58 @@ function makeSpotChipStyles(theme: ThemePalette) {
   });
 }
 
-function makeRowStyles(theme: ThemePalette) {
+function makeTileStyles(theme: ThemePalette) {
   return StyleSheet.create({
-    card: {
-      backgroundColor: theme.background.secondary,
-      borderColor: theme.glassBorder,
-      borderWidth: 1,
+    tile: {
+      aspectRatio: 1,
       borderRadius: 16,
-      padding: 12,
-      gap: 10,
-    },
-    imageRow: {
-      flexDirection: 'row',
-      gap: 6,
-      height: 120,
-    },
-    imageHalf: {
-      flex: 1,
-      borderRadius: 10,
       overflow: 'hidden',
       backgroundColor: theme.background.tertiary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
       position: 'relative',
     },
-    imgFull: {
-      width: '100%',
-      height: '100%',
+    image: {
+      ...StyleSheet.absoluteFillObject,
     },
-    labelChip: {
+    baseMask: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.12)',
+    },
+    captionGradient: {
       position: 'absolute',
-      top: 6,
-      left: 6,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 6,
-      backgroundColor: 'rgba(10,10,10,0.7)',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: '55%',
     },
-    labelText: {
-      color: '#FFFFFF',
-      fontSize: 9,
-      letterSpacing: 0.5,
-    },
-    captureDot: {
+    cornerBadge: {
       position: 'absolute',
-      bottom: 6,
-      right: 6,
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      backgroundColor: theme.accent,
-      borderWidth: 2,
+      top: 8,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    infoRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
+    cornerLeft: { left: 8 },
+    cornerRight: { right: 8 },
+    captionWrap: {
+      position: 'absolute',
+      left: 10,
+      right: 10,
+      bottom: 9,
+      gap: 1,
     },
-    infoCol: {
-      flex: 1,
-      gap: 3,
-      minWidth: 0,
+    captionTitle: {
+      color: ON_DARK,
+      textShadowColor: 'rgba(0,0,0,0.55)',
+      textShadowRadius: 4,
     },
-    epRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      flexWrap: 'wrap',
-    },
-    dot: {
-      width: 3,
-      height: 3,
-      borderRadius: 1.5,
-      opacity: 0.6,
-    },
-    actionsCol: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    visitPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 14,
-      borderWidth: 1,
-    },
-    iconPill: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
+    captionMeta: {
+      color: 'rgba(255,255,255,0.85)',
+      textShadowColor: 'rgba(0,0,0,0.45)',
+      textShadowRadius: 3,
     },
   });
 }
