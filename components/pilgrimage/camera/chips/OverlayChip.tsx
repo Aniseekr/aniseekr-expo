@@ -11,6 +11,8 @@ interface OverlayChipProps {
   opacity: number;
   flipped: boolean;
   themeColor: string;
+  /** When true, panel opens to the LEFT of the chip (right-edge dock). */
+  isLandscape?: boolean;
   onSelectMode: (mode: OverlayMode) => void;
   onChangeOpacity: (opacity: number) => void;
   onToggleFlip: () => void;
@@ -33,6 +35,7 @@ export default function OverlayChip({
   opacity,
   flipped,
   themeColor,
+  isLandscape = false,
   onSelectMode,
   onChangeOpacity,
   onToggleFlip,
@@ -85,7 +88,7 @@ export default function OverlayChip({
       </Pressable>
 
       {expanded ? (
-        <View style={styles.panel}>
+        <View style={[styles.panel, isLandscape && styles.panelLandscape]}>
           <View style={styles.row}>
             {MODES.map((m) => {
               const active = m.id === mode;
@@ -171,9 +174,9 @@ const styles = StyleSheet.create({
   },
   // rgba scrim sits over live camera — no theme surface below.
   chip: {
-    height: 36,
+    height: 44,
     width: 110,
-    borderRadius: 18,
+    borderRadius: 22,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,9 +189,12 @@ const styles = StyleSheet.create({
   chipText: {
     color: '#fff',
   },
+  // Panel opens BELOW the chip in portrait; in landscape we anchor it to the
+  // LEFT of the chip so it doesn't clip behind the ShutterRow rail. Caller
+  // passes `isLandscape` to flip.
   panel: {
     position: 'absolute',
-    top: 44,
+    top: 52,
     left: 0,
     width: 280,
     paddingVertical: 10,
@@ -198,6 +204,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
     gap: 8,
+  },
+  panelLandscape: {
+    left: undefined,
+    right: 52,
+    top: 0,
   },
   row: {
     flexDirection: 'row',

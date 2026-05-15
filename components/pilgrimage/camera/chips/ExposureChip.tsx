@@ -10,6 +10,8 @@ import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 // EV side-effect is wired by parent — chip only manages UI state.
 interface ExposureChipProps {
   value: number;
+  /** When true, the scrub panel opens to the LEFT of the chip (right-edge dock). */
+  isLandscape?: boolean;
   onChange: (next: number) => void;
 }
 
@@ -27,7 +29,7 @@ function formatEV(v: number): string {
   return v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1);
 }
 
-export default function ExposureChip({ value, onChange }: ExposureChipProps) {
+export default function ExposureChip({ value, isLandscape = false, onChange }: ExposureChipProps) {
   const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [trackWidth, setTrackWidth] = useState(TRACK_WIDTH_DEFAULT);
@@ -158,7 +160,13 @@ export default function ExposureChip({ value, onChange }: ExposureChipProps) {
       </Pressable>
 
       {expanded ? (
-        <View style={[styles.panel, { borderColor: theme.glassBorder }]}>
+        <View
+          style={[
+            styles.panel,
+            isLandscape && styles.panelLandscape,
+            { borderColor: theme.glassBorder },
+          ]}>
+
           <GestureDetector gesture={panGesture}>
             <View style={styles.trackArea} onLayout={onTrackLayout}>
               <View style={styles.trackLine} />
@@ -192,15 +200,24 @@ export default function ExposureChip({ value, onChange }: ExposureChipProps) {
 const styles = StyleSheet.create({
   wrap: { position: 'relative' },
   chip: {
-    height: 36, width: 80, borderRadius: 18, paddingHorizontal: 12, gap: 6, borderWidth: 1,
+    height: 44, width: 80, borderRadius: 22, paddingHorizontal: 12, gap: 6, borderWidth: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   text: { color: '#fff' },
+  // Panel opens BELOW the chip in portrait. In landscape the dock is a narrow
+  // right-edge column, so we anchor the panel to the LEFT (right: 0 relative
+  // to the chip) so the scrubber doesn't overflow under the ShutterRow rail.
+  // Caller passes `isLandscape` and we swap `left` ↔ `right`.
   panel: {
-    position: 'absolute', top: 44, left: 0,
+    position: 'absolute', top: 52, left: 0,
     width: SCRUB_WIDTH, paddingVertical: 8, paddingHorizontal: SCRUB_PADDING,
     borderRadius: 16, borderWidth: 1, gap: 6, backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  panelLandscape: {
+    left: undefined,
+    right: 52,
+    top: 0,
   },
   trackArea: { height: 32, justifyContent: 'center' },
   trackLine: { height: 2, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.35)' },

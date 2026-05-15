@@ -7,6 +7,10 @@ interface ToolRibbonProps {
   topInset: number;
   /** Reserved for future top-anchored placement variants — keep in API for caller compatibility. */
   bottomInset: number;
+  /** Optional new slots — render before the existing chips when provided. */
+  captureMode?: ReactNode;
+  countdown?: ReactNode;
+  settings?: ReactNode;
   overlay: ReactNode;
   flash: ReactNode;
   exposure: ReactNode;
@@ -22,6 +26,9 @@ export function ToolRibbon({
   isLandscape,
   topInset: _topInset,
   bottomInset: _bottomInset,
+  captureMode,
+  countdown,
+  settings,
   overlay,
   flash,
   exposure,
@@ -31,6 +38,9 @@ export function ToolRibbon({
     <View
       pointerEvents="box-none"
       style={[styles.root, isLandscape ? styles.column : styles.row]}>
+      {captureMode}
+      {countdown}
+      {settings}
       {overlay}
       {flash}
       {exposure}
@@ -45,6 +55,8 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 12,
   },

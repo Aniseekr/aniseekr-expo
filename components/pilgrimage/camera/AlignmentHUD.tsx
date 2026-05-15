@@ -127,7 +127,9 @@ export default function AlignmentHUD({
         <View
           style={[
             isLandscape ? styles.alignmentChipWrapLandscape : styles.alignmentChipWrap,
-            isLandscape ? { top: topInset + 208 } : { bottom: bottomInset + 156 },
+            isLandscape
+              ? { bottom: bottomInset + 24 }
+              : { bottom: bottomInset + 156 },
           ]}
           pointerEvents="none">
           <View
@@ -154,7 +156,11 @@ export default function AlignmentHUD({
           pointerEvents="none"
           style={[
             styles.perfectBanner,
-            isLandscape ? { top: topInset + 64 } : { bottom: bottomInset + 232 },
+            // In landscape the right edge is reserved for the ShutterRow
+            // control column — narrow the banner so it doesn't crash into it.
+            isLandscape
+              ? { top: topInset + 64, left: '10%', right: '40%' }
+              : { bottom: bottomInset + 232 },
             {
               backgroundColor: theme.status.success,
               opacity: perfectOpacity,

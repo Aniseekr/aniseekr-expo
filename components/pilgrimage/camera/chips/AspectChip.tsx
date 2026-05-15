@@ -53,11 +53,11 @@ export default function AspectChip({ aspect, onChange }: AspectChipProps) {
 
 const styles = StyleSheet.create({
   chip: {
-    height: 36,
+    height: 44,
     minWidth: 76,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

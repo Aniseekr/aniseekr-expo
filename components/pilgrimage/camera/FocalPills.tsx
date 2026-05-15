@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText, readableTextOn } from '../../themed';
 import { useTheme } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
@@ -31,6 +32,16 @@ interface FocalPillsProps {
   availableStops?: FocalStop[];
   isFrontFacing?: boolean;
   opticalHint?: boolean;
+  /**
+   * Virtual / auto-switching lenses (builtInDual/Triple…) the device exposes.
+   * When non-empty, FocalPills appends an "AUTO" pill that lets iOS pick the
+   * best underlying optical lens. Empty/undefined → no AUTO pill rendered.
+   */
+  virtualLenses?: string[];
+  /** Tap handler for the AUTO pill. Required when `virtualLenses` is non-empty. */
+  onPickVirtual?: () => void;
+  /** Highlight the AUTO pill when the active selectedLens is virtual. */
+  virtualActive?: boolean;
 }
 
 function formatStop(stop: FocalStop): string {
@@ -45,15 +56,19 @@ export default function FocalPills({
   availableStops,
   isFrontFacing = false,
   opticalHint = false,
+  virtualLenses,
+  onPickVirtual,
+  virtualActive = false,
 }: FocalPillsProps) {
   const { theme } = useTheme();
   const stops =
     availableStops ?? (isFrontFacing ? FRONT_FACING_STOPS : DEFAULT_STOPS);
   const activeFg = readableTextOn(themeColor);
+  const showAutoPill = (virtualLenses?.length ?? 0) > 0 && typeof onPickVirtual === 'function';
 
-  // Empty array = truth-respecting hide. The device offers no stops the parent
-  // wants to surface. See JSDoc above for full semantics.
-  if (stops.length === 0) return null;
+  // Empty stops AND no AUTO pill = truth-respecting hide. If the device offers
+  // a virtual lens stack we still show the row so the user can engage AUTO.
+  if (stops.length === 0 && !showAutoPill) return null;
 
   return (
     <View style={styles.container}>
@@ -71,7 +86,10 @@ export default function FocalPills({
         {stops.map((stop) => {
           // activeStop === null means user is between stops — highlight nothing
           // rather than lie about which stop is "selected".
-          const isActive = activeStop !== null && stop === activeStop;
+          // A virtual lens being active outranks any focal-stop highlight: the
+          // user has handed control to iOS, so no single physical stop owns
+          // the active state.
+          const isActive = !virtualActive && activeStop !== null && stop === activeStop;
           return (
             <Pressable
               key={stop}
@@ -103,6 +121,31 @@ export default function FocalPills({
             </Pressable>
           );
         })}
+        {showAutoPill ? (
+          <Pressable
+            onPress={() => {
+              hapticsBridge.selection();
+              onPickVirtual?.();
+            }}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Auto lens"
+            accessibilityState={{ selected: virtualActive }}
+            style={({ pressed }) => [
+              styles.pill,
+              {
+                backgroundColor: virtualActive ? themeColor : 'rgba(0,0,0,0.45)',
+                borderColor: theme.glassBorder,
+              },
+              pressed && { opacity: 0.7 },
+            ]}>
+            <Ionicons
+              name="aperture-outline"
+              size={16}
+              color={virtualActive ? activeFg : '#fff'}
+            />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
