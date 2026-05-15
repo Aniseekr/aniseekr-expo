@@ -2,7 +2,7 @@
   "expo": {
     "name": "AniSeekr",
     "slug": "aniseekr",
-    "version": "0.0.1",
+    "version": "1.1.5",
     "scheme": "aniseekr",
     "web": {
       "favicon": "./assets/favicon.png"
@@ -81,17 +81,20 @@
       "resizeMode": "cover",
       "backgroundColor": "#0A1929"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kidneyweakx.aniseekr",
+      "bundleIdentifier": "kidneyweakx.aniseeker",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "AniSeekr uses your location to surface nearby anime pilgrimage spots.",
         "NSPhotoLibraryUsageDescription": "AniSeekr needs access to your photos so you can pick a profile picture.",
         "NSPhotoLibraryAddUsageDescription": "AniSeekr saves pilgrimage comparison photos to your library so you can share them later.",
         "NSCameraUsageDescription": "AniSeekr uses the camera so you can frame and capture a pilgrimage scene next to its anime reference.",
         "NSMotionUsageDescription": "AniSeekr uses the compass to help you match your shot to the original anime scene direction.",
-        "NSFaceIDUsageDescription": "AniSeekr uses Face ID to confirm before showing adult content."
+        "NSFaceIDUsageDescription": "AniSeekr uses Face ID to confirm before showing adult content.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -100,7 +103,19 @@
         "backgroundColor": "#0A1929"
       },
       "package": "com.kidneyweakx.aniseekr",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "CAMERA"],
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ],
       "blockedPermissions": [
         "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.READ_MEDIA_AUDIO",

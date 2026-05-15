@@ -1,6 +1,6 @@
 {
   "name": "aniseekr",
-  "version": "1.0.0",
+  "version": "1.1.5",
   "scripts": {
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -20,6 +20,7 @@
     "web": "expo start --web",
     "build:android": "eas build --platform android --profile production",
     "build:android:local": "eas build --platform android --profile production --local",
+    "build:ios:local": "eas build --platform ios --profile production --local",
     "submit:android": "./scripts/android-submit.sh",
     "gcp:bootstrap": "./scripts/gcp-bootstrap.sh",
     "gcp:rotate-key": "./scripts/gcp-rotate-key.sh"

@@ -25,6 +25,7 @@ android
 # Build files
 *.aab
 *.apk
+*.ipa
 
 .opencode
 .agent
