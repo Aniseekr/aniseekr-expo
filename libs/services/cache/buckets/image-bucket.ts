@@ -9,8 +9,8 @@ import type { CacheBucket, BucketStats } from '../cache-manager';
 
 export class ImageDiskBucket implements CacheBucket {
   readonly id = 'image.disk';
-  readonly label = '圖片快取（磁碟）';
-  readonly description = '海報、縮圖、場景圖 — 下次重新下載';
+  readonly label = 'Image cache (disk)';
+  readonly description = 'Posters, thumbnails, and scene images; redownloaded when needed';
   readonly icon = 'image';
 
   async getStats(): Promise<BucketStats> {
@@ -27,8 +27,8 @@ export class ImageDiskBucket implements CacheBucket {
 
 export class ImageMemoryBucket implements CacheBucket {
   readonly id = 'image.memory';
-  readonly label = '圖片快取（記憶體）';
-  readonly description = '本次 app 啟動後解碼過的圖片';
+  readonly label = 'Image cache (memory)';
+  readonly description = 'Decoded images from the current app session';
   readonly icon = 'memory';
 
   async getStats(): Promise<BucketStats> {

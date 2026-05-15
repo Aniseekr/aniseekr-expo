@@ -14,6 +14,7 @@ import { Paths } from 'expo-file-system';
 import { MetadataBucket } from './buckets/metadata-bucket';
 import { ImageDiskBucket, ImageMemoryBucket } from './buckets/image-bucket';
 import { RuntimeFilesBucket } from './buckets/runtime-files-bucket';
+import { QueryClientBucket } from './buckets/query-client-bucket';
 
 export interface BucketStats {
   entries: number;
@@ -169,6 +170,7 @@ export class CacheManager {
 
   private registerDefaults() {
     this.register(new MetadataBucket());
+    this.register(new QueryClientBucket());
     this.register(new ImageDiskBucket());
     this.register(new ImageMemoryBucket());
     this.register(new RuntimeFilesBucket());

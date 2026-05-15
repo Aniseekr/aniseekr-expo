@@ -45,12 +45,15 @@ function formatBytes(bytes: number): string {
 }
 
 function formatStats(stats: BucketStats): string {
-  const parts: string[] = [formatBytes(stats.bytes)];
-  if (stats.entries > 0) parts.push(`${stats.entries} 筆`);
-  if (stats.expiredEntries && stats.expiredEntries > 0) {
-    parts.push(`${stats.expiredEntries} 過期`);
+  const parts: string[] = [];
+  if (stats.bytes > 0) parts.push(formatBytes(stats.bytes));
+  if (stats.entries > 0) {
+    parts.push(`${stats.entries} ${stats.entries === 1 ? 'entry' : 'entries'}`);
   }
-  return parts.join(' · ');
+  if (stats.expiredEntries && stats.expiredEntries > 0) {
+    parts.push(`${stats.expiredEntries} expired`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'Empty';
 }
 
 type BucketSnapshot = {
@@ -121,12 +124,12 @@ export default function CacheSettingsScreen() {
 
   const handleClearBucket = (bucket: CacheBucket) => {
     Alert.alert(
-      '清除這個快取？',
-      `${bucket.label} 將會被清空。下次需要時會重新下載或計算。`,
+      'Clear this cache?',
+      `${bucket.label} will be cleared. It will be downloaded or computed again when needed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: '清除',
+          text: 'Clear',
           style: 'destructive',
           onPress: () => void withBusy(() => bucket.clear()),
         },
@@ -135,10 +138,10 @@ export default function CacheSettingsScreen() {
   };
 
   const handleClearSubBucket = (child: CacheSubBucket) => {
-    Alert.alert('清除這個分類？', `${child.label} 將會被清空。`, [
+    Alert.alert('Clear this category?', `${child.label} will be cleared.`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: '清除',
+        text: 'Clear',
         style: 'destructive',
         onPress: () => void withBusy(() => child.clear()),
       },
@@ -149,18 +152,18 @@ export default function CacheSettingsScreen() {
     withBusy(async () => {
       const result = await manager.pruneAll();
       if (result.totalRemoved === 0) {
-        Alert.alert('沒有過期項目', '目前所有快取都還在有效期內。');
+        Alert.alert('No expired entries', 'All TTL-based cache entries are still valid.');
       }
     });
 
   const handleClearAll = () => {
     Alert.alert(
-      '清除所有快取？',
-      '所有圖片快取、API 回應、預下載資料都會被移除。你的收藏、評分、巡禮紀錄不受影響。',
+      'Clear all caches?',
+      'Image caches, API responses, request memory cache, and preloaded files will be removed. Collections, ratings, and pilgrimage records are not affected.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: '全部清除',
+          text: 'Clear all',
           style: 'destructive',
           onPress: () => void withBusy(() => manager.clearAll()),
         },
@@ -171,27 +174,27 @@ export default function CacheSettingsScreen() {
   return (
     <SettingsScreenLayout
       title="Cache"
-      subtitle="管理離線資料與磁碟用量"
+      subtitle="Manage offline data and storage usage"
       refreshing={loading}
       onRefresh={() => void refresh()}>
-      <SettingsSection title="儲存總覽">
+      <SettingsSection title="Storage Overview">
         <SettingsRow
           icon="folder"
-          label="Cache 目錄"
-          description="圖片、暫存、預下載資料"
+          label="Cache directory"
+          description="Images, temporary files, and preloaded data"
           value={overview ? formatBytes(overview.cacheDirBytes) : '...'}
         />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="description"
-          label="文件目錄"
-          description="使用者資料 — 不會被清"
+          label="Document directory"
+          description="User data; never cleared by cache actions"
           value={overview ? formatBytes(overview.documentDirBytes) : '...'}
         />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="storage"
-          label="裝置可用空間"
+          label="Available device storage"
           value={
             overview && overview.totalDiskBytes > 0
               ? `${formatBytes(overview.availableDiskBytes)} / ${formatBytes(overview.totalDiskBytes)}`
@@ -200,7 +203,7 @@ export default function CacheSettingsScreen() {
         />
       </SettingsSection>
 
-      <SettingsSection title="快取分類">
+      <SettingsSection title="Cache Buckets">
         {snapshots.length === 0 && loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={theme.accent} />
@@ -237,17 +240,13 @@ export default function CacheSettingsScreen() {
         )}
       </SettingsSection>
 
-      <SettingsSection title="操作">
-        <SettingsRow
-          icon="refresh"
-          label="重新計算用量"
-          onPress={() => void refresh()}
-        />
+      <SettingsSection title="Actions">
+        <SettingsRow icon="refresh" label="Recalculate usage" onPress={() => void refresh()} />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="cleaning-services"
-          label="清除過期項目"
-          description="只清掉已過 TTL 的快取"
+          label="Prune expired entries"
+          description="Only clears TTL-based cache entries that are already expired"
           onPress={handlePruneExpired}
         />
       </SettingsSection>
@@ -267,7 +266,7 @@ export default function CacheSettingsScreen() {
           },
         ]}>
         <MaterialIcons name="delete-forever" size={20} color={Colors.error} />
-        <Text style={styles.dangerLabel}>清除所有快取</Text>
+        <Text style={styles.dangerLabel}>Clear all caches</Text>
       </Pressable>
     </SettingsScreenLayout>
   );
@@ -293,10 +292,7 @@ function BucketRow({ bucket, stats, hasChildren, expanded, onToggle, onClear }: 
           onToggle();
         }
       }}
-      style={({ pressed }) => [
-        styles.bucketRow,
-        { opacity: pressed && hasChildren ? 0.7 : 1 },
-      ]}>
+      style={({ pressed }) => [styles.bucketRow, { opacity: pressed && hasChildren ? 0.7 : 1 }]}>
       <View style={[styles.bucketIcon, { backgroundColor: theme.background.tertiary }]}>
         <MaterialIcons name={icon} size={18} color={theme.accent} />
       </View>
@@ -374,7 +370,7 @@ function SubBucketRow({ child, onClear }: SubBucketRowProps) {
             opacity: pressed ? 0.7 : 1,
           },
         ]}>
-        <Text style={[styles.subActionLabel, { color: theme.text.secondary }]}>清除</Text>
+        <Text style={[styles.subActionLabel, { color: theme.text.secondary }]}>Clear</Text>
       </Pressable>
     </View>
   );

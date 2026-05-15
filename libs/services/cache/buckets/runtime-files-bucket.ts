@@ -23,20 +23,20 @@ const RUNTIME_FILES: readonly RuntimeFileDescriptor[] = [
   {
     id: 'anitabi-index',
     filename: 'anitabi-index.runtime.json',
-    label: 'Anitabi 索引',
-    description: '巡禮點清單與覆蓋範圍',
+    label: 'Anitabi index',
+    description: 'Pilgrimage spot list and coverage index',
   },
   {
     id: 'anitabi-cross-index',
     filename: 'anitabi-cross-index.runtime.json',
-    label: 'Anitabi 交叉索引',
-    description: '跨來源 ID 對應',
+    label: 'Anitabi cross-index',
+    description: 'Cross-platform ID mapping index',
   },
   {
     id: 'id-mappings',
     filename: 'anime-mappings.json',
-    label: 'ID 對照表（下載檔）',
-    description: '上次匯入用的原始 JSON；可安全刪除',
+    label: 'ID mappings download',
+    description: 'Raw JSON used by the last import; safe to delete',
   },
 ];
 
@@ -61,8 +61,8 @@ function deleteIfExists(filename: string): void {
 
 export class RuntimeFilesBucket implements CacheBucket {
   readonly id = 'runtime_files';
-  readonly label = '預先下載資料';
-  readonly description = '巡禮索引與 ID 對照原檔（會於下次啟動重抓）';
+  readonly label = 'Preloaded files';
+  readonly description = 'Pilgrimage indexes and ID mapping downloads; refreshed on next launch';
   readonly icon = 'cloud-download';
 
   async getStats(): Promise<BucketStats> {

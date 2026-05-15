@@ -21,50 +21,42 @@ interface MetadataGroup {
 const METADATA_GROUPS: readonly MetadataGroup[] = [
   {
     id: 'anime_detail',
-    label: '動畫詳細頁',
+    label: 'Anime details',
     description: 'Anime detail responses',
     prefixes: ['anime_detail_'],
   },
   {
     id: 'seasonal',
-    label: '季度列表',
+    label: 'Seasonal lists',
     description: 'Seasonal page lists',
     prefixes: ['seasonal_', 'seasonalpage_'],
   },
   {
     id: 'anitabi',
-    label: 'Anitabi 巡禮資料',
+    label: 'Anitabi pilgrimage data',
     description: 'Anitabi detailed points',
     prefixes: ['anitabi_detail_'],
   },
   {
     id: 'search',
-    label: '搜尋結果',
+    label: 'Search results',
     description: 'Search responses',
     prefixes: ['search_'],
   },
   {
     id: 'browse',
-    label: '瀏覽 / 趨勢',
+    label: 'Browse and trends',
     description: 'Top, trending, genre lists',
-    prefixes: [
-      'top_anime_',
-      'trending_anime_',
-      'genre_',
-      'genres_list_',
-      'anime_genres_',
-    ],
+    prefixes: ['top_anime_', 'trending_anime_', 'genre_', 'genres_list_', 'anime_genres_'],
   },
 ];
 
-const ALL_KNOWN_PREFIXES: readonly string[] = METADATA_GROUPS.flatMap(
-  (g) => g.prefixes
-);
+const ALL_KNOWN_PREFIXES: readonly string[] = METADATA_GROUPS.flatMap((g) => g.prefixes);
 
 export class MetadataBucket implements CacheBucket {
   readonly id = 'metadata';
-  readonly label = '快取資料 (Metadata)';
-  readonly description = 'API 回應、動畫資料、巡禮點資料';
+  readonly label = 'Metadata cache';
+  readonly description = 'API responses, anime data, and pilgrimage data';
   readonly icon = 'storage';
 
   async getStats(): Promise<BucketStats> {
@@ -118,7 +110,7 @@ export class MetadataBucket implements CacheBucket {
     if (miscStat && miscStat.entries > 0) {
       children.push({
         id: 'metadata.misc',
-        label: '其他',
+        label: 'Other metadata',
         description: 'Uncategorised cache entries',
         stats: {
           entries: miscStat.entries,

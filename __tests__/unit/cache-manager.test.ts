@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { CacheService } from '../../libs/services/cache-service';
 import { CacheManager, type CacheBucket } from '../../libs/services/cache/cache-manager';
 import { MetadataBucket } from '../../libs/services/cache/buckets/metadata-bucket';
+import { queryClient } from '../../libs/services/query-client';
 
 class FakeBucket implements CacheBucket {
   id: string;
@@ -35,6 +36,7 @@ describe('CacheManager', () => {
   beforeEach(async () => {
     await CacheService.init();
     await CacheService.clear();
+    queryClient.invalidateAll();
     CacheManager.__resetForTests();
   });
 
@@ -44,10 +46,11 @@ describe('CacheManager', () => {
     expect(a).toBe(b);
   });
 
-  it('CM-002 default registration includes metadata / image / runtime buckets', () => {
+  it('CM-002 default registration includes all built-in buckets', () => {
     const manager = CacheManager.getInstance();
     const ids = manager.getBuckets().map((b) => b.id);
     expect(ids).toContain('metadata');
+    expect(ids).toContain('query.memory');
     expect(ids).toContain('image.disk');
     expect(ids).toContain('image.memory');
     expect(ids).toContain('runtime_files');
@@ -114,6 +117,52 @@ describe('CacheManager', () => {
     expect(c.cleared).toBe(1);
   });
 
+  it('CM-009 clearAll also invalidates QueryClient in-memory entries', async () => {
+    const manager = CacheManager.getInstance();
+    let calls = 0;
+    const fetcher = async () => {
+      calls += 1;
+      return `value-${calls}`;
+    };
+
+    const first = await queryClient.fetch('memory-key', fetcher);
+    expect(first).toBe('value-1');
+    expect(queryClient.has('memory-key')).toBe(true);
+
+    await manager.clearAll();
+
+    expect(queryClient.has('memory-key')).toBe(false);
+    const second = await queryClient.fetch('memory-key', fetcher);
+    expect(second).toBe('value-2');
+    expect(calls).toBe(2);
+  });
+
+  it('CM-010 clearAll prevents in-flight QueryClient results from being cached later', async () => {
+    const manager = CacheManager.getInstance();
+    let resolveFetch!: (value: string) => void;
+    let calls = 0;
+    const fetcher = async () => {
+      calls += 1;
+      return await new Promise<string>((resolve) => {
+        resolveFetch = resolve;
+      });
+    };
+
+    const pending = queryClient.fetch('slow-memory-key', fetcher);
+    await manager.clearAll();
+    resolveFetch('stale-result');
+
+    await expect(pending).resolves.toBe('stale-result');
+    expect(queryClient.has('slow-memory-key')).toBe(false);
+
+    const fresh = await queryClient.fetch('slow-memory-key', async () => {
+      calls += 1;
+      return 'fresh-result';
+    });
+    expect(fresh).toBe('fresh-result');
+    expect(calls).toBe(2);
+  });
+
   it('CM-007 pruneAll skips buckets without prune and sums removed', async () => {
     const manager = CacheManager.getInstance();
     const noPrune: CacheBucket = {
@@ -173,7 +222,7 @@ describe('MetadataBucket', () => {
     const ids = children.map((c) => c.id);
     expect(ids).toContain('metadata.anime_detail');
     expect(ids).toContain('metadata.search');
-    expect(ids).not.toContain('metadata.seasonal');  // empty group hidden
+    expect(ids).not.toContain('metadata.seasonal'); // empty group hidden
 
     const detail = children.find((c) => c.id === 'metadata.anime_detail')!;
     await detail.clear();

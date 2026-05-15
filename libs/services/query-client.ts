@@ -36,6 +36,11 @@ interface CacheEntry {
   serializedKey: string;
 }
 
+export interface QueryClientStats {
+  entries: number;
+  inFlightEntries: number;
+}
+
 const DEFAULT_STALE_TIME_MS = 5 * 60 * 1000;
 
 export class QueryClient {
@@ -43,6 +48,7 @@ export class QueryClient {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, Promise<unknown>>();
   private nowFn: () => number = Date.now;
+  private generation = 0;
 
   static getInstance(): QueryClient {
     if (!QueryClient.instance) {
@@ -84,19 +90,26 @@ export class QueryClient {
     }
 
     // 3. Otherwise create and register a new request.
-    const promise = (async () => {
+    const generationAtStart = this.generation;
+    let promise!: Promise<T>;
+    promise = (async () => {
       try {
         const value = await fetcher();
-        this.cache.set(serialized, {
-          value,
-          timestamp: this.nowFn(),
-          serializedKey: serialized,
-        });
+        if (generationAtStart === this.generation) {
+          this.cache.set(serialized, {
+            value,
+            timestamp: this.nowFn(),
+            serializedKey: serialized,
+          });
+        }
         return value;
       } finally {
-        // Always remove from in-flight, even on success — the cache covers
-        // subsequent reads.
-        this.inFlight.delete(serialized);
+        // Only the currently tracked promise may clear the in-flight slot. A
+        // cache invalidation can remove this promise while a newer request for
+        // the same key is already running.
+        if (this.inFlight.get(serialized) === promise) {
+          this.inFlight.delete(serialized);
+        }
       }
     })();
 
@@ -110,6 +123,8 @@ export class QueryClient {
    */
   invalidateAll(): void {
     this.cache.clear();
+    this.inFlight.clear();
+    this.generation += 1;
   }
 
   /**
@@ -128,6 +143,14 @@ export class QueryClient {
   /** Inspection helper for tests. Returns whether a key has a cached value. */
   has(key: QueryKeyInput): boolean {
     return this.cache.has(serializeKey(key));
+  }
+
+  /** Inspection helper for cache management UI and tests. */
+  getStats(): QueryClientStats {
+    return {
+      entries: this.cache.size,
+      inFlightEntries: this.inFlight.size,
+    };
   }
 }
 
