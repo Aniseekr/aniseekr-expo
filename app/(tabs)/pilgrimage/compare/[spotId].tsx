@@ -26,9 +26,9 @@ import { getPilgrimageSpotTitles } from '../../../../libs/services/pilgrimage/pi
 import type { AnitabiPoint } from '../../../../libs/services/pilgrimage/types';
 import {
   cameraOrientationLockIntent,
-  formatCameraHeader,
-  CAMERA_TOOL_MENU_DOCK_BOTTOM_OFFSET,
-  resolveCameraToolMenuLayout,
+  CAMERA_BOTTOM_BAR_CONTENT_HEIGHT,
+  CAMERA_SIDE_RAIL_WIDTH,
+  resolveCameraToolMenuAnchor,
   resolveCameraActive,
   resolveTransientCameraHudVisibility,
   type CameraOrientationMode,
@@ -47,23 +47,22 @@ import OverlayLayer from '../../../../components/pilgrimage/camera/OverlayLayer'
 import { FocusReticle } from '../../../../components/pilgrimage/camera/FocusReticle';
 import { LevelHorizon } from '../../../../components/pilgrimage/camera/LevelHorizon';
 import FocusExposureBar from '../../../../components/pilgrimage/camera/FocusExposureBar';
-import CameraTopBar from '../../../../components/pilgrimage/camera/CameraTopBar';
+import CameraTopBar, {
+  CameraHeaderButton,
+} from '../../../../components/pilgrimage/camera/CameraTopBar';
 import AlignmentHUD from '../../../../components/pilgrimage/camera/AlignmentHUD';
 import FocalPills from '../../../../components/pilgrimage/camera/FocalPills';
-import CameraToolMenu, {
-  CameraToolMenuTrigger,
-} from '../../../../components/pilgrimage/camera/CameraToolMenu';
+import CameraToolMenu from '../../../../components/pilgrimage/camera/CameraToolMenu';
 import ShutterRow, {
   SHUTTER_ROW_LANDSCAPE_WIDTH,
 } from '../../../../components/pilgrimage/camera/ShutterRow';
 import OverlayControls from '../../../../components/pilgrimage/camera/chips/OverlayControls';
-import FlashChip from '../../../../components/pilgrimage/camera/chips/FlashChip';
 import ExposureControls, {
   formatEV,
 } from '../../../../components/pilgrimage/camera/chips/ExposureControls';
 import AspectChip from '../../../../components/pilgrimage/camera/chips/AspectChip';
-import CaptureModeChip from '../../../../components/pilgrimage/camera/chips/CaptureModeChip';
 import CountdownChip from '../../../../components/pilgrimage/camera/chips/CountdownChip';
+import OrientationChip from '../../../../components/pilgrimage/camera/chips/OrientationChip';
 import SettingsChip from '../../../../components/pilgrimage/camera/chips/SettingsChip';
 import CameraSettingsSheet from '../../../../components/pilgrimage/camera/CameraSettingsSheet';
 import { CountdownOverlay } from '../../../../components/pilgrimage/camera/CountdownOverlay';
@@ -102,6 +101,17 @@ type CameraRouteParams = {
   spotLat: string;
   spotLng: string;
 };
+
+// Flash lives as a top-bar icon button. The icon mirrors the live mode; the
+// cycle drops `torch` on the front camera, which has no torch.
+const FLASH_ICON: Record<FlashMode, keyof typeof Ionicons.glyphMap> = {
+  off: 'flash-off-outline',
+  auto: 'flash-outline',
+  on: 'flash',
+  torch: 'flashlight',
+};
+const FLASH_REAR_CYCLE: FlashMode[] = ['off', 'auto', 'on', 'torch'];
+const FLASH_FRONT_CYCLE: FlashMode[] = ['off', 'auto', 'on'];
 
 export default function CompareCaptureScreen() {
   const router = useRouter();
@@ -267,6 +277,15 @@ export default function CompareCaptureScreen() {
     hapticsBridge.selection();
     setFacing((f) => (f === 'back' ? 'front' : 'back'));
   }, []);
+
+  const cycleFlash = useCallback(() => {
+    hapticsBridge.selection();
+    setFlashMode((cur) => {
+      const cycle = facing === 'front' ? FLASH_FRONT_CYCLE : FLASH_REAR_CYCLE;
+      const idx = cycle.indexOf(cur);
+      return cycle[(idx === -1 ? 0 : idx + 1) % cycle.length];
+    });
+  }, [facing]);
 
   useEffect(() => {
     return () => {
@@ -646,11 +665,6 @@ export default function CompareCaptureScreen() {
     [hasOpticalZoom, setOpticalStop, zoom]
   );
 
-  const toggleLandscapeMode = useCallback(() => {
-    hapticsBridge.selection();
-    setOrientationMode((mode) => (mode === 'landscape' ? 'auto' : 'landscape'));
-  }, []);
-
   if (!permission) {
     return <View style={[styles.permRoot, { backgroundColor: theme.background.primary }]} />;
   }
@@ -700,18 +714,18 @@ export default function CompareCaptureScreen() {
     );
   }
 
-  const headerText = formatCameraHeader({ sceneName: name, animeTitle, ep });
   const activeFocalStop = hasOpticalZoom
     ? (stopForLens(selectedLens) as FocalStop | null)
     : zoom.activeStop;
   const safeAreaBottomPad = bottomPad(insets);
-  const focusEvBarBottom = safeAreaBottomPad + (isLandscape ? 72 : 116);
-  const dockBottom = safeAreaBottomPad + (isLandscape ? 70 : 110) + (tapFocus.afLocked ? 68 : 0);
-  const toolMenuLayout = resolveCameraToolMenuLayout({
+  // Fixed letterbox bars — neither moves, so every floating HUD layer anchors
+  // off this height instead of the old AF-reactive offset that made the dock
+  // physically jump 68px the moment tap-to-focus locked.
+  const bottomBarHeight = safeAreaBottomPad + CAMERA_BOTTOM_BAR_CONTENT_HEIGHT;
+  const focusEvBarBottom = isLandscape ? safeAreaBottomPad + 72 : bottomBarHeight + 12;
+  const toolMenuAnchor = resolveCameraToolMenuAnchor({
+    topInset: insets.top,
     isLandscape,
-    safeAreaBottomPad,
-    portraitDockBottom: dockBottom,
-    shutterRailWidth: SHUTTER_ROW_LANDSCAPE_WIDTH,
   });
   const cameraHudVisibility = resolveTransientCameraHudVisibility({
     toolMenuOpen,
@@ -721,6 +735,24 @@ export default function CompareCaptureScreen() {
     hapticsBridge.tap();
     router.push({ pathname: '/pilgrimage/compare/align', params: { ...params } });
   };
+  // One FocalPills instance, reused: it lives inside the portrait bottom bar
+  // and free-floats bottom-left in landscape.
+  const focalPills = (
+    <FocalPills
+      activeStop={activeFocalStop}
+      themeColor={themeColor}
+      availableStops={hasOpticalZoom ? availableStops : undefined}
+      opticalHint={false}
+      isFrontFacing={facing === 'front'}
+      onPick={onPickFocalStop}
+      virtualLenses={virtualLenses}
+      virtualActive={isVirtualLensActive}
+      onPickVirtual={() => {
+        const pick = pickAutoVirtualLens(availableLenses);
+        if (pick) setVirtualLens(pick);
+      }}
+    />
+  );
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -783,85 +815,54 @@ export default function CompareCaptureScreen() {
         </View>
 
         <CameraTopBar
-          sceneName={headerText.title}
-          subtitleText={headerText.subtitle}
+          placeName={name}
           themeColor={themeColor}
           topInset={insets.top}
           leftInset={insets.left}
           rightInset={insets.right}
+          bottomInset={insets.bottom}
+          rightRailWidth={isLandscape ? SHUTTER_ROW_LANDSCAPE_WIDTH : 0}
+          isLandscape={isLandscape}
           onClose={() => router.back()}
-          onOpenInfo={handleOpenInfo}
-          showActions
-          compact
           trailingActions={
             <>
-              <Pressable
+              <CameraHeaderButton
+                icon="camera-reverse-outline"
+                accessibilityLabel={facing === 'front' ? 'Use back camera' : 'Use front camera'}
+                accessibilityState={{ selected: facing === 'front' }}
+                themeColor={themeColor}
+                active={facing === 'front'}
+                onPress={toggleFacing}
+              />
+              <CameraHeaderButton
+                icon={editMode ? 'lock-open' : 'move'}
+                accessibilityLabel={editMode ? 'Lock overlay' : 'Edit overlay position'}
+                accessibilityState={{ selected: editMode }}
+                themeColor={themeColor}
+                active={editMode}
                 onPress={() => {
                   hapticsBridge.selection();
                   setEditMode((v) => !v);
                 }}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityState={{ selected: editMode }}
-                accessibilityLabel={editMode ? 'Lock overlay' : 'Edit overlay position'}
-                style={({ pressed }) => [
-                  styles.topBarBtn,
-                  {
-                    backgroundColor: editMode ? themeColor : 'rgba(0,0,0,0.55)',
-                  },
-                  pressed && { opacity: 0.7 },
-                ]}>
-                <Ionicons
-                  name={editMode ? 'lock-open' : 'move'}
-                  size={18}
-                  color={editMode ? readableTextOn(themeColor) : '#fff'}
-                />
-              </Pressable>
-              <Pressable
-                onPress={toggleFacing}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityState={{ selected: facing === 'front' }}
-                accessibilityLabel={facing === 'front' ? 'Use back camera' : 'Use front camera'}
-                style={({ pressed }) => [
-                  styles.topBarBtn,
-                  {
-                    backgroundColor: facing === 'front' ? themeColor : 'rgba(0,0,0,0.55)',
-                  },
-                  pressed && { opacity: 0.7 },
-                ]}>
-                <Ionicons
-                  name="camera-reverse-outline"
-                  size={18}
-                  color={facing === 'front' ? readableTextOn(themeColor) : '#fff'}
-                />
-              </Pressable>
-              <Pressable
-                onPress={toggleLandscapeMode}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityState={{ selected: orientationMode === 'landscape' }}
-                accessibilityLabel={
-                  orientationMode === 'landscape' ? 'Return to auto rotation' : 'Use landscape'
-                }
-                style={({ pressed }) => [
-                  styles.topBarBtn,
-                  {
-                    backgroundColor:
-                      orientationMode === 'landscape' ? themeColor : 'rgba(0,0,0,0.55)',
-                  },
-                  pressed && { opacity: 0.7 },
-                ]}>
-                <Ionicons
-                  name={
-                    orientationMode === 'landscape'
-                      ? 'phone-portrait-outline'
-                      : 'phone-landscape-outline'
-                  }
-                  size={18}
-                  color={orientationMode === 'landscape' ? readableTextOn(themeColor) : '#fff'}
-                />
-              </Pressable>
+              />
+              <CameraHeaderButton
+                icon={FLASH_ICON[flashMode]}
+                accessibilityLabel={`Flash ${flashMode}`}
+                themeColor={themeColor}
+                active={flashMode !== 'off'}
+                onPress={cycleFlash}
+              />
+              <CameraHeaderButton
+                icon={toolMenuOpen ? 'close' : 'ellipsis-horizontal'}
+                accessibilityLabel={toolMenuOpen ? 'Close camera tools' : 'Camera tools'}
+                accessibilityState={{ expanded: toolMenuOpen }}
+                themeColor={themeColor}
+                active={toolMenuOpen}
+                onPress={() => {
+                  hapticsBridge.selection();
+                  setToolMenuOpen((v) => !v);
+                }}
+              />
             </>
           }
         />
@@ -871,6 +872,8 @@ export default function CompareCaptureScreen() {
           themeColor={themeColor}
           topInset={insets.top}
           bottomInset={insets.bottom}
+          bottomBarHeight={bottomBarHeight}
+          leftReserve={isLandscape ? CAMERA_SIDE_RAIL_WIDTH + insets.left : 0}
           isLandscape={isLandscape}
           transformed={overlayTransform.transformed}
           rotationDisplayDeg={overlayTransform.rotationDisplayDeg}
@@ -878,62 +881,21 @@ export default function CompareCaptureScreen() {
           onReset={overlayTransform.resetTransforms}
         />
 
-        {/* Dock houses focal pills + capture mode + the "More" trigger in a
-            single edge-anchored row (same shape portrait + landscape).
-            - Focal pills (left) and capture mode (centre) stay visible all
-              the time — they're the two controls the user hits most often.
-            - The "More" trigger opens <CameraToolMenu/> (rendered at screen
-              root, below) — a drill-down popover for the secondary tools.
-            - Action buttons (close/info/edit-overlay/swap/orientation) live
-              in the top bar so the bottom strip stays slim. */}
-        <View
-          style={[
-            styles.dock,
-            isLandscape
-              ? {
-                  left: Math.max(16, insets.left),
-                  right: SHUTTER_ROW_LANDSCAPE_WIDTH + 16,
-                  bottom: safeAreaBottomPad + CAMERA_TOOL_MENU_DOCK_BOTTOM_OFFSET,
-                  top: undefined,
-                  width: undefined,
-                  zIndex: 60,
-                }
-              : {
-                  left: 16,
-                  right: 16,
-                  bottom: dockBottom,
-                  width: undefined,
-                  zIndex: 60,
-                },
-          ]}
-          pointerEvents="box-none">
-          <FocalPills
-            activeStop={activeFocalStop}
-            themeColor={themeColor}
-            availableStops={hasOpticalZoom ? availableStops : undefined}
-            // Keep the OPTICAL caption hidden — the row sits flat in both
-            // portrait and landscape now, and the extra vertical line would
-            // misalign the row across the bar.
-            opticalHint={false}
-            isFrontFacing={facing === 'front'}
-            onPick={onPickFocalStop}
-            virtualLenses={virtualLenses}
-            virtualActive={isVirtualLensActive}
-            onPickVirtual={() => {
-              const pick = pickAutoVirtualLens(availableLenses);
-              if (pick) setVirtualLens(pick);
-            }}
-          />
-          <CaptureModeChip
-            mode={settings.captureMode}
-            onChange={(m) => setSettings({ captureMode: m })}
-          />
-          <CameraToolMenuTrigger
-            themeColor={themeColor}
-            expanded={toolMenuOpen}
-            onPress={() => setToolMenuOpen((v) => !v)}
-          />
-        </View>
+        {/* Landscape floats the focal pills just inside the left rail; in
+            portrait they live inside the fixed bottom bar (ShutterRow). */}
+        {isLandscape ? (
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.landscapeFocalDock,
+              {
+                left: CAMERA_SIDE_RAIL_WIDTH + insets.left + 16,
+                bottom: safeAreaBottomPad + 16,
+              },
+            ]}>
+            {focalPills}
+          </View>
+        ) : null}
 
         {cameraHudVisibility.showFocusExposureBar ? (
           <FocusExposureBar
@@ -950,9 +912,8 @@ export default function CompareCaptureScreen() {
           style={[
             styles.autoBadgeWrap,
             isLandscape
-              ? // Sit above the chip strip (chips occupy ~58px from the bottom inset).
-                { right: SHUTTER_ROW_LANDSCAPE_WIDTH + 12, bottom: safeAreaBottomPad + 80 }
-              : { left: 0, right: 0, bottom: safeAreaBottomPad + 180 },
+              ? { right: SHUTTER_ROW_LANDSCAPE_WIDTH + 12, bottom: safeAreaBottomPad + 80 }
+              : { left: 0, right: 0, bottom: bottomBarHeight + 84 },
             // The tool menu popover covers this region — drop it out entirely
             // while the menu is open so nothing peeks past the panel edges.
             !cameraHudVisibility.showAutoCaptureBadge && styles.hidden,
@@ -979,7 +940,7 @@ export default function CompareCaptureScreen() {
               : {
                   left: 0,
                   right: 0,
-                  bottom: safeAreaBottomPad + 220,
+                  bottom: bottomBarHeight + 12,
                   height: 60,
                 },
             !cameraHudVisibility.showCaptureHistory && styles.hidden,
@@ -1006,6 +967,9 @@ export default function CompareCaptureScreen() {
           isLandscape={isLandscape}
           topInset={insets.top}
           bottomInset={insets.bottom}
+          captureMode={settings.captureMode}
+          onChangeCaptureMode={(m) => setSettings({ captureMode: m })}
+          focalSlot={isLandscape ? undefined : focalPills}
           onShutter={onShutter}
           onLongPress={onShutterLongPress}
           burst={
@@ -1032,21 +996,18 @@ export default function CompareCaptureScreen() {
           visible={toolMenuOpen}
           onRequestClose={() => setToolMenuOpen(false)}
           themeColor={themeColor}
-          bottomOffset={toolMenuLayout.bottomOffset}
-          rightOffset={toolMenuLayout.rightOffset}
-          topInset={insets.top}
+          topOffset={toolMenuAnchor.topOffset}
+          leftOffset={toolMenuAnchor.leftOffset}
+          rightOffset={toolMenuAnchor.rightOffset}
+          bottomReserve={isLandscape ? safeAreaBottomPad + 24 : bottomBarHeight}
           cycleChips={
             <>
               <CountdownChip
                 seconds={settings.countdownSeconds}
                 onChange={(s) => setSettings({ countdownSeconds: s })}
               />
-              <FlashChip
-                flashMode={flashMode}
-                isFrontFacing={facing === 'front'}
-                onChange={setFlashMode}
-              />
               <AspectChip aspect={aspect} onChange={setAspect} />
+              <OrientationChip mode={orientationMode} onChange={setOrientationMode} />
               <SettingsChip
                 onPress={() => {
                   setToolMenuOpen(false);
@@ -1069,6 +1030,7 @@ export default function CompareCaptureScreen() {
           }
           exposureSummary={tapFocus.afLocked ? null : formatEV(evValue)}
           exposureControls={<ExposureControls value={evValue} onChange={setEvValue} />}
+          onOpenTips={handleOpenInfo}
         />
 
         <CountdownOverlay
@@ -1110,29 +1072,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   permBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, marginTop: 12 },
-  dock: {
+  landscapeFocalDock: {
     position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    overflow: 'visible',
+    zIndex: 60,
   },
   autoBadgeWrap: { position: 'absolute', alignItems: 'center' },
   captureHistoryWrap: { position: 'absolute', alignItems: 'center' },
   hidden: { display: 'none' },
   levelHorizonWrap: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Compact top-bar action button. Matches CameraTopBar's internal topBtn
-  // dimensions so the trailing actions (edit / swap / orientation) slot in
-  // cleanly next to the info icon.
-  topBarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
