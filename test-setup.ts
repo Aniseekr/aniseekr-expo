@@ -79,11 +79,17 @@ class FakeDatabase {
 
     if (
       upper.startsWith('CREATE') ||
-      upper.startsWith('PRAGMA') ||
       upper.startsWith('DROP') ||
       upper.startsWith('BEGIN') ||
-      upper.startsWith('COMMIT')
+      upper.startsWith('COMMIT') ||
+      upper.startsWith('VACUUM')
     ) {
+      return result;
+    }
+
+    // pragma_page_count() / pragma_page_size() — used by CacheService.getDatabaseFileSize.
+    if (upper.startsWith('PRAGMA') || upper.includes('PRAGMA_PAGE_COUNT')) {
+      result.rows = [{ size: 0 }];
       return result;
     }
 
@@ -95,6 +101,22 @@ class FakeDatabase {
       return result;
     }
     if (upper.startsWith('SELECT') && upper.includes('FROM CACHE')) {
+      // SELECT key FROM cache — used by CacheService.allKeys.
+      if (/^SELECT\s+KEY\s+FROM\s+CACHE\s*$/.test(upper)) {
+        result.rows = [...this.cache.values()].map((row) => ({ key: row.key }));
+        return result;
+      }
+      // SELECT key, length(value) AS bytes, timestamp, ttl FROM cache — stats().
+      if (upper.includes('LENGTH(VALUE)')) {
+        result.rows = [...this.cache.values()].map((row) => ({
+          key: row.key,
+          bytes: typeof row.value === 'string' ? row.value.length : 0,
+          timestamp: row.timestamp,
+          ttl: row.ttl,
+        }));
+        return result;
+      }
+      // SELECT value, timestamp, ttl FROM cache WHERE key = ?
       const key = params[0] as string;
       const entry = this.cache.get(key);
       if (entry) {
@@ -103,6 +125,46 @@ class FakeDatabase {
       return result;
     }
     if (upper.startsWith('DELETE FROM CACHE')) {
+      // DELETE FROM cache WHERE key = ?
+      if (upper.includes('WHERE KEY = ?')) {
+        const key = params[0] as string;
+        const removed = this.cache.delete(key) ? 1 : 0;
+        result.changes = removed;
+        return result;
+      }
+      // DELETE FROM cache WHERE key LIKE ? ESCAPE '\'
+      if (upper.includes('WHERE KEY LIKE')) {
+        const raw = String(params[0] ?? '');
+        // Strip trailing % and unescape \_ \% \\ produced by clearByPrefix.
+        const literal = raw
+          .replace(/%$/, '')
+          .replace(/\\_/g, '_')
+          .replace(/\\%/g, '%')
+          .replace(/\\\\/g, '\\');
+        let removed = 0;
+        for (const k of [...this.cache.keys()]) {
+          if (k.startsWith(literal)) {
+            this.cache.delete(k);
+            removed++;
+          }
+        }
+        result.changes = removed;
+        return result;
+      }
+      // DELETE FROM cache WHERE timestamp + ttl < ?
+      if (upper.includes('TIMESTAMP + TTL')) {
+        const cutoff = Number(params[0]);
+        let removed = 0;
+        for (const [k, v] of this.cache.entries()) {
+          if ((v.expires_at as number) < cutoff) {
+            this.cache.delete(k);
+            removed++;
+          }
+        }
+        result.changes = removed;
+        return result;
+      }
+      // Bare DELETE FROM cache — full clear.
       this.cache.clear();
       return result;
     }
@@ -174,16 +236,62 @@ mock.module('expo-sqlite', () => ({
   openDatabaseAsync: async (_name: string) => new FakeDatabase(),
 }));
 
-// expo-file-system shim — IDMappingService.updateMappings() reads/downloads,
-// tests never invoke that path but the static import must resolve.
+// expo-file-system new API (SDK 54 Paths/File/Directory). cache-manager and
+// runtime-files-bucket use this; we expose just enough for unit tests.
+const fakeFsCacheRoot = '/tmp/test-cache/';
+const fakeFsDocsRoot = '/tmp/test-docs/';
+
+class FakeFile {
+  readonly uri: string;
+  exists = false;
+  size = 0;
+  constructor(...uris: (string | { uri: string })[]) {
+    const parts = uris.map((u) => (typeof u === 'string' ? u : u.uri));
+    this.uri = parts.join('').replace(/\/+/g, '/');
+  }
+  delete(): void {
+    this.exists = false;
+    this.size = 0;
+  }
+}
+
+const fakeDir = (uri: string) => ({ uri, size: 0 as number | null });
+
 mock.module('expo-file-system', () => ({
-  cacheDirectory: '/tmp/test-cache/',
-  documentDirectory: '/tmp/test-docs/',
+  Paths: {
+    cache: fakeDir(fakeFsCacheRoot),
+    document: fakeDir(fakeFsDocsRoot),
+    bundle: fakeDir('/tmp/test-bundle/'),
+    availableDiskSpace: 1_000_000_000,
+    totalDiskSpace: 10_000_000_000,
+  },
+  File: FakeFile,
+  Directory: class FakeDirectory {
+    uri: string;
+    size: number | null = 0;
+    constructor(...uris: (string | { uri: string })[]) {
+      this.uri = uris.map((u) => (typeof u === 'string' ? u : u.uri)).join('');
+    }
+    list() {
+      return [];
+    }
+  },
+}));
+
+// expo-file-system/legacy — id-mapping-service, anitabi-data-service,
+// AvatarUploader, user-repository all use this. Tests never invoke the network
+// paths but the static import must resolve.
+mock.module('expo-file-system/legacy', () => ({
+  cacheDirectory: fakeFsCacheRoot,
+  documentDirectory: fakeFsDocsRoot,
   downloadAsync: async (_url: string, _dest: string) => ({ status: 200 }),
   readAsStringAsync: async (_path: string) => '[]',
   writeAsStringAsync: async (_path: string, _content: string) => undefined,
   deleteAsync: async (_path: string) => undefined,
   getInfoAsync: async (_path: string) => ({ exists: false }),
+  makeDirectoryAsync: async (_path: string) => undefined,
+  copyAsync: async (_options: { from: string; to: string }) => undefined,
+  moveAsync: async (_options: { from: string; to: string }) => undefined,
 }));
 
 // expo-haptics no-op shim
@@ -205,14 +313,16 @@ mock.module('expo-location', () => ({
   watchPositionAsync: async () => ({ remove: () => undefined }),
 }));
 
-// expo-image: render as RN Image
+// expo-image: render as RN Image + cache-clearing stubs used by ImageDiskBucket /
+// ImageMemoryBucket.
 mock.module('expo-image', () => {
   const React = require('react');
-  return {
-    Image: React.forwardRef((props: any, ref: any) =>
-      React.createElement('Image', { ...props, ref })
-    ),
-  };
+  const ImageComponent: any = React.forwardRef((props: any, ref: any) =>
+    React.createElement('Image', { ...props, ref })
+  );
+  ImageComponent.clearDiskCache = async () => true;
+  ImageComponent.clearMemoryCache = async () => true;
+  return { Image: ImageComponent };
 });
 
 // react-native shim: Bun cannot parse RN's Flow-typed entrypoint, so we
