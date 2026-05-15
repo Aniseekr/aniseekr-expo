@@ -518,9 +518,11 @@ interface SceneTileProps {
   distanceKm: number | null;
   visited: boolean;
   hasCapture: boolean;
+  captureUri: string | null;
   theme: ThemePalette;
   onPress: (spot: AnitabiPoint) => void;
   onToggleVisited: (spot: AnitabiPoint) => void;
+  onTakeComparison: (spot: AnitabiPoint) => void;
 }
 
 function SceneTile({
@@ -530,14 +532,27 @@ function SceneTile({
   distanceKm,
   visited,
   hasCapture,
+  captureUri,
   theme,
   onPress,
   onToggleVisited,
+  onTakeComparison,
 }: SceneTileProps) {
   const styles = useMemo(() => makeTileStyles(theme), [theme]);
   const titles = getPilgrimageSpotTitles(spot);
   const metaLine =
     distanceKm != null ? `EP ${spot.ep} · ${formatDistanceKm(distanceKm)}` : `EP ${spot.ep}`;
+  const [showCapture, setShowCapture] = useState(false);
+  const flipped = showCapture && !!captureUri;
+  const displayedUri = flipped ? captureUri! : spot.image;
+  const handleFlip = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    if (captureUri) {
+      setShowCapture((s) => !s);
+    } else {
+      onTakeComparison(spot);
+    }
+  }, [captureUri, onTakeComparison, spot]);
   return (
     <Pressable
       onPress={() => onPress(spot)}
@@ -555,7 +570,7 @@ function SceneTile({
       accessibilityLabel={`Open ${titles.primary}`}
       accessibilityHint="Long press to toggle visited">
       <Image
-        source={{ uri: spot.image }}
+        source={{ uri: displayedUri }}
         style={styles.image}
         contentFit="cover"
         transition={160}
@@ -603,6 +618,28 @@ function SceneTile({
           {metaLine}
         </ThemedText>
       </View>
+      <Pressable
+        onPress={handleFlip}
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.flipBtn,
+          flipped && { backgroundColor: `${themeColor}E6` },
+          pressed && { opacity: 0.75 },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={
+          captureUri
+            ? flipped
+              ? 'Show scene image'
+              : 'Show your photo'
+            : 'Take comparison photo'
+        }>
+        <Ionicons
+          name={captureUri ? 'swap-horizontal' : 'camera-outline'}
+          size={14}
+          color={flipped ? themeColorFg : ON_DARK}
+        />
+      </Pressable>
     </Pressable>
   );
 }
@@ -1500,12 +1537,14 @@ export default function PilgrimageDetailScreen() {
                             distanceKm={distanceFor(spot)}
                             visited={visited[spot.id] === true}
                             hasCapture={!!captures[spot.id]}
+                            captureUri={captures[spot.id]?.uri ?? null}
                             theme={theme}
                             onPress={(s) => {
                               Haptics.selectionAsync().catch(() => undefined);
                               setActiveSpot(s);
                             }}
                             onToggleVisited={handleToggleVisited}
+                            onTakeComparison={handleFrameShot}
                           />
                         </View>
                       ))}
@@ -2271,6 +2310,17 @@ function makeTileStyles(theme: ThemePalette) {
       color: 'rgba(255,255,255,0.85)',
       textShadowColor: 'rgba(0,0,0,0.45)',
       textShadowRadius: 3,
+    },
+    flipBtn: {
+      position: 'absolute',
+      bottom: 8,
+      right: 8,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 }
