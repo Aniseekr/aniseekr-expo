@@ -27,8 +27,10 @@ import type { AnitabiPoint } from '../../../../libs/services/pilgrimage/types';
 import {
   cameraOrientationLockIntent,
   formatCameraHeader,
-  LANDSCAPE_TOOL_MENU_BOTTOM_OFFSET,
+  CAMERA_TOOL_MENU_DOCK_BOTTOM_OFFSET,
+  resolveCameraToolMenuLayout,
   resolveCameraActive,
+  resolveTransientCameraHudVisibility,
   type CameraOrientationMode,
 } from '../../../../libs/services/pilgrimage/camera-ui';
 import {
@@ -47,15 +49,18 @@ import { LevelHorizon } from '../../../../components/pilgrimage/camera/LevelHori
 import FocusExposureBar from '../../../../components/pilgrimage/camera/FocusExposureBar';
 import CameraTopBar from '../../../../components/pilgrimage/camera/CameraTopBar';
 import AlignmentHUD from '../../../../components/pilgrimage/camera/AlignmentHUD';
-import { ToolRibbon } from '../../../../components/pilgrimage/camera/ToolRibbon';
 import FocalPills from '../../../../components/pilgrimage/camera/FocalPills';
-import CameraToolMenu from '../../../../components/pilgrimage/camera/CameraToolMenu';
+import CameraToolMenu, {
+  CameraToolMenuTrigger,
+} from '../../../../components/pilgrimage/camera/CameraToolMenu';
 import ShutterRow, {
   SHUTTER_ROW_LANDSCAPE_WIDTH,
 } from '../../../../components/pilgrimage/camera/ShutterRow';
-import OverlayChip from '../../../../components/pilgrimage/camera/chips/OverlayChip';
+import OverlayControls from '../../../../components/pilgrimage/camera/chips/OverlayControls';
 import FlashChip from '../../../../components/pilgrimage/camera/chips/FlashChip';
-import ExposureChip from '../../../../components/pilgrimage/camera/chips/ExposureChip';
+import ExposureControls, {
+  formatEV,
+} from '../../../../components/pilgrimage/camera/chips/ExposureControls';
 import AspectChip from '../../../../components/pilgrimage/camera/chips/AspectChip';
 import CaptureModeChip from '../../../../components/pilgrimage/camera/chips/CaptureModeChip';
 import CountdownChip from '../../../../components/pilgrimage/camera/chips/CountdownChip';
@@ -124,6 +129,7 @@ export default function CompareCaptureScreen() {
   const [orientationMode, setOrientationMode] = useState<CameraOrientationMode>('auto');
   const [capturing, setCapturing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [appIsForeground, setAppIsForeground] = useState(() => AppState.currentState === 'active');
   const [availablePictureSizes, setAvailablePictureSizes] = useState<string[]>([]);
   const [sceneSwitcherOpen, setSceneSwitcherOpen] = useState(false);
@@ -698,8 +704,19 @@ export default function CompareCaptureScreen() {
   const activeFocalStop = hasOpticalZoom
     ? (stopForLens(selectedLens) as FocalStop | null)
     : zoom.activeStop;
-  const focusEvBarBottom = bottomPad(insets) + (isLandscape ? 72 : 116);
-  const dockBottom = bottomPad(insets) + (isLandscape ? 70 : 110) + (tapFocus.afLocked ? 68 : 0);
+  const safeAreaBottomPad = bottomPad(insets);
+  const focusEvBarBottom = safeAreaBottomPad + (isLandscape ? 72 : 116);
+  const dockBottom = safeAreaBottomPad + (isLandscape ? 70 : 110) + (tapFocus.afLocked ? 68 : 0);
+  const toolMenuLayout = resolveCameraToolMenuLayout({
+    isLandscape,
+    safeAreaBottomPad,
+    portraitDockBottom: dockBottom,
+    shutterRailWidth: SHUTTER_ROW_LANDSCAPE_WIDTH,
+  });
+  const cameraHudVisibility = resolveTransientCameraHudVisibility({
+    toolMenuOpen,
+    afLocked: tapFocus.afLocked,
+  });
   const handleOpenInfo = () => {
     hapticsBridge.tap();
     router.push({ pathname: '/pilgrimage/compare/align', params: { ...params } });
@@ -805,14 +822,11 @@ export default function CompareCaptureScreen() {
                 hitSlop={14}
                 accessibilityRole="button"
                 accessibilityState={{ selected: facing === 'front' }}
-                accessibilityLabel={
-                  facing === 'front' ? 'Use back camera' : 'Use front camera'
-                }
+                accessibilityLabel={facing === 'front' ? 'Use back camera' : 'Use front camera'}
                 style={({ pressed }) => [
                   styles.topBarBtn,
                   {
-                    backgroundColor:
-                      facing === 'front' ? themeColor : 'rgba(0,0,0,0.55)',
+                    backgroundColor: facing === 'front' ? themeColor : 'rgba(0,0,0,0.55)',
                   },
                   pressed && { opacity: 0.7 },
                 ]}>
@@ -828,17 +842,13 @@ export default function CompareCaptureScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ selected: orientationMode === 'landscape' }}
                 accessibilityLabel={
-                  orientationMode === 'landscape'
-                    ? 'Return to auto rotation'
-                    : 'Use landscape'
+                  orientationMode === 'landscape' ? 'Return to auto rotation' : 'Use landscape'
                 }
                 style={({ pressed }) => [
                   styles.topBarBtn,
                   {
                     backgroundColor:
-                      orientationMode === 'landscape'
-                        ? themeColor
-                        : 'rgba(0,0,0,0.55)',
+                      orientationMode === 'landscape' ? themeColor : 'rgba(0,0,0,0.55)',
                   },
                   pressed && { opacity: 0.7 },
                 ]}>
@@ -849,11 +859,7 @@ export default function CompareCaptureScreen() {
                       : 'phone-landscape-outline'
                   }
                   size={18}
-                  color={
-                    orientationMode === 'landscape'
-                      ? readableTextOn(themeColor)
-                      : '#fff'
-                  }
+                  color={orientationMode === 'landscape' ? readableTextOn(themeColor) : '#fff'}
                 />
               </Pressable>
             </>
@@ -872,12 +878,12 @@ export default function CompareCaptureScreen() {
           onReset={overlayTransform.resetTransforms}
         />
 
-        {/* Dock houses focal pills + capture mode + "More" drawer in a single
-            edge-anchored row (same shape portrait + landscape).
+        {/* Dock houses focal pills + capture mode + the "More" trigger in a
+            single edge-anchored row (same shape portrait + landscape).
             - Focal pills (left) and capture mode (centre) stay visible all
               the time — they're the two controls the user hits most often.
-            - The "More" trigger expands a panel above it with the secondary
-              chips (flash/aspect/EV/overlay/countdown/settings).
+            - The "More" trigger opens <CameraToolMenu/> (rendered at screen
+              root, below) — a drill-down popover for the secondary tools.
             - Action buttons (close/info/edit-overlay/swap/orientation) live
               in the top bar so the bottom strip stays slim. */}
         <View
@@ -887,7 +893,7 @@ export default function CompareCaptureScreen() {
               ? {
                   left: Math.max(16, insets.left),
                   right: SHUTTER_ROW_LANDSCAPE_WIDTH + 16,
-                  bottom: bottomPad(insets) + LANDSCAPE_TOOL_MENU_BOTTOM_OFFSET,
+                  bottom: safeAreaBottomPad + CAMERA_TOOL_MENU_DOCK_BOTTOM_OFFSET,
                   top: undefined,
                   width: undefined,
                   zIndex: 60,
@@ -922,48 +928,14 @@ export default function CompareCaptureScreen() {
             mode={settings.captureMode}
             onChange={(m) => setSettings({ captureMode: m })}
           />
-          <CameraToolMenu themeColor={themeColor} inlineLabel panelAlign="right">
-            <ToolRibbon
-              isLandscape={false}
-              topInset={insets.top}
-              bottomInset={insets.bottom}
-              countdown={
-                <CountdownChip
-                  seconds={settings.countdownSeconds}
-                  onChange={(s) => setSettings({ countdownSeconds: s })}
-                />
-              }
-              settings={<SettingsChip onPress={() => setSettingsOpen(true)} />}
-              overlay={
-                <OverlayChip
-                  mode={overlayMode}
-                  opacity={overlayOpacity}
-                  flipped={overlayTransform.flipped}
-                  themeColor={themeColor}
-                  isLandscape={false}
-                  onSelectMode={setOverlayMode}
-                  onChangeOpacity={setOverlayOpacity}
-                  onToggleFlip={overlayTransform.toggleFlip}
-                />
-              }
-              flash={
-                <FlashChip
-                  flashMode={flashMode}
-                  isFrontFacing={facing === 'front'}
-                  onChange={setFlashMode}
-                />
-              }
-              exposure={
-                tapFocus.afLocked ? null : (
-                  <ExposureChip value={evValue} isLandscape={false} onChange={setEvValue} />
-                )
-              }
-              aspect={<AspectChip aspect={aspect} onChange={setAspect} />}
-            />
-          </CameraToolMenu>
+          <CameraToolMenuTrigger
+            themeColor={themeColor}
+            expanded={toolMenuOpen}
+            onPress={() => setToolMenuOpen((v) => !v)}
+          />
         </View>
 
-        {tapFocus.afLocked ? (
+        {cameraHudVisibility.showFocusExposureBar ? (
           <FocusExposureBar
             value={evValue}
             themeColor={themeColor}
@@ -979,8 +951,11 @@ export default function CompareCaptureScreen() {
             styles.autoBadgeWrap,
             isLandscape
               ? // Sit above the chip strip (chips occupy ~58px from the bottom inset).
-                { right: SHUTTER_ROW_LANDSCAPE_WIDTH + 12, bottom: bottomPad(insets) + 80 }
-              : { left: 0, right: 0, bottom: bottomPad(insets) + 180 },
+                { right: SHUTTER_ROW_LANDSCAPE_WIDTH + 12, bottom: safeAreaBottomPad + 80 }
+              : { left: 0, right: 0, bottom: safeAreaBottomPad + 180 },
+            // The tool menu popover covers this region — drop it out entirely
+            // while the menu is open so nothing peeks past the panel edges.
+            !cameraHudVisibility.showAutoCaptureBadge && styles.hidden,
           ]}>
           <AutoCaptureStatusBadge
             remainingMs={autoCapture.remainingMs}
@@ -998,15 +973,16 @@ export default function CompareCaptureScreen() {
                   // Clears the compact landscape top bar (≈ insets.top + 48).
                   right: SHUTTER_ROW_LANDSCAPE_WIDTH + 8,
                   top: insets.top + 56,
-                  bottom: bottomPad(insets) + 96,
+                  bottom: safeAreaBottomPad + 96,
                   width: 56,
                 }
               : {
                   left: 0,
                   right: 0,
-                  bottom: bottomPad(insets) + 220,
+                  bottom: safeAreaBottomPad + 220,
                   height: 60,
                 },
+            !cameraHudVisibility.showCaptureHistory && styles.hidden,
           ]}>
           <CaptureHistoryStrip
             uris={captureHistory.history}
@@ -1047,6 +1023,52 @@ export default function CompareCaptureScreen() {
             hapticsBridge.tap();
             setSceneSwitcherOpen(true);
           }}
+        />
+
+        {/* Drill-down popover for the secondary camera tools. Rendered at
+            screen root (after ShutterRow) so it floats above every HUD layer
+            and is reliably touchable — see CameraToolMenu for the rationale. */}
+        <CameraToolMenu
+          visible={toolMenuOpen}
+          onRequestClose={() => setToolMenuOpen(false)}
+          themeColor={themeColor}
+          bottomOffset={toolMenuLayout.bottomOffset}
+          rightOffset={toolMenuLayout.rightOffset}
+          topInset={insets.top}
+          cycleChips={
+            <>
+              <CountdownChip
+                seconds={settings.countdownSeconds}
+                onChange={(s) => setSettings({ countdownSeconds: s })}
+              />
+              <FlashChip
+                flashMode={flashMode}
+                isFrontFacing={facing === 'front'}
+                onChange={setFlashMode}
+              />
+              <AspectChip aspect={aspect} onChange={setAspect} />
+              <SettingsChip
+                onPress={() => {
+                  setToolMenuOpen(false);
+                  setSettingsOpen(true);
+                }}
+              />
+            </>
+          }
+          overlaySummary={`${Math.round(overlayOpacity * 100)}%`}
+          overlayControls={
+            <OverlayControls
+              mode={overlayMode}
+              opacity={overlayOpacity}
+              flipped={overlayTransform.flipped}
+              themeColor={themeColor}
+              onSelectMode={setOverlayMode}
+              onChangeOpacity={setOverlayOpacity}
+              onToggleFlip={overlayTransform.toggleFlip}
+            />
+          }
+          exposureSummary={tapFocus.afLocked ? null : formatEV(evValue)}
+          exposureControls={<ExposureControls value={evValue} onChange={setEvValue} />}
         />
 
         <CountdownOverlay
@@ -1098,6 +1120,7 @@ const styles = StyleSheet.create({
   },
   autoBadgeWrap: { position: 'absolute', alignItems: 'center' },
   captureHistoryWrap: { position: 'absolute', alignItems: 'center' },
+  hidden: { display: 'none' },
   levelHorizonWrap: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
