@@ -12,6 +12,11 @@ export interface CameraHeaderText {
 export type CameraOrientationMode = 'auto' | 'landscape';
 export type CameraOrientationLockIntent = 'unlock' | 'landscape';
 
+export interface CameraActiveInput {
+  appIsForeground: boolean;
+  settingsOpen: boolean;
+}
+
 const RESERVED_COMPARE_ROUTES = new Set(['align', 'preview', 'share', 'tips']);
 const EV_MIN = -2;
 const EV_MAX = 2;
@@ -49,6 +54,10 @@ export function cameraOrientationLockIntent(
 export function roundExposureValue(value: number): number {
   const clamped = Math.max(EV_MIN, Math.min(EV_MAX, value));
   return Number(clamped.toFixed(1));
+}
+
+export function resolveCameraActive(input: CameraActiveInput): boolean {
+  return input.appIsForeground && !input.settingsOpen;
 }
 
 function firstParam(value: CameraHeaderInput['animeTitle'] | CameraHeaderInput['ep']): string {

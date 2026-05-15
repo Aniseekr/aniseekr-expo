@@ -13,11 +13,13 @@
 // if targeting those. We use SINGLE physical lens names (not the virtual
 // `builtInDual/TripleCamera` wrappers) so lens switching is predictable.
 import type { CameraView } from 'expo-camera';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { FocalStop } from '../components/pilgrimage/camera/types';
 import {
+  isVirtualLens,
   lensForFocalStop,
   stopsForAvailableLenses,
+  virtualLensesFromAvailable,
   type TelephotoStop,
 } from '../libs/services/pilgrimage/lens-switching';
 
@@ -40,6 +42,19 @@ export interface UseLensSwitcherOutput {
   hasOpticalZoom: boolean;
   /** Re-query lenses after CameraView reports ready; initial render usually has a null ref. */
   refreshAvailableLenses: () => Promise<void>;
+  /**
+   * Virtual / multi-lens auto-switching cameras the device exposes (subset of
+   * `availableLenses` matching `builtInDual/DualWide/TripleCamera`). Empty on
+   * non-Pro hardware and Android. Per Rule 8 — only echoes real values.
+   */
+  virtualLenses: string[];
+  /**
+   * Switch the active lens to a virtual auto-switching camera, or clear it by
+   * passing `null`. No-op if the requested lens isn't in `virtualLenses`.
+   */
+  setVirtualLens: (lensName: string | null) => void;
+  /** True iff `selectedLens` currently points at a virtual auto-switching lens. */
+  isVirtualLensActive: boolean;
 }
 
 export function useLensSwitcher(input: UseLensSwitcherInput): UseLensSwitcherOutput {
@@ -89,6 +104,28 @@ export function useLensSwitcher(input: UseLensSwitcherInput): UseLensSwitcherOut
     [availableLenses, telephotoStop]
   );
 
+  // Memoized so the array identity stays stable across renders that don't
+  // actually change `availableLenses` — keeps consumers' useEffect deps quiet.
+  const virtualLenses = useMemo(
+    () => virtualLensesFromAvailable(availableLenses),
+    [availableLenses]
+  );
+
+  const setVirtualLens = useCallback(
+    (lensName: string | null) => {
+      if (lensName === null) {
+        setSelectedLens(null);
+        return;
+      }
+      // Per Rule 8: refuse to set a virtual lens the device hasn't reported.
+      if (!virtualLenses.includes(lensName)) return;
+      setSelectedLens(lensName);
+    },
+    [virtualLenses]
+  );
+
+  const isVirtualLensActive = isVirtualLens(selectedLens);
+
   const hasOpticalZoom = availableStops.length >= 2;
 
   return {
@@ -98,5 +135,8 @@ export function useLensSwitcher(input: UseLensSwitcherInput): UseLensSwitcherOut
     setStop,
     hasOpticalZoom,
     refreshAvailableLenses,
+    virtualLenses,
+    setVirtualLens,
+    isVirtualLensActive,
   };
 }

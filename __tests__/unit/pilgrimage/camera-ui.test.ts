@@ -3,6 +3,7 @@ import {
   cameraOrientationLockIntent,
   formatCameraHeader,
   isCameraCapturePath,
+  resolveCameraActive,
   roundExposureValue,
 } from '../../../libs/services/pilgrimage/camera-ui';
 
@@ -43,5 +44,11 @@ describe('camera UI helpers', () => {
     expect(roundExposureValue(0.96)).toBe(1);
     expect(roundExposureValue(-4)).toBe(-2);
     expect(roundExposureValue(2.44)).toBe(2);
+  });
+
+  it('only keeps the native camera active while foregrounded and unobscured', () => {
+    expect(resolveCameraActive({ appIsForeground: true, settingsOpen: false })).toBe(true);
+    expect(resolveCameraActive({ appIsForeground: false, settingsOpen: false })).toBe(false);
+    expect(resolveCameraActive({ appIsForeground: true, settingsOpen: true })).toBe(false);
   });
 });
