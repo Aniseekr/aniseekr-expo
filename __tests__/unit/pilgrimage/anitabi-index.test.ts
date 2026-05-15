@@ -191,4 +191,31 @@ describe('anitabi-index', () => {
       indexModule.getAnimeInBounds({ north: 0, south: 10, east: 180, west: -180 })
     ).toEqual([]);
   });
+
+  it('PILG-IDX-010 notifies subscribers and normalizes covers after runtime hydration', () => {
+    let notifications = 0;
+    const before = indexModule.getIndexVersion();
+    const unsubscribe = indexModule.subscribeAnitabiIndex(() => {
+      notifications += 1;
+    });
+
+    indexModule.hydrateFromRuntime({
+      generatedAt: 1700000001000,
+      source: 'runtime-fixture',
+      entries: [
+        {
+          ...TOKYO,
+          cover: '/images/bangumi/1.jpg',
+        },
+      ],
+    });
+
+    expect(indexModule.getIndexVersion()).toBe(before + 1);
+    expect(notifications).toBe(1);
+    expect(indexModule.getAllIndexed()[0].cover).toBe(
+      'https://image.anitabi.cn/bangumi/1.jpg?plan=h160'
+    );
+
+    unsubscribe();
+  });
 });
