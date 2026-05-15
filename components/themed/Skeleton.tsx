@@ -321,7 +321,10 @@ function TimelineBase({ count = 5, showHeader = true, style }: SkeletonTimelineP
 }
 export const SkeletonTimeline = memo(TimelineBase);
 
-// ---------- Profile (avatar + chips row + cards) ----------
+// ---------- Profile card (single card: avatar ring + name + currency pill) ----------
+// Mirrors the profileCard block in app/(tabs)/profile.tsx so the swap to data
+// has no layout shift. Stats row, premium CTA, shortcuts and settings row are
+// rendered alongside their own data and do not need a skeleton here.
 
 export interface SkeletonProfileProps {
   style?: ViewStyle;
@@ -330,32 +333,20 @@ export interface SkeletonProfileProps {
 function ProfileBase({ style }: SkeletonProfileProps) {
   const { theme } = useTheme();
   return (
-    <View style={[styles.profile, style]}>
-      <Row style={{ alignItems: 'center', gap: Spacing.md }}>
-        <ShimmerEffect width={72} height={72} borderRadius={36} />
-        <Col style={{ flex: 1 }}>
-          <ShimmerEffect width="60%" height={18} />
-          <ShimmerEffect width="40%" height={12} style={{ marginTop: 8 }} />
-        </Col>
-      </Row>
-      <Row style={{ marginTop: Spacing.lg, gap: Spacing.xs, flexWrap: 'wrap' }}>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <ShimmerEffect key={i} width={84} height={28} borderRadius={14} />
-        ))}
-      </Row>
-      <View style={{ gap: Spacing.md, marginTop: Spacing.lg }}>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.profileCard,
-              { backgroundColor: theme.background.secondary, borderColor: theme.glassBorder },
-            ]}>
-            <ShimmerEffect width="50%" height={14} />
-            <ShimmerEffect width="80%" height={11} style={{ marginTop: 8 }} />
-          </View>
-        ))}
-      </View>
+    <View
+      style={[
+        styles.profileCard,
+        { backgroundColor: theme.background.secondary, borderColor: theme.glassBorder },
+        style,
+      ]}>
+      <ShimmerEffect width={72} height={72} borderRadius={36} />
+      <ShimmerEffect width={140} height={22} style={{ marginTop: Spacing.sm + 2 }} />
+      <ShimmerEffect
+        width={180}
+        height={36}
+        borderRadius={Radius.full}
+        style={{ marginTop: Spacing.sm + 2 }}
+      />
     </View>
   );
 }
@@ -412,10 +403,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   stepBody: { flex: 1, paddingBottom: Spacing.lg },
-  profile: { padding: Spacing.lg },
   profileCard: {
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    alignItems: 'center',
+    padding: Spacing.xl,
+    borderRadius: Radius.card,
     borderWidth: 1,
   },
   ratingCard: {
