@@ -22,7 +22,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Changes',
-    body: 'We may update these terms occasionally. Significant changes will be highlighted in the changelog within the app.',
+    body: 'We may update these terms occasionally. The effective date below reflects the most recent revision; please re-read this page after major updates.',
   },
 ];
 

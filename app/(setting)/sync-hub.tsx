@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Spacing, Typography } from '../../constants/DesignSystem';
+import { router } from 'expo-router';
+import { Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import {
@@ -9,7 +10,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from '../../components/setting/SettingsScreenLayout';
-import { readableTextOn } from '../../components/themed';
+import { ThemedText, readableTextOn } from '../../components/themed';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -92,9 +93,19 @@ export default function SyncHubScreen() {
         ]}>
         <MaterialIcons name="sync" size={24} color={theme.accent} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.statusTitle, { color: theme.text.primary }]}>
-            {lastSync ? `Last sync ${formatRelative(lastSync)}` : 'No sync yet'}
-          </Text>
+          <View style={styles.statusTitleRow}>
+            <Text style={[styles.statusTitle, { color: theme.text.primary }]}>
+              {lastSync ? `Last sync ${formatRelative(lastSync)}` : 'No sync yet'}
+            </Text>
+            <View style={[styles.betaPill, { backgroundColor: theme.accent }]}>
+              <ThemedText
+                variant="captionSmall"
+                weight="800"
+                style={[styles.betaPillText, { color: readableTextOn(theme.accent) }]}>
+                BETA
+              </ThemedText>
+            </View>
+          </View>
           <Text style={[styles.statusBody, { color: theme.text.secondary }]}>
             Sync runs in the background when your library changes.
           </Text>
@@ -173,7 +184,7 @@ export default function SyncHubScreen() {
         <SettingsRow
           icon="manage-accounts"
           label="Connected platforms"
-          onPress={() => null}
+          onPress={() => router.push('/(setting)/account')}
           value="Manage in Account"
         />
         <Divider />
@@ -255,8 +266,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
   },
+  statusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   statusTitle: {
     ...Typography.titleMedium,
+    flexShrink: 1,
+  },
+  betaPill: {
+    paddingHorizontal: Spacing.xs + 2,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  betaPillText: {
+    letterSpacing: 1,
   },
   statusBody: {
     ...Typography.bodySmall,

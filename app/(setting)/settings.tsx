@@ -10,11 +10,12 @@ import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Application from 'expo-application';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Radius, Spacing } from '../../constants/DesignSystem';
+import { Radius, Spacing, Size } from '../../constants/DesignSystem';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { useTheme, type ThemeId, type ThemeMode } from '../../context/ThemeContext';
 import { PaywallSheet } from '../../components/subscription/PaywallSheet';
@@ -38,7 +39,6 @@ import {
   type UserPrefs,
 } from '../../libs/services/user-prefs';
 import { UserRepository, type UserProfile } from '../../libs/repositories/user-repository';
-import { gachaService } from '../../libs/services/gacha-service';
 import { authService } from '../../libs/services/auth/auth-service';
 
 interface PurchasesShowManage {
@@ -99,22 +99,20 @@ export default function SettingsScreen() {
     themes,
   } = useTheme();
 
-  const [dataSaver, setDataSaver] = useState(false);
   const [prefs, setPrefs] = useState<UserPrefs>(DEFAULT_USER_PREFS);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [nameSheetVisible, setNameSheetVisible] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [coins, setCoins] = useState(0);
-  const [shards, setShards] = useState(0);
   const [connectedCount, setConnectedCount] = useState(0);
   const [activeSheet, setActiveSheet] = useState<QuickSheetKind>(null);
+
+  const appVersion =
+    Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '1.0.0';
 
   useEffect(() => {
     let mounted = true;
     loadUserPrefs().then((p) => mounted && setPrefs(p));
     UserRepository.getProfile().then((u) => mounted && setUser(u));
-    gachaService.getCoins().then((v) => mounted && setCoins(v));
-    gachaService.getShards().then((v) => mounted && setShards(v));
     (async () => {
       try {
         await authService.initialize();
@@ -340,12 +338,6 @@ export default function SettingsScreen() {
           icon: 'card-outline',
           onPress: () => void openManageSubscription(),
         },
-        {
-          key: 'benefits',
-          label: 'View benefits',
-          icon: 'sparkles-outline',
-          onPress: () => router.push('/(setting)/account'),
-        },
       ];
     }
     return [
@@ -504,20 +496,6 @@ export default function SettingsScreen() {
                     </View>
                   ) : null}
                 </View>
-                <View style={styles.currencyRow}>
-                  <View style={styles.currencyItem}>
-                    <MaterialIcons name="monetization-on" size={14} color="#FFD60A" />
-                    <ThemedText variant="caption" tone="secondary" weight="600">
-                      {coins}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.currencyItem}>
-                    <MaterialIcons name="diamond" size={14} color="#06B6D4" />
-                    <ThemedText variant="caption" tone="secondary" weight="600">
-                      {shards}
-                    </ThemedText>
-                  </View>
-                </View>
               </View>
 
               <View
@@ -591,11 +569,6 @@ export default function SettingsScreen() {
               onLongPress={() => setActiveSheet('platforms')}
             />
             <SettingsRow
-              icon="finger-print-outline"
-              label="Otaku DNA"
-              onPress={() => router.push('/(setting)/otaku-dna')}
-            />
-            <SettingsRow
               icon="trophy-outline"
               label="Achievements"
               onPress={() => router.push('/(setting)/achievements')}
@@ -609,25 +582,9 @@ export default function SettingsScreen() {
               onPress={() => router.push('/(setting)/data-source')}
             />
             <SettingsRow
-              icon="git-branch-outline"
-              label="Sync hub"
-              onPress={() => router.push('/(setting)/sync-hub')}
-            />
-            <SettingsRow
-              icon="cloud-upload-outline"
-              label="Import wizard"
-              onPress={() => router.push('/(setting)/import-wizard')}
-            />
-            <SettingsRow
               icon="server-outline"
               label="Cache"
               onPress={() => router.push('/(setting)/cache')}
-            />
-            <SettingsSwitchRow
-              icon="cellular-outline"
-              label="Data saver"
-              value={dataSaver}
-              onValueChange={setDataSaver}
             />
           </SettingsSection>
 
@@ -646,11 +603,6 @@ export default function SettingsScreen() {
               }
               onPress={() => router.push('/(setting)/appearance')}
               onLongPress={() => setActiveSheet('appearance')}
-            />
-            <SettingsRow
-              icon="language-outline"
-              label="Title language priority"
-              onPress={() => router.push('/(setting)/language-priority')}
             />
           </SettingsSection>
 
@@ -702,19 +654,23 @@ export default function SettingsScreen() {
           </SettingsSection>
 
           <Pressable
+            onPress={() => {
+              hapticsBridge.tap();
+              router.push('/(setting)/advanced');
+            }}
             onLongPress={() => {
               hapticsBridge.longPress();
               router.push('/(setting)/design-tokens');
             }}
             delayLongPress={500}
-            accessibilityRole="text"
-            accessibilityLabel="App version. Long-press for developer options.">
+            style={styles.versionRow}
+            accessibilityRole="button"
+            accessibilityLabel="App version. Tap to open advanced settings.">
             <ThemedText
               variant="caption"
               tone="tertiary"
-              align="center"
-              style={styles.versionText}>
-              Aniseekr v1.0.0 (Expo)
+              align="center">
+              Aniseekr v{appVersion} (Expo)
             </ThemedText>
           </Pressable>
         </ScrollView>
@@ -795,16 +751,6 @@ const styles = StyleSheet.create({
   proBadgeText: {
     letterSpacing: 1,
   },
-  currencyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  currencyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   editPill: {
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
@@ -844,7 +790,11 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
   },
-  versionText: {
+  versionRow: {
     marginTop: Spacing.md,
+    minHeight: Size.minTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
   },
 });
