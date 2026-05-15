@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { bottomPad } from '../../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText } from '../../../../components/themed';
@@ -74,7 +75,9 @@ export default function ComparePreviewScreen() {
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions();
+  const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions({
+    granularPermissions: ['photo'],
+  });
   const [stagePx, setStagePx] = useState({ width: 0, height: 0 });
 
   // Alignment sensor snapshot — strictly real data from capture-time sensors.
@@ -708,7 +711,7 @@ export default function ComparePreviewScreen() {
           ) : null}
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+        <View style={[styles.footer, { paddingBottom: bottomPad(insets) }]}>
           <Pressable
             onPress={handleRetake}
             style={({ pressed }) => [

@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Radius } from '../../../../constants/DesignSystem';
+import { Radius, bottomPad } from '../../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../../components/themed';
@@ -68,7 +68,9 @@ export default function ShareComparisonScreen() {
   const [toast, setToast] = useState<string | null>(null);
 
   const cardRef = useRef<View>(null);
-  const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions();
+  const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions({
+    granularPermissions: ['photo'],
+  });
 
   const today = useMemo(() => {
     const d = new Date();
@@ -333,7 +335,7 @@ export default function ShareComparisonScreen() {
           </View>
         </ScrollView>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+        <View style={[styles.footer, { paddingBottom: bottomPad(insets) }]}>
           <View style={styles.socialRow}>
             <SocialBtn
               icon="logo-instagram"
