@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -26,6 +33,7 @@ import {
   type FrameMatch,
 } from '../../../../libs/services/pilgrimage/frame-match';
 import { useCaptureSession, type CaptureSessionShot } from '../../../../hooks/useCaptureSession';
+import { sanitizeCaptureNote } from '../../../../libs/services/pilgrimage/capture-session';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 
 function getRetakeTip(s: SensorSnapshot | null): string | null {
@@ -95,6 +103,10 @@ export default function ComparePreviewScreen() {
   const headingDeltaDegParam = getStringParam(params, 'headingDeltaDeg');
   const tiltParam = getStringParam(params, 'tilt');
   const captureModeParam = getStringParam(params, 'captureMode');
+  const shotSourceParam = getStringParam(params, 'shotSource');
+  const userLatParam = getStringParam(params, 'userLat');
+  const userLngParam = getStringParam(params, 'userLng');
+  const noteParam = getStringParam(params, 'note');
   const routeShot = useMemo(
     () =>
       buildCaptureSessionShotFromRoute({
@@ -108,6 +120,10 @@ export default function ComparePreviewScreen() {
         headingDeltaDeg: headingDeltaDegParam ?? undefined,
         tilt: tiltParam ?? undefined,
         captureMode: captureModeParam ?? undefined,
+        shotSource: shotSourceParam ?? undefined,
+        userLat: userLatParam ?? undefined,
+        userLng: userLngParam ?? undefined,
+        note: noteParam ?? undefined,
       }),
     [
       spotId,
@@ -120,6 +136,10 @@ export default function ComparePreviewScreen() {
       headingDeltaDegParam,
       tiltParam,
       captureModeParam,
+      shotSourceParam,
+      userLatParam,
+      userLngParam,
+      noteParam,
     ]
   );
   const shots = useMemo(
@@ -152,6 +172,7 @@ export default function ComparePreviewScreen() {
     () => shots.find((s) => s.id === focusedShotId) ?? shots[0] ?? null,
     [shots, focusedShotId]
   );
+  const [note, setNote] = useState(() => focusedShot?.note ?? routeShot?.note ?? '');
   const shotUri = focusedShot?.uri ?? '';
   const selectedCount = useMemo(
     () => shots.reduce((n, s) => (selectedIds.has(s.id) ? n + 1 : n), 0),
@@ -171,6 +192,14 @@ export default function ComparePreviewScreen() {
   useEffect(() => {
     setSaved(false);
   }, [shots]);
+
+  useEffect(() => {
+    setNote(focusedShot?.note ?? '');
+  }, [focusedShot?.id, focusedShot?.note]);
+
+  useEffect(() => {
+    setSaved(false);
+  }, [note]);
 
   // Alignment sensor snapshot — strictly real data, taken from the FOCUSED
   // shot's own capture-time fields. Each shot carries its own snapshot, so the
@@ -254,6 +283,7 @@ export default function ComparePreviewScreen() {
   }, [frameMatch]);
 
   const stageRef = useRef<View>(null);
+  const compositeByShotIdRef = useRef<Record<string, string>>({});
 
   // Slider drag position (0..1) for slider mode
   const sliderProgress = useSharedValue(0.5);
@@ -294,8 +324,14 @@ export default function ComparePreviewScreen() {
 
   // Persist one session shot's capture record so the spot shows "captured".
   const persistShot = useCallback(
-    async (shot: CaptureSessionShot, frame: FrameMatch | null, compositeUri?: string) => {
+    async (
+      shot: CaptureSessionShot,
+      frame: FrameMatch | null,
+      compositeUri?: string,
+      noteText?: string
+    ) => {
       const snap = snapshotFromShot(shot);
+      const cleanedNote = sanitizeCaptureNote(noteText ?? shot.note);
       const enrichedSnapshot: SensorSnapshot | undefined = snap
         ? {
             ...snap,
@@ -311,6 +347,9 @@ export default function ComparePreviewScreen() {
         capturedAt: shot.createdAt,
         heading: shot.heading ?? undefined,
         sensorSnapshot: enrichedSnapshot,
+        userLocation: shot.userLocation ?? undefined,
+        note: cleanedNote,
+        source: shot.source === 'library' ? 'library' : shot.source === 'auto' ? 'auto' : 'camera',
         animeId: animeIdNumber ?? undefined,
         animeTitle: animeTitle ?? undefined,
         animeColor: themeColor,
@@ -353,8 +392,16 @@ export default function ComparePreviewScreen() {
     const newest = shots[0];
     if (!newest || persistedRef.current.has(newest.id)) return;
     persistedRef.current.add(newest.id);
-    void persistShot(newest, null);
+    void persistShot(newest, null, undefined, newest.note);
   }, [shots, persistShot]);
+
+  useEffect(() => {
+    if (!focusedShot) return;
+    const timer = setTimeout(() => {
+      void persistShot(focusedShot, frameMatch, compositeByShotIdRef.current[focusedShot.id], note);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [focusedShot, frameMatch, note, persistShot]);
 
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -379,6 +426,7 @@ export default function ComparePreviewScreen() {
       }
       if (composite) {
         await MediaLibrary.saveToLibraryAsync(composite);
+        if (focusedShot) compositeByShotIdRef.current[focusedShot.id] = composite;
       }
       // Persist the focused shot's record with its frame-match analysis +
       // composite; other selected shots persist their raw record.
@@ -387,7 +435,8 @@ export default function ComparePreviewScreen() {
         await persistShot(
           shot,
           isFocused ? frameMatch : null,
-          isFocused ? (composite ?? undefined) : undefined
+          isFocused ? (composite ?? undefined) : undefined,
+          note
         );
         persistedRef.current.add(shot.id);
       }
@@ -406,6 +455,7 @@ export default function ComparePreviewScreen() {
     snapshotComposite,
     persistShot,
     frameMatch,
+    note,
   ]);
 
   const handleShare = useCallback(() => {
@@ -922,12 +972,47 @@ export default function ComparePreviewScreen() {
             </View>
           ) : null}
 
+          <View
+            style={[
+              styles.noteCard,
+              {
+                backgroundColor: theme.background.secondary,
+                borderColor: theme.glassBorder,
+              },
+            ]}>
+            <View style={styles.analysisHeader}>
+              <ThemedText variant="titleMedium" weight="700">
+                Album description
+              </ThemedText>
+              <Ionicons name="create-outline" size={14} color={theme.accent} />
+            </View>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="Add where, why, or what to remember about this shot"
+              placeholderTextColor={theme.text.tertiary}
+              multiline
+              maxLength={280}
+              textAlignVertical="top"
+              accessibilityLabel="Album description"
+              style={[
+                styles.noteInput,
+                {
+                  color: theme.text.primary,
+                  backgroundColor: theme.background.tertiary,
+                  borderColor: theme.glassBorder,
+                },
+              ]}
+            />
+          </View>
+
           <CaptureExifInfoCard
             animeTitle={animeTitle}
             episode={ep}
             spotLat={spotLat}
             spotLng={spotLng}
             heading={focusedHeading}
+            userLocation={focusedShot?.userLocation ?? null}
           />
         </ScrollView>
 
@@ -1008,6 +1093,14 @@ function Filmstrip({
       {shots.map((shot) => {
         const focused = shot.id === focusedShotId;
         const selected = selectedIds.has(shot.id);
+        const sourceBadge =
+          shot.source === 'library'
+            ? 'LIBRARY'
+            : shot.captureMode === 'burst'
+              ? 'BURST'
+              : shot.captureMode === 'hdr'
+                ? 'HDR'
+                : null;
         return (
           <View key={shot.id} style={styles.thumbWrap}>
             <Pressable
@@ -1024,13 +1117,13 @@ function Filmstrip({
               accessibilityRole="button"
               accessibilityLabel={focused ? 'Focused shot' : 'Focus this shot'}>
               <Image source={{ uri: shot.uri }} style={styles.thumbImage} contentFit="cover" />
-              {shot.captureMode !== 'single' ? (
+              {sourceBadge ? (
                 <View style={[styles.thumbModeBadge, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
                   <ThemedText
                     variant="captionSmall"
                     weight="700"
                     style={{ color: '#fff', fontSize: 9 }}>
-                    {shot.captureMode === 'burst' ? 'BURST' : 'HDR'}
+                    {sourceBadge}
                   </ThemedText>
                 </View>
               ) : null}
@@ -1073,12 +1166,14 @@ function CaptureExifInfoCard({
   spotLat,
   spotLng,
   heading,
+  userLocation,
 }: {
   animeTitle: string | null;
   episode: string | null;
   spotLat: string | null;
   spotLng: string | null;
   heading: number | null;
+  userLocation: CaptureSessionShot['userLocation'];
 }) {
   const { theme } = useTheme();
 
@@ -1088,14 +1183,17 @@ function CaptureExifInfoCard({
 
   const latNum = spotLat != null ? Number(spotLat) : Number.NaN;
   const lngNum = spotLng != null ? Number(spotLng) : Number.NaN;
-  const gpsText =
+  const sceneGpsText =
     Number.isFinite(latNum) && Number.isFinite(lngNum)
       ? `${latNum.toFixed(4)}, ${lngNum.toFixed(4)}`
       : null;
+  const recordedGpsText = userLocation
+    ? `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`
+    : null;
 
   const headingText = heading != null && Number.isFinite(heading) ? `${heading.toFixed(0)}°` : null;
 
-  if (!animeWithEpisode && !gpsText && !headingText) return null;
+  if (!animeWithEpisode && !recordedGpsText && !sceneGpsText && !headingText) return null;
 
   return (
     <View style={styles.exifCardWrap}>
@@ -1118,16 +1216,29 @@ function CaptureExifInfoCard({
               </ThemedText>
             </View>
           ) : null}
-          {gpsText ? (
+          {recordedGpsText ? (
             <View style={styles.exifRow}>
               <ThemedText variant="bodySmall" weight="600" style={{ color: theme.text.secondary }}>
-                GPS
+                Recorded GPS
               </ThemedText>
               <ThemedText
                 variant="bodySmall"
                 weight="600"
                 style={[styles.exifRowValue, { color: theme.text.primary }]}>
-                {gpsText}
+                {recordedGpsText}
+              </ThemedText>
+            </View>
+          ) : null}
+          {sceneGpsText ? (
+            <View style={styles.exifRow}>
+              <ThemedText variant="bodySmall" weight="600" style={{ color: theme.text.secondary }}>
+                Scene GPS
+              </ThemedText>
+              <ThemedText
+                variant="bodySmall"
+                weight="600"
+                style={[styles.exifRowValue, { color: theme.text.primary }]}>
+                {sceneGpsText}
               </ThemedText>
             </View>
           ) : null}
@@ -1406,6 +1517,22 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     borderWidth: 1,
+  },
+  noteCard: {
+    marginHorizontal: 16,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+  },
+  noteInput: {
+    minHeight: 84,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
   },
   exifCardWrap: {
     marginHorizontal: 16,
