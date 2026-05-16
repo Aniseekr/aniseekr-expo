@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -37,6 +37,7 @@ import {
 } from '../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../libs/services/pilgrimage/pilgrimage-navigation';
 import { getStringParam } from '../libs/utils/route-params';
+import { sameArrayBy } from '../libs/utils/state-array';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -84,6 +85,32 @@ const SORTS: readonly { key: SortKey; label: string }[] = [
   { key: 'year', label: 'Newest' },
 ];
 
+function sameSearchResults(current: SearchAnime[], next: SearchAnime[]): boolean {
+  return sameArrayBy(current, next, (anime) => [
+    anime.id,
+    anime.title,
+    anime.titleEnglish,
+    anime.secondaryTitle,
+    anime.image,
+    anime.bannerImage,
+    anime.rank,
+    anime.score,
+    anime.startDate?.year,
+    anime.startDate?.month,
+    anime.startDate?.day,
+    anime.type,
+    anime.format,
+    anime.status,
+    anime.episodes,
+    anime.durationMinutes,
+    anime.nextAiringEpisode?.airingAt,
+    anime.nextAiringEpisode?.episode,
+    anime.bangumiId,
+    anime.hasPilgrimage,
+    anime.pilgrimageSource,
+  ]);
+}
+
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -109,6 +136,8 @@ export default function SearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeQueryRef = useRef(initialQuery);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRequestRef = useRef(0);
+  const resolveRequestRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,30 +195,36 @@ export default function SearchScreen() {
 
   const runSearch = useCallback(
     async (q: string) => {
+      const requestId = ++searchRequestRef.current;
       const trimmed = q.trim();
       if (!trimmed) {
-        setResults([]);
-        setError(null);
-        setLoading(false);
+        setResults((prev) => (prev.length === 0 ? prev : []));
+        setError((prev) => (prev === null ? prev : null));
+        setLoading((prev) => (prev ? false : prev));
         return;
       }
       setLoading(true);
       setError(null);
       setResolveError(null);
       try {
+        let nextResults: SearchAnime[];
         if (isPilgrimageMode) {
           const data = await pilgrimageSearchService.search(trimmed, { limit: 30 });
-          setResults(data.map(mapPilgrimageResultToAnime));
-          return;
+          nextResults = data.map(mapPilgrimageResultToAnime);
+        } else {
+          const data = await AnimeRepository.searchAnime(trimmed, 1);
+          nextResults = (data ?? []) as SearchAnime[];
         }
-
-        const data = await AnimeRepository.searchAnime(trimmed, 1);
-        setResults((data ?? []) as SearchAnime[]);
+        if (requestId !== searchRequestRef.current) return;
+        setResults((prev) => (sameSearchResults(prev, nextResults) ? prev : nextResults));
       } catch (e) {
+        if (requestId !== searchRequestRef.current) return;
         setError(e instanceof Error ? e.message : 'Search failed');
-        setResults([]);
+        setResults((prev) => (prev.length === 0 ? prev : []));
       } finally {
-        setLoading(false);
+        if (requestId === searchRequestRef.current) {
+          setLoading(false);
+        }
       }
     },
     [isPilgrimageMode]
@@ -207,6 +242,7 @@ export default function SearchScreen() {
 
   const handleSelect = useCallback(
     async (anime: SearchAnime) => {
+      const resolveRequestId = ++resolveRequestRef.current;
       hapticsBridge.tap();
       const next = [anime.title, ...recent.filter((r) => r !== anime.title)].slice(0, MAX_RECENT);
       setRecent(next);
@@ -235,6 +271,7 @@ export default function SearchScreen() {
             sourcePlatform: 'anilist',
             id: anime.id,
           });
+          if (resolveRequestId !== resolveRequestRef.current) return;
           if (bangumiId === null) {
             hapticsBridge.warning();
             setResolveError(`No pilgrimage mapping for "${anime.title}".`);
@@ -247,10 +284,13 @@ export default function SearchScreen() {
             })
           );
         } catch (e) {
+          if (resolveRequestId !== resolveRequestRef.current) return;
           hapticsBridge.warning();
           setResolveError(e instanceof Error ? e.message : 'Could not resolve this title.');
         } finally {
-          setResolvingId(null);
+          if (resolveRequestId === resolveRequestRef.current) {
+            setResolvingId(null);
+          }
         }
         return;
       }
@@ -316,6 +356,14 @@ export default function SearchScreen() {
     setQuery(term);
   }, []);
 
+  const handleSubmitSearch = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    runSearch(query);
+  }, [query, runSearch]);
+
   const handleClearRecent = useCallback(async () => {
     hapticsBridge.warning();
     setRecent([]);
@@ -349,7 +397,7 @@ export default function SearchScreen() {
 
   // Apply client-side filter + sort to keep things responsive without adding
   // backend params. Filters narrow on type; sort reorders only.
-  const filteredResults = (() => {
+  const filteredResults = useMemo(() => {
     let list = results;
     if (filter === 'tv') {
       list = list.filter((a) => (a.type ?? a.format ?? '').toUpperCase().includes('TV'));
@@ -365,7 +413,7 @@ export default function SearchScreen() {
       list = [...list].sort((a, b) => (b.startDate?.year ?? 0) - (a.startDate?.year ?? 0));
     }
     return list;
-  })();
+  }, [filter, results, sort]);
 
   const sortLabel = SORTS.find((s) => s.key === sort)?.label ?? 'Relevance';
 
@@ -406,7 +454,7 @@ export default function SearchScreen() {
               onChangeText={setQuery}
               style={styles.input}
               returnKeyType="search"
-              onSubmitEditing={() => runSearch(query)}
+              onSubmitEditing={handleSubmitSearch}
               autoCorrect={false}
               autoCapitalize="none"
             />

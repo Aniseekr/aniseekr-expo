@@ -6,6 +6,10 @@ import {
   computeAlignmentScore,
   type AlignmentSensors,
 } from '../libs/services/pilgrimage/alignment-scoring';
+import {
+  circularDegreesDelta,
+  shouldPublishSensorSnapshot,
+} from '../libs/services/pilgrimage/alignment-sensor-state';
 import type { AlignmentScoreView } from '../components/pilgrimage/camera/types';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 
@@ -32,6 +36,15 @@ const RELEASE_THRESHOLD = 0.85;
 const SLOW_CONFIRM_MS = 800;
 const PERFECT_DELAY_MS = 800;
 const PERFECT_BANNER_MS = 1600;
+const SENSOR_REACT_MIN_INTERVAL_MS = FAST_INTERVAL_MS;
+const SENSOR_REACT_MAX_INTERVAL_MS = 1000;
+const HEADING_REACT_DELTA_DEG = 1.5;
+const TILT_REACT_DELTA_DEG = 0.75;
+
+interface SensorSnapshotRef {
+  value: number | null;
+  publishedAtMs: number | null;
+}
 
 function bearingBetween(from: LatLng, to: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -58,6 +71,8 @@ export function useAlignmentSensors({
 
   const tiltShared = useSharedValue<number>(0);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const headingSnapshotRef = useRef<SensorSnapshotRef>({ value: null, publishedAtMs: null });
+  const tiltSnapshotRef = useRef<SensorSnapshotRef>({ value: null, publishedAtMs: null });
 
   const targetLocation = useMemo<LatLng | null>(() => {
     const lat = Number(spotLat);
@@ -104,7 +119,24 @@ export function useAlignmentSensors({
         const angle = Math.atan2(data.y, data.x);
         let deg = (angle * 180) / Math.PI;
         deg = (90 - deg + 360) % 360;
-        setHeading(deg);
+        const snapshot = headingSnapshotRef.current;
+        const nowMs = Date.now();
+        if (
+          shouldPublishSensorSnapshot({
+            previousValue: snapshot.value,
+            lastPublishedAtMs: snapshot.publishedAtMs,
+            nextValue: deg,
+            nowMs,
+            minDelta: HEADING_REACT_DELTA_DEG,
+            minIntervalMs: SENSOR_REACT_MIN_INTERVAL_MS,
+            maxIntervalMs: SENSOR_REACT_MAX_INTERVAL_MS,
+            delta: circularDegreesDelta,
+          })
+        ) {
+          snapshot.value = deg;
+          snapshot.publishedAtMs = nowMs;
+          setHeading(deg);
+        }
       });
       DeviceMotion.setUpdateInterval(intervalMs);
       DeviceMotion.isAvailableAsync()
@@ -114,7 +146,23 @@ export function useAlignmentSensors({
             const pitch = data.rotation?.beta ?? 0;
             tiltShared.value = pitch;
             const deg = (pitch * 180) / Math.PI;
-            setTilt(deg);
+            const snapshot = tiltSnapshotRef.current;
+            const nowMs = Date.now();
+            if (
+              shouldPublishSensorSnapshot({
+                previousValue: snapshot.value,
+                lastPublishedAtMs: snapshot.publishedAtMs,
+                nextValue: deg,
+                nowMs,
+                minDelta: TILT_REACT_DELTA_DEG,
+                minIntervalMs: SENSOR_REACT_MIN_INTERVAL_MS,
+                maxIntervalMs: SENSOR_REACT_MAX_INTERVAL_MS,
+              })
+            ) {
+              snapshot.value = deg;
+              snapshot.publishedAtMs = nowMs;
+              setTilt(deg);
+            }
           });
         })
         .catch(() => undefined);

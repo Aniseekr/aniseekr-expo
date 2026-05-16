@@ -48,6 +48,7 @@ import { readableTextOn } from '../../components/themed';
 import { ShimmerEffect } from '../../components/common/ShimmerEffect';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { setFloatingTabBarHidden } from '../../libs/navigation/floating-tab-bar-visibility';
+import { sameArrayBy } from '../../libs/utils/state-array';
 
 // Module-level snapshot of the most-recent successful fetch per season key.
 // Survives screen unmount/remount (tab switch), so re-entering the page (or
@@ -58,8 +59,7 @@ type SeasonSnapshot = {
   sourcePlatform: string;
 };
 const seasonSnapshots = new Map<string, SeasonSnapshot>();
-const snapshotKey = (season: string, year: number, source: string) =>
-  `${season}_${year}_${source}`;
+const snapshotKey = (season: string, year: number, source: string) => `${season}_${year}_${source}`;
 const BANGUMI_CARDS_TAB_BAR_REASON = 'bangumi-cards-mode';
 
 type FilterMode = 'all' | 'tracking';
@@ -122,6 +122,37 @@ function matchesTypeFilter(anime: Anime, filter: BangumiTypeFilter): boolean {
     default:
       return true;
   }
+}
+
+function sameAnimeList(current: Anime[], next: Anime[]): boolean {
+  return sameArrayBy(current, next, (anime) => [
+    anime.id,
+    anime.title,
+    anime.titleEnglish,
+    anime.image,
+    anime.bannerImage,
+    anime.rank,
+    anime.format,
+    anime.type,
+    anime.status,
+    anime.episodes,
+    anime.durationMinutes,
+    anime.score,
+    anime.startDate?.year,
+    anime.startDate?.month,
+    anime.startDate?.day,
+    anime.nextAiringEpisode?.airingAt,
+    anime.nextAiringEpisode?.episode,
+  ]);
+}
+
+function sameStringSet(current: Set<string>, next: Set<string>): boolean {
+  if (current === next) return true;
+  if (current.size !== next.size) return false;
+  for (const id of current) {
+    if (!next.has(id)) return false;
+  }
+  return true;
 }
 
 export default function BangumiScreen() {
@@ -200,7 +231,10 @@ export default function BangumiScreen() {
   }, []);
 
   useEffect(() => {
-    return trackingService.onTrackedIdsChange((ids) => setTrackedIds(new Set(ids)));
+    return trackingService.onTrackedIdsChange((ids) => {
+      const next = new Set(ids);
+      setTrackedIds((prev) => (sameStringSet(prev, next) ? prev : next));
+    });
   }, []);
 
   const handleAdultContentChange = useCallback((value: boolean) => {
@@ -238,34 +272,31 @@ export default function BangumiScreen() {
     }
   }, []);
 
-  const handleToggleReminder = useCallback(
-    async (anime: Anime, currentlyScheduled: boolean) => {
-      try {
-        if (currentlyScheduled) {
-          await animeNotificationService.cancelAnimeNotification(anime.id);
-          setSnackbar({
-            key: Date.now(),
-            message: `Reminder cancelled`,
-            icon: 'notifications-off',
-          });
-        } else {
-          const id = await animeNotificationService.scheduleAnimeNotification(anime);
-          setSnackbar({
-            key: Date.now(),
-            message: id
-              ? `Reminder set for "${anime.title}"`
-              : `No upcoming episode scheduled for "${anime.title}"`,
-            icon: id ? 'notifications-active' : 'info',
-          });
-        }
-        hapticsBridge.selection();
-      } catch (e) {
-        console.warn('[bangumi] reminder toggle failed', e);
-        hapticsBridge.warning();
+  const handleToggleReminder = useCallback(async (anime: Anime, currentlyScheduled: boolean) => {
+    try {
+      if (currentlyScheduled) {
+        await animeNotificationService.cancelAnimeNotification(anime.id);
+        setSnackbar({
+          key: Date.now(),
+          message: `Reminder cancelled`,
+          icon: 'notifications-off',
+        });
+      } else {
+        const id = await animeNotificationService.scheduleAnimeNotification(anime);
+        setSnackbar({
+          key: Date.now(),
+          message: id
+            ? `Reminder set for "${anime.title}"`
+            : `No upcoming episode scheduled for "${anime.title}"`,
+          icon: id ? 'notifications-active' : 'info',
+        });
       }
-    },
-    []
-  );
+      hapticsBridge.selection();
+    } catch (e) {
+      console.warn('[bangumi] reminder toggle failed', e);
+      hapticsBridge.warning();
+    }
+  }, []);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
 
@@ -317,17 +348,21 @@ export default function BangumiScreen() {
         // Re-hydrate instantly from snapshot if we have one for this season.
         // Otherwise blank out so the skeleton shows during the cold fetch.
         if (snapshot) {
-          setRawAnime(snapshot.rawAnime);
-          setSourcePlatform(snapshot.sourcePlatform);
-          setIsLoading(false);
+          setRawAnime((prev) =>
+            sameAnimeList(prev, snapshot.rawAnime) ? prev : snapshot.rawAnime
+          );
+          setSourcePlatform((prev) =>
+            prev === snapshot.sourcePlatform ? prev : snapshot.sourcePlatform
+          );
+          setIsLoading((prev) => (prev ? false : prev));
         } else {
-          setRawAnime([]);
-          setIsLoading(true);
+          setRawAnime((prev) => (prev.length === 0 ? prev : []));
+          setIsLoading((prev) => (prev ? prev : true));
         }
       } else {
         // Pull-to-refresh keeps the visible list; the RefreshControl spinner
         // is the affordance, not the skeleton.
-        setIsLoading(true);
+        setIsLoading((prev) => (prev ? prev : true));
       }
 
       // Local accumulator so each onPageReceived call replaces with the
@@ -356,8 +391,8 @@ export default function BangumiScreen() {
                   if (myVersion !== fetchVersionRef.current) return;
                   const mapped = pageItems.map(unifiedToLegacyAnime);
                   acc = [...acc, ...mapped];
-                  setRawAnime(acc);
-                  setIsLoading(false);
+                  setRawAnime((prev) => (sameAnimeList(prev, acc) ? prev : acc));
+                  setIsLoading((prev) => (prev ? false : prev));
                 }
               : undefined,
           }
@@ -365,29 +400,27 @@ export default function BangumiScreen() {
         if (myVersion !== fetchVersionRef.current) return;
         const finalSource = dataSourceConfig.browseSource;
         const finalList = fetched.map(unifiedToLegacyAnime);
-        const visible = snapshot?.rawAnime ?? acc;
-        const unchanged =
-          visible.length === finalList.length &&
-          visible.every((a, i) => a.id === finalList[i]?.id);
         // Swap to fresh data silently — but skip the state update when the
         // server result is identical to what we already have on screen, so
         // useMemo deps (and downstream list renders) don't churn.
-        if (!unchanged) {
-          setRawAnime(finalList);
-        }
-        setSourcePlatform(finalSource);
+        setRawAnime((prev) => (sameAnimeList(prev, finalList) ? prev : finalList));
+        setSourcePlatform((prev) => (prev === finalSource ? prev : finalSource));
         seasonSnapshots.set(snapshotKey(selectedSeason, selectedYear, finalSource), {
           rawAnime: finalList,
           sourcePlatform: finalSource,
         });
-        setError(null);
+        setError((prev) => (prev === null ? prev : null));
       } catch (e) {
         if (myVersion !== fetchVersionRef.current) return;
         console.error('Failed to fetch bangumi', e);
-        setError("Couldn't load this season. Pull to retry.");
+        setError((prev) =>
+          prev === "Couldn't load this season. Pull to retry."
+            ? prev
+            : "Couldn't load this season. Pull to retry."
+        );
       } finally {
         if (myVersion === fetchVersionRef.current) {
-          setIsLoading(false);
+          setIsLoading((prev) => (prev ? false : prev));
         }
       }
     },
@@ -532,8 +565,10 @@ export default function BangumiScreen() {
     }
   }, [selectedYear, selectedSeason, groupedAnime, totalCount]);
 
-  const listViewData = groupedAnime.filter(
-    (g) => g.anime.length > 0 || (g.day === 'Unknown' && showUnknownDays)
+  const listViewData = useMemo(
+    () =>
+      groupedAnime.filter((g) => g.anime.length > 0 || (g.day === 'Unknown' && showUnknownDays)),
+    [groupedAnime, showUnknownDays]
   );
 
   const scrollToTodayKey = `${selectedSeason}-${selectedYear}-${typeFilter ?? 'all'}`;

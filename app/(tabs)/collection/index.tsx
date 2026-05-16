@@ -1,11 +1,4 @@
-import {
-  View,
-  ScrollView,
-  RefreshControl,
-  Pressable,
-  Share,
-  StyleSheet,
-} from 'react-native';
+import { View, ScrollView, RefreshControl, Pressable, Share, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,6 +43,7 @@ import {
   type ShareTemplateBuild,
 } from '../../../libs/services/collection/share-templates';
 import { UserRepository } from '../../../libs/repositories/user-repository';
+import { sameArrayBy } from '../../../libs/utils/state-array';
 
 type SortMode = CollectionSortMode;
 type ScreenMode = 'collect' | 'share';
@@ -75,6 +69,96 @@ const CATEGORY_TO_SYSTEM_FOLDER: Record<string, string> = {
 
 const ANIME_PREVIEW_LIMIT = 6;
 
+type AnimeCardRow = {
+  anime_id: string;
+  title: string | null;
+  image_url: string | null;
+  progress: number | null;
+  total_episodes: number | null;
+  status: string;
+};
+
+type RecentRow = {
+  anime_id: string;
+  title: string | null;
+  image_url: string | null;
+  updated_at: number | null;
+};
+
+async function fetchAnimeCards(category: string): Promise<CollectionAnimeCardItem[]> {
+  const db = await LocalDB.getDatabase();
+  const status = CATEGORY_TO_STATUS[category];
+  const rows = await db.getAllAsync<AnimeCardRow>(
+    status
+      ? `SELECT anime_id, title, image_url, progress, total_episodes, status
+           FROM user_anime
+          WHERE title IS NOT NULL AND status = ?
+          ORDER BY COALESCE(updated_at, 0) DESC`
+      : `SELECT anime_id, title, image_url, progress, total_episodes, status
+           FROM user_anime
+          WHERE title IS NOT NULL
+          ORDER BY COALESCE(updated_at, 0) DESC`,
+    ...(status ? [status] : [])
+  );
+
+  return rows.map((r) => ({
+    id: r.anime_id,
+    title: r.title || 'Untitled',
+    imageUrl: r.image_url,
+    progress: r.progress ?? 0,
+    totalEpisodes: r.total_episodes ?? null,
+    status: r.status,
+  }));
+}
+
+async function fetchRecents(): Promise<RecentRailItem[]> {
+  const db = await LocalDB.getDatabase();
+  const rows = await db.getAllAsync<RecentRow>(
+    'SELECT anime_id, title, image_url, updated_at FROM user_anime WHERE title IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 10'
+  );
+
+  return rows.map((r) => ({
+    id: r.anime_id,
+    title: r.title || 'Untitled',
+    imageUrl: r.image_url || undefined,
+  }));
+}
+
+function sameCollections(current: CollectionFolder[], next: CollectionFolder[]): boolean {
+  return sameArrayBy(current, next, (folder) => [
+    folder.id,
+    folder.name,
+    folder.icon,
+    folder.animeCount,
+    folder.coverUrl,
+    folder.folderType,
+    folder.isSystemFolder,
+    folder.isR18,
+    folder.isShared,
+    folder.sharedBy,
+    folder.sortOrder,
+    folder.createdAt.getTime(),
+  ]);
+}
+
+function sameRecents(current: RecentRailItem[], next: RecentRailItem[]): boolean {
+  return sameArrayBy(current, next, (item) => [item.id, item.title, item.imageUrl]);
+}
+
+function sameAnimeCards(
+  current: CollectionAnimeCardItem[],
+  next: CollectionAnimeCardItem[]
+): boolean {
+  return sameArrayBy(current, next, (item) => [
+    item.id,
+    item.title,
+    item.imageUrl,
+    item.progress,
+    item.totalEpisodes,
+    item.status,
+  ]);
+}
+
 export default function CollectionScreen() {
   const { top } = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -96,86 +180,73 @@ export default function CollectionScreen() {
   const [username, setUsername] = useState<string | undefined>(undefined);
   const rendererRef = useRef<View>(null);
   const hydratedRef = useRef(false);
+  const collectionLoadRef = useRef(0);
+  const animeCardsLoadRef = useRef(0);
+  const categoryLoadInitializedRef = useRef(false);
   const router = useRouter();
 
-  const loadCollection = async () => {
-    try {
-      const data = await collectionService.getFolders();
-      setCollections(data);
-    } catch (error) {
-      console.error('Failed to load collection:', error);
-    }
-  };
-
   const loadAnimeCards = useCallback(async (category: string) => {
+    const requestId = ++animeCardsLoadRef.current;
     try {
-      const db = await LocalDB.getDatabase();
-      const status = CATEGORY_TO_STATUS[category];
-      const rows = await db.getAllAsync<{
-        anime_id: string;
-        title: string | null;
-        image_url: string | null;
-        progress: number | null;
-        total_episodes: number | null;
-        status: string;
-      }>(
-        status
-          ? `SELECT anime_id, title, image_url, progress, total_episodes, status
-               FROM user_anime
-              WHERE title IS NOT NULL AND status = ?
-              ORDER BY COALESCE(updated_at, 0) DESC`
-          : `SELECT anime_id, title, image_url, progress, total_episodes, status
-               FROM user_anime
-              WHERE title IS NOT NULL
-              ORDER BY COALESCE(updated_at, 0) DESC`,
-        ...(status ? [status] : [])
-      );
-      setAnimeCards(
-        rows.map((r) => ({
-          id: r.anime_id,
-          title: r.title || 'Untitled',
-          imageUrl: r.image_url,
-          progress: r.progress ?? 0,
-          totalEpisodes: r.total_episodes ?? null,
-          status: r.status,
-        }))
-      );
+      const next = await fetchAnimeCards(category);
+      if (requestId !== animeCardsLoadRef.current) return;
+      setAnimeCards((prev) => (sameAnimeCards(prev, next) ? prev : next));
     } catch (error) {
+      if (requestId !== animeCardsLoadRef.current) return;
       console.error('Failed to load anime cards:', error);
-      setAnimeCards([]);
+      setAnimeCards((prev) => (prev.length === 0 ? prev : []));
     }
   }, []);
 
-  const loadRecents = useCallback(async () => {
-    try {
-      const db = await LocalDB.getDatabase();
-      const rows = await db.getAllAsync<{
-        anime_id: string;
-        title: string | null;
-        image_url: string | null;
-        updated_at: number | null;
-      }>(
-        'SELECT anime_id, title, image_url, updated_at FROM user_anime WHERE title IS NOT NULL ORDER BY COALESCE(updated_at, 0) DESC LIMIT 10'
-      );
-      setRecents(
-        rows.map((r) => ({
-          id: r.anime_id,
-          title: r.title || 'Untitled',
-          imageUrl: r.image_url || undefined,
-        }))
-      );
-    } catch (error) {
-      console.error('Failed to load recents:', error);
-      setRecents([]);
+  const loadCollectionData = useCallback(async (category: string) => {
+    const collectionRequestId = ++collectionLoadRef.current;
+    const animeCardsRequestId = ++animeCardsLoadRef.current;
+    const [foldersResult, recentsResult, cardsResult] = await Promise.allSettled([
+      collectionService.getFolders(),
+      fetchRecents(),
+      fetchAnimeCards(category),
+    ]);
+
+    if (collectionRequestId === collectionLoadRef.current) {
+      if (foldersResult.status === 'fulfilled') {
+        setCollections((prev) =>
+          sameCollections(prev, foldersResult.value) ? prev : foldersResult.value
+        );
+      } else {
+        console.error('Failed to load collection:', foldersResult.reason);
+      }
+
+      if (recentsResult.status === 'fulfilled') {
+        setRecents((prev) => (sameRecents(prev, recentsResult.value) ? prev : recentsResult.value));
+      } else {
+        console.error('Failed to load recents:', recentsResult.reason);
+        setRecents((prev) => (prev.length === 0 ? prev : []));
+      }
+    }
+
+    if (animeCardsRequestId === animeCardsLoadRef.current) {
+      if (cardsResult.status === 'fulfilled') {
+        setAnimeCards((prev) =>
+          sameAnimeCards(prev, cardsResult.value) ? prev : cardsResult.value
+        );
+      } else {
+        console.error('Failed to load anime cards:', cardsResult.reason);
+        setAnimeCards((prev) => (prev.length === 0 ? prev : []));
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadCollection();
-    loadRecents();
-  }, [loadRecents]);
+    loadCollectionData(selectedCategory);
+    // Initial hydration only; category changes refresh the preview cards below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadCollectionData]);
 
   useEffect(() => {
+    if (!categoryLoadInitializedRef.current) {
+      categoryLoadInitializedRef.current = true;
+      return;
+    }
     loadAnimeCards(selectedCategory);
   }, [loadAnimeCards, selectedCategory]);
 
@@ -190,10 +261,8 @@ export default function CollectionScreen() {
         focusInitRef.current = true;
         return;
       }
-      loadCollection();
-      loadRecents();
-      loadAnimeCards(selectedCategory);
-    }, [loadAnimeCards, loadRecents, selectedCategory])
+      loadCollectionData(selectedCategory);
+    }, [loadCollectionData, selectedCategory])
   );
 
   // Subscribe to tracking-set changes — adds/removes that happen from any
@@ -201,11 +270,9 @@ export default function CollectionScreen() {
   // (no need to switch tabs or pull-to-refresh).
   useEffect(() => {
     return trackingService.onTrackedIdsChange(() => {
-      loadCollection();
-      loadRecents();
-      loadAnimeCards(selectedCategory);
+      loadCollectionData(selectedCategory);
     });
-  }, [loadAnimeCards, loadRecents, selectedCategory]);
+  }, [loadCollectionData, selectedCategory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -376,20 +443,14 @@ export default function CollectionScreen() {
   const totalCount = categoryCounts.All ?? 0;
 
   const userFolderCount = useMemo(
-    () =>
-      collections.filter(
-        (f) => !f.isSystemFolder || f.folderType === 'favorites'
-      ).length,
+    () => collections.filter((f) => !f.isSystemFolder || f.folderType === 'favorites').length,
     [collections]
   );
 
-  const handleEditFolder = useCallback(
-    (folder: CollectionFolder) => {
-      setEditingFolder(folder);
-      setCreateModalVisible(true);
-    },
-    []
-  );
+  const handleEditFolder = useCallback((folder: CollectionFolder) => {
+    setEditingFolder(folder);
+    setCreateModalVisible(true);
+  }, []);
 
   const handleSort = useCallback((mode: SortMode) => {
     setSortMode(mode);
@@ -417,7 +478,10 @@ export default function CollectionScreen() {
       const targetType = targetTypeMap[selectedCategory];
       filtered = targetType
         ? baseFolders.filter(
-            (f) => f.folderType === targetType || f.folderType === 'custom' || f.folderType === 'favorites'
+            (f) =>
+              f.folderType === targetType ||
+              f.folderType === 'custom' ||
+              f.folderType === 'favorites'
           )
         : baseFolders;
     }
@@ -443,14 +507,14 @@ export default function CollectionScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([
-      loadCollection(),
-      loadRecents(),
-      loadAnimeCards(selectedCategory),
-    ]).finally(() => {
+    loadCollectionData(selectedCategory).finally(() => {
       setRefreshing(false);
     });
-  }, [loadAnimeCards, loadRecents, selectedCategory]);
+  }, [loadCollectionData, selectedCategory]);
+
+  const refreshCollectionData = useCallback(() => {
+    void loadCollectionData(selectedCategory);
+  }, [loadCollectionData, selectedCategory]);
 
   const enterShareMode = useCallback(() => {
     hapticsBridge.tap();
@@ -471,18 +535,11 @@ export default function CollectionScreen() {
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: theme.background.primary, paddingTop: top }]}>
       <LinearGradient
-        colors={[
-          theme.background.primary,
-          theme.background.secondary,
-          theme.background.primary,
-        ]}
+        colors={[theme.background.primary, theme.background.secondary, theme.background.primary]}
         style={StyleSheet.absoluteFill}
       />
       <View
-        style={[
-          styles.glowAccent,
-          { backgroundColor: `${theme.accent}26` },
-        ]}
+        style={[styles.glowAccent, { backgroundColor: `${theme.accent}26` }]}
         pointerEvents="none"
       />
       <View style={styles.container}>
@@ -523,14 +580,9 @@ export default function CollectionScreen() {
                 hitSlop={8}
                 style={styles.sectionHeaderRight}>
                 <ThemedText variant="captionSmall" tone="secondary">
-                  {visibleFolders.length}{' '}
-                  {visibleFolders.length === 1 ? 'folder' : 'folders'}
+                  {visibleFolders.length} {visibleFolders.length === 1 ? 'folder' : 'folders'}
                 </ThemedText>
-                <MaterialIcons
-                  name="chevron-right"
-                  size={14}
-                  color={theme.text.tertiary}
-                />
+                <MaterialIcons name="chevron-right" size={14} color={theme.text.tertiary} />
               </Pressable>
             </View>
 
@@ -545,9 +597,7 @@ export default function CollectionScreen() {
                       style={[
                         styles.sortChip,
                         {
-                          backgroundColor: isActive
-                            ? theme.accent
-                            : theme.background.tertiary,
+                          backgroundColor: isActive ? theme.accent : theme.background.tertiary,
                           borderColor: isActive ? theme.accent : theme.glassBorder,
                         },
                       ]}>
@@ -662,8 +712,7 @@ export default function CollectionScreen() {
                 <Pressable
                   onPress={() => {
                     hapticsBridge.tap();
-                    const folderId =
-                      CATEGORY_TO_SYSTEM_FOLDER[selectedCategory] ?? 'system_all';
+                    const folderId = CATEGORY_TO_SYSTEM_FOLDER[selectedCategory] ?? 'system_all';
                     router.push(
                       `/collection/${folderId}?name=${encodeURIComponent(selectedCategory)}`
                     );
@@ -673,11 +722,7 @@ export default function CollectionScreen() {
                   <ThemedText variant="captionSmall" tone="secondary" weight="600">
                     See all {animeCards.length}
                   </ThemedText>
-                  <MaterialIcons
-                    name="chevron-right"
-                    size={14}
-                    color={theme.text.tertiary}
-                  />
+                  <MaterialIcons name="chevron-right" size={14} color={theme.text.tertiary} />
                 </Pressable>
               ) : null}
             </View>
@@ -715,7 +760,7 @@ export default function CollectionScreen() {
             setCreateModalVisible(false);
             setEditingFolder(null);
           }}
-          onCreated={loadCollection}
+          onCreated={refreshCollectionData}
           onUpdate={async (id, data) => {
             await collectionService.updateFolder(id, data);
           }}

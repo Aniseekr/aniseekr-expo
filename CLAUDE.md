@@ -163,6 +163,29 @@ When in doubt, ask: "would a screenshot of this screen mislead the user about wh
 
 Generic guidance is fine (rule of thirds, "use eye-level for portraits", "avoid flash indoors") — that's photography knowledge, not pretending to be scene-specific data. The line is: **does it claim to know something specific about this scene/user/spot?** If yes, it must be real.
 
+### 9. State ownership → keep render state small and local
+
+React state is for values that must change rendered JSX. Do **not** put every interaction, sensor tick, gesture value, cache snapshot, and async phase into the screen root. Large screens with many independent `useState` / `useEffect` calls become hard to reason about and can re-render expensive children unnecessarily.
+
+Use the narrowest owner for each kind of state:
+
+| State kind | Default owner |
+|------------|---------------|
+| Gesture / animation / sensor ticks | Reanimated `SharedValue` or a ref-backed subscription, with throttled React mirrors only when text/chips must update |
+| Imperative handles, in-flight flags not rendered, cancellation tokens | `useRef` |
+| Derived values from props/state | `useMemo` or plain local constants, not mirrored `useState` |
+| Persisted preferences / cross-screen data | Feature service/store hook with a small public API |
+| Modal, selected tab, current filter | Local state in the smallest component that renders that control |
+| Large async resource (`data/loading/error`) | One reducer or feature hook, not three unrelated setters spread through the screen |
+
+For camera and map screens specifically:
+
+- High-frequency values (`zoom`, `tilt`, heading, pan/drag, WebView marker updates) must stay off the React render path unless the UI needs a coarse display value.
+- The route screen should orchestrate navigation and feature hooks; it should not own every HUD toggle, capture phase, settings sheet, spot switcher, and sensor state directly.
+- If adding a new camera control requires another top-level `useState` in `compare/[spotId].tsx`, first ask whether it belongs in `useCameraSettings`, a camera HUD hook, a child component, a `SharedValue`, or a reducer.
+- Avoid effects whose only job is to reconcile state that could have been derived. If reconciliation is necessary, keep it close to the state it fixes and guard against redundant setter calls.
+- Before optimizing, profile or at least count render-triggering state changes. Fix the state with the largest render fan-out, not the state that is merely visually nearby.
+
 ## Anti-patterns I've seen — don't repeat these
 
 - **`color: '#FFFFFF'` on `backgroundColor: theme.accent`** → invisible on light accents. Use `ThemedButton` or `readableTextOn()`.
@@ -173,6 +196,9 @@ Generic guidance is fine (rule of thirds, "use eye-level for portraits", "avoid 
 - **`shadowColor: '#000'` written in 14 places** → use `Shadow.subtle / .medium / .heavy` from `DesignSystem`, or `Shadow.glow(theme.accent)` for branded glow.
 - **Hash-seeded "plausible" placeholders** (`fallbackAnalysisFromUrl` style) → returns numbers that look computed but aren't. See Rule 8. Return `null` and render an error state.
 - **Hardcoded scene/anime captions in generic screens** (`K-On! S2 EP{ep}` in `compare/tips.tsx`) → every spot ends up labelled with the same anime. See Rule 8.
+- **Top-level screen as a state dumping ground** (`20+ useState` plus many effects in one route file) → every small UI change risks re-rendering the whole screen. Split feature hooks/components or use a reducer/store.
+- **Mirroring derived data into state** (`filtered`, `selected`, `ready` values that can be computed from existing inputs) → extra effects, stale closures, and redundant renders. Derive it unless an async boundary truly owns it.
+- **Sensor/gesture/WebView updates through React state at live frequency** → JS-thread churn and jank. Use `SharedValue`, refs, throttling, or bridge commands.
 
 ## Workflow
 
@@ -194,6 +220,8 @@ When changing `components/themed/*`, add or update tests under `__tests__/unit/t
 | Color doesn't update when theme changes | Hardcoded hex somewhere; switch to `useTheme()` |
 | Accent picker has no effect on a screen | Screen used a hardcoded color instead of `theme.accent` |
 | Theme mode toggle doesn't change a screen | `resolvedTheme` in `ThemeContext.tsx` currently doesn't switch surface palette for light mode — that work is open. Don't fake light mode with hardcoded hex; extend `resolvedTheme` instead. |
+| Screen feels janky after a small control changes | Count top-level `useState` / `useEffect`; move hot state into a child hook, reducer, ref, or `SharedValue` |
+| Camera/map gestures feel delayed | Check that zoom, tilt, heading, pan, and marker updates are not flowing through root React state every tick |
 
 ## When in doubt
 

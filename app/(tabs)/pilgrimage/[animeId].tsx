@@ -8,7 +8,7 @@
 // fade in once the hero scrolls past. All surfaces flow from useTheme() so a
 // theme/accent switch repaints the whole screen.
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   FlatList,
   Linking,
@@ -103,6 +103,7 @@ import {
   type SpotIntentKind,
   type SpotIntentMap,
 } from '../../../libs/services/pilgrimage/spot-intents';
+import { sameLatLng } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
@@ -147,6 +148,53 @@ function chunkPairs<T>(items: readonly T[]): T[][] {
 function buildBrowseUrl(platform: PlatformType, bangumiId: number): string | null {
   if (platform === 'bangumi') return `https://bgm.tv/subject/${bangumiId}`;
   return `${ANITABI_BASE_PAGE}${bangumiId}`;
+}
+
+interface DetailLoadState {
+  anime: AnitabiBangumi | null;
+  points: readonly AnitabiPoint[];
+  loading: boolean;
+  error: string | null;
+}
+
+type DetailLoadAction =
+  | { type: 'loading' }
+  | { type: 'invalid_id' }
+  | { type: 'empty' }
+  | { type: 'lite_loaded'; anime: AnitabiBangumi; points: readonly AnitabiPoint[] }
+  | { type: 'detailed_points_loaded'; points: readonly AnitabiPoint[] }
+  | { type: 'error'; message: string };
+
+function detailLoadReducer(state: DetailLoadState, action: DetailLoadAction): DetailLoadState {
+  switch (action.type) {
+    case 'loading':
+      return state.loading && state.error === null
+        ? state
+        : { ...state, loading: true, error: null };
+    case 'invalid_id':
+      return state.error === 'Invalid anime id' && !state.loading
+        ? state
+        : { ...state, loading: false, error: 'Invalid anime id' };
+    case 'empty':
+      return !state.anime && state.points.length === 0 && !state.loading && state.error === null
+        ? state
+        : { anime: null, points: [], loading: false, error: null };
+    case 'lite_loaded':
+      return {
+        anime: action.anime,
+        points: action.points,
+        loading: false,
+        error: null,
+      };
+    case 'detailed_points_loaded':
+      return state.points === action.points ? state : { ...state, points: action.points };
+    case 'error':
+      return state.error === action.message && !state.loading
+        ? state
+        : { ...state, loading: false, error: action.message };
+    default:
+      return state;
+  }
 }
 
 interface MapMarkerPayload {
@@ -1227,10 +1275,12 @@ export default function PilgrimageDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
 
-  const [anime, setAnime] = useState<AnitabiBangumi | null>(null);
-  const [points, setPoints] = useState<readonly AnitabiPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [{ anime, points, loading, error }, dispatchLoad] = useReducer(detailLoadReducer, {
+    anime: null,
+    points: [],
+    loading: true,
+    error: null,
+  });
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [listLayout, setListLayout] = useState<'grid' | 'rows'>('grid');
   const [mapMarkerMode, setMapMarkerMode] = useState<MapMarkerMode>('photo');
@@ -1238,6 +1288,7 @@ export default function PilgrimageDetailScreen() {
   const [spotFilter, setSpotFilter] = useState<SpotFilter>('all');
   const [spotSearchQuery, setSpotSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const userLocationRef = useRef<LatLng | null>(null);
   const [visited, setVisited] = useState<VisitedMap>({});
   const [spotIntents, setSpotIntents] = useState<SpotIntentMap>({});
   const [browseSource, setBrowseSource] = useState<PlatformType>(dataSourceConfig.browseSource);
@@ -1275,35 +1326,29 @@ export default function PilgrimageDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     if (bangumiId === null || bangumiId <= 0) {
-      setError('Invalid anime id');
-      setLoading(false);
+      dispatchLoad({ type: 'invalid_id' });
       return;
     }
     const validBangumiId = bangumiId;
 
-    setLoading(true);
-    setError(null);
+    dispatchLoad({ type: 'loading' });
 
     pilgrimageRepository
       .getSpotsByBangumiId(validBangumiId)
       .then(async (lite) => {
         if (cancelled) return;
         if (!lite) {
-          setAnime(null);
-          setPoints([]);
-          setLoading(false);
+          dispatchLoad({ type: 'empty' });
           return;
         }
-        setAnime(lite);
-        setPoints(lite.litePoints ?? []);
         // Lite payload is enough to render the screen — let the user interact
         // immediately while the heavier full /points call runs in the
         // background and upgrades the points when it lands.
-        setLoading(false);
+        dispatchLoad({ type: 'lite_loaded', anime: lite, points: lite.litePoints ?? [] });
         try {
           const detailed: AnitabiPoint[] = await anitabiService.getDetailedPoints(validBangumiId);
           if (!cancelled && detailed.length > 0) {
-            setPoints(detailed);
+            dispatchLoad({ type: 'detailed_points_loaded', points: detailed });
           }
         } catch {
           // Lite data is enough; ignore.
@@ -1312,8 +1357,7 @@ export default function PilgrimageDetailScreen() {
       .catch((err: unknown) => {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Failed to load pilgrimage';
-        setError(message);
-        setLoading(false);
+        dispatchLoad({ type: 'error', message });
       });
 
     return () => {
@@ -1346,7 +1390,9 @@ export default function PilgrimageDetailScreen() {
     locationService
       .getCurrentLocation()
       .then((loc) => {
-        if (!cancelled && loc) setUserLocation(loc);
+        if (cancelled || !loc || sameLatLng(userLocationRef.current, loc)) return;
+        userLocationRef.current = loc;
+        setUserLocation(loc);
       })
       .catch(() => undefined);
     return () => {
@@ -1459,6 +1505,19 @@ export default function PilgrimageDetailScreen() {
     [points, spotSearchQuery, spotFilter, visited, captures, spotIntents]
   );
 
+  const filteredPointIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const point of filteredPoints) ids.add(point.id);
+    return ids;
+  }, [filteredPoints]);
+
+  const filteredMappablePointCount = useMemo(
+    () => filteredPoints.reduce((count, point) => count + (hasValidGeo(point.geo) ? 1 : 0), 0),
+    [filteredPoints]
+  );
+
+  const groupedGridRows = useMemo(() => chunkPairs(filteredGroupedSpots), [filteredGroupedSpots]);
+
   // Filter-pill badges count searched locations, matching the list rows below.
   const groupedCounts = useMemo(
     () => countPilgrimageSpotFilters(searchedGroupedSpots, visited, captures, spotIntents),
@@ -1469,22 +1528,22 @@ export default function PilgrimageDetailScreen() {
   // selection valid: if the current pick was filtered out, fall back to the
   // first spot that still has a real coordinate so the chip strip is never
   // empty while the map has markers.
-  useEffect(() => {
-    if (viewMode !== 'map' || filteredGroupedSpots.length === 0) {
-      if (selectedSpotId !== null) setSelectedSpotId(null);
-      return;
-    }
-    // A selection stays valid if it points at any on-map scene (a tapped
-    // marker) or a chip's representative — only reset when it is neither.
-    const stillVisible = selectedSpotId
-      ? filteredPoints.some((p) => p.id === selectedSpotId)
-      : false;
-    if (stillVisible) return;
+  const fallbackSelectedSpotId = useMemo(() => {
+    if (viewMode !== 'map' || filteredGroupedSpots.length === 0) return null;
     const firstValid = filteredGroupedSpots
-      .map((s) => getNearestSceneForSpot(s, userLocation))
-      .find((p) => hasValidGeo(p.geo));
-    setSelectedSpotId(firstValid ? firstValid.id : null);
-  }, [viewMode, filteredPoints, filteredGroupedSpots, selectedSpotId, userLocation]);
+      .map((spot) => getNearestSceneForSpot(spot, userLocation))
+      .find((point) => hasValidGeo(point.geo));
+    return firstValid ? firstValid.id : null;
+  }, [viewMode, filteredGroupedSpots, userLocation]);
+
+  useEffect(() => {
+    setSelectedSpotId((current) => {
+      if (viewMode !== 'map' || filteredGroupedSpots.length === 0) {
+        return current === null ? current : null;
+      }
+      return current && filteredPointIds.has(current) ? current : fallbackSelectedSpotId;
+    });
+  }, [viewMode, filteredGroupedSpots.length, filteredPointIds, fallbackSelectedSpotId]);
 
   const handleSpotChipPress = useCallback((spot: AnitabiPoint) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -1970,7 +2029,7 @@ export default function PilgrimageDetailScreen() {
                         icon="map"
                         themeColor={themeColor}
                         themeColorFg={themeColorFg}
-                        count={filteredPoints.filter((p) => hasValidGeo(p.geo)).length}
+                        count={filteredMappablePointCount}
                         theme={theme}
                         onPress={() => handleViewToggle('map')}
                       />
@@ -2173,7 +2232,7 @@ export default function PilgrimageDetailScreen() {
                 </View>
               ) : listLayout === 'grid' ? (
                 <View style={styles.gridList}>
-                  {chunkPairs(filteredGroupedSpots).map((pair) => (
+                  {groupedGridRows.map((pair) => (
                     <View key={pair[0].id + (pair[1]?.id ?? '_solo')} style={styles.gridRow}>
                       {pair.map((gs) => {
                         const rep = representativeForGroup(gs);

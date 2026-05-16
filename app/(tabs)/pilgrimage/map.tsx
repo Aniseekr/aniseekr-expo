@@ -66,6 +66,11 @@ import {
 } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import { loadNearbySpots, type NearbySpot } from '../../../libs/services/pilgrimage/nearby-spots';
+import {
+  appendIndexedEntries,
+  buildKnownAnimeIdSet,
+  sameLatLng,
+} from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
 import NearbySpotsSheet from '../../../components/pilgrimage/NearbySpotsSheet';
 
 interface HubMapMarker {
@@ -522,12 +527,15 @@ export default function PilgrimageMapScreen() {
   const [collectionIds, setCollectionIds] = useState<Set<number>>(() => new Set());
   const animesRef = useRef<AnitabiBangumi[]>([]);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
+  const userLocationRef = useRef<LatLng | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   const [nearbySpots, setNearbySpots] = useState<NearbySpot[]>([]);
   const [nearbyLoading, setNearbyLoading] = useState(false);
-  const [focusSpotRequest, setFocusSpotRequest] = useState<
-    { key: string; lat: number; lng: number } | null
-  >(null);
+  const [focusSpotRequest, setFocusSpotRequest] = useState<{
+    key: string;
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Same priority as the hub: collection first, featured backfills.
@@ -587,25 +595,30 @@ export default function PilgrimageMapScreen() {
   // additive only (we never remove — the WebView dedups by id so duplicates
   // are cheap, and pan-back-and-forth wants the markers to stay put).
   const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(() => new Map());
+  const extraIndexedRef = useRef(extraIndexed);
 
-  const mergeNearbyIndexed = useCallback((loc: LatLng) => {
-    setExtraIndexed((prev) => {
-      const seen = new Set<number>();
-      for (const anime of animesRef.current) seen.add(anime.id);
-      for (const id of prev.keys()) seen.add(id);
-      const nearby = getNearbyMapEntries(loc, { exclude: seen });
-      if (nearby.length === 0) return prev;
-
-      const merged = new Map(prev);
-      let changed = false;
-      for (const entry of nearby) {
-        if (merged.has(entry.id)) continue;
-        merged.set(entry.id, entry);
-        changed = true;
-      }
-      return changed ? merged : prev;
-    });
+  const updateUserLocation = useCallback((loc: LatLng) => {
+    if (sameLatLng(userLocationRef.current, loc)) return false;
+    userLocationRef.current = loc;
+    setUserLocation(loc);
+    return true;
   }, []);
+
+  const appendExtraIndexed = useCallback((entries: readonly AnitabiIndexEntry[]) => {
+    if (entries.length === 0) return;
+    const next = appendIndexedEntries(extraIndexedRef.current, entries);
+    if (next === extraIndexedRef.current) return;
+    extraIndexedRef.current = next;
+    setExtraIndexed(next);
+  }, []);
+
+  const mergeNearbyIndexed = useCallback(
+    (loc: LatLng) => {
+      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
+      appendExtraIndexed(getNearbyMapEntries(loc, { exclude: seen }));
+    },
+    [appendExtraIndexed]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -613,7 +626,7 @@ export default function PilgrimageMapScreen() {
       .getCurrentLocation()
       .then((loc) => {
         if (!cancelled && loc) {
-          setUserLocation(loc);
+          updateUserLocation(loc);
           mergeNearbyIndexed(loc);
         }
       })
@@ -621,7 +634,7 @@ export default function PilgrimageMapScreen() {
     return () => {
       cancelled = true;
     };
-  }, [mergeNearbyIndexed]);
+  }, [mergeNearbyIndexed, updateUserLocation]);
 
   // Compass heading for the user-location cone — subscribed only while the map
   // is visible. Rounded + thresholded so small wrist movements don't spam the
@@ -633,7 +646,7 @@ export default function PilgrimageMapScreen() {
       const rounded = Math.round(deg);
       if (Number.isFinite(last) && Math.abs(rounded - last) < 3) return;
       last = rounded;
-      setUserHeading(rounded);
+      setUserHeading((prev) => (prev === rounded ? prev : rounded));
     });
     return unsubscribe;
   }, [mode]);
@@ -659,18 +672,10 @@ export default function PilgrimageMapScreen() {
 
   const handleBoundsChange = useCallback(
     (bounds: BoundingBox) => {
-      const seen = new Set<number>();
-      for (const a of animes) seen.add(a.id);
-      for (const id of extraIndexed.keys()) seen.add(id);
-      const next = getAnimeInBounds(bounds, { exclude: seen, limit: 40 });
-      if (next.length === 0) return;
-      setExtraIndexed((prev) => {
-        const merged = new Map(prev);
-        for (const entry of next) merged.set(entry.id, entry);
-        return merged;
-      });
+      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
+      appendExtraIndexed(getAnimeInBounds(bounds, { exclude: seen, limit: 40 }));
     },
-    [animes, extraIndexed]
+    [appendExtraIndexed]
   );
 
   // Filter state for the chip row above the map. `null` region == all 7 groups.
@@ -794,11 +799,11 @@ export default function PilgrimageMapScreen() {
       .getCurrentLocation()
       .then((loc) => {
         if (!loc) return;
-        setUserLocation(loc);
+        updateUserLocation(loc);
         mergeNearbyIndexed(loc);
       })
       .catch(() => undefined);
-  }, [mergeNearbyIndexed]);
+  }, [mergeNearbyIndexed, updateUserLocation]);
 
   const handleAnimePress = useCallback(
     (bangumiId: number) => {
@@ -1004,7 +1009,10 @@ function PilgrimageListCard({ row, theme, onPress }: PilgrimageListCardProps) {
             <View
               style={[
                 styles.collectionPill,
-                { backgroundColor: `${theme.status.info}1A`, borderColor: `${theme.status.info}66` },
+                {
+                  backgroundColor: `${theme.status.info}1A`,
+                  borderColor: `${theme.status.info}66`,
+                },
               ]}>
               <Ionicons name="bookmark" size={10} color={theme.status.info} />
             </View>
