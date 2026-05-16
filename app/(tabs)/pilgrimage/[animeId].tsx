@@ -18,6 +18,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  TextInput,
   View,
   type StyleProp,
   type ViewStyle,
@@ -38,7 +39,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
-import { Radius, Spacing } from '../../../constants/DesignSystem';
+import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { ON_DARK, Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
@@ -88,6 +89,20 @@ import {
   getSpotDistanceKm,
   sortSpotsByDistance,
 } from '../../../libs/services/pilgrimage/spot-distance-sort';
+import {
+  countPilgrimageSpotFilters,
+  filterPilgrimagePoints,
+  filterPilgrimageSpots,
+  normalizePilgrimageSearchQuery,
+  sortPilgrimageSpotsByIntent,
+  type PilgrimageSpotFilter as SpotFilter,
+} from '../../../libs/services/pilgrimage/pilgrimage-detail-filter';
+import {
+  loadSpotIntents,
+  saveSpotIntents,
+  type SpotIntentKind,
+  type SpotIntentMap,
+} from '../../../libs/services/pilgrimage/spot-intents';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
@@ -95,7 +110,7 @@ import type {
 } from '../../../libs/services/pilgrimage/types';
 
 type ViewMode = 'list' | 'map';
-type SpotFilter = 'all' | 'visited' | 'unvisited' | 'photos';
+type MapMarkerMode = 'photo' | 'dot';
 
 const HERO_HEIGHT = 320;
 const HEADER_HEIGHT = 56;
@@ -143,6 +158,7 @@ interface MapMarkerPayload {
   ep: number;
   ringColor: string;
   visited: boolean;
+  markerMode: MapMarkerMode;
 }
 
 function buildSpotMapHtml(initial: {
@@ -219,6 +235,16 @@ function buildSpotMapHtml(initial: {
     box-shadow: 0 1px 2px rgba(0,0,0,0.25);
   }
   .spot-marker.visited .ep { background: #34A853; color: #ffffff; }
+  .spot-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--ring, #4285F4);
+    border: 3px solid #ffffff;
+    box-shadow: 0 1px 3px 0 rgba(0,0,0,0.30),
+                0 3px 6px 2px rgba(0,0,0,0.18);
+  }
+  .spot-dot.visited {
+    background: #34A853;
+  }
 </style>
 </head>
 <body>
@@ -314,17 +340,28 @@ ${MAP_BASE_BODY}
     var bounds = [];
     for (var i = 0; i < markers.length; i++) {
       (function(m){
-        var cls = 'spot-marker' + (m.visited ? ' visited' : '');
-        var photoInner = m.image ? '<img src="' + m.image + '" loading="lazy" />' : '';
-        var html = '<div class="' + cls + '">' +
-          '<div class="photo">' + photoInner + '</div>' +
-          '<span class="region-dot" style="background:' + m.ringColor + '"></span>' +
-          '<span class="ep">EP ' + m.ep + '</span>' +
-        '</div>';
-        // Same balloon dimensions as the other maps: 48 wide × 57 tall
-        // (48 + 9 tail). Anchor at the tail tip (24, 57).
-        var icon = L.divIcon({ className: '', html: html, iconSize: [48, 57], iconAnchor: [24, 57] });
-        var marker = L.marker([m.lat, m.lng], { icon: icon });
+        var icon;
+        if (m.markerMode === 'dot') {
+          var dotCls = 'spot-dot' + (m.visited ? ' visited' : '');
+          icon = L.divIcon({
+            className: '',
+            html: '<div class="' + dotCls + '" style="--ring:' + m.ringColor + '"></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+        } else {
+          var cls = 'spot-marker' + (m.visited ? ' visited' : '');
+          var photoInner = m.image ? '<img src="' + m.image + '" loading="lazy" />' : '';
+          var html = '<div class="' + cls + '">' +
+            '<div class="photo">' + photoInner + '</div>' +
+            '<span class="region-dot" style="background:' + m.ringColor + '"></span>' +
+            '<span class="ep">EP ' + m.ep + '</span>' +
+          '</div>';
+          // Same balloon dimensions as the other maps: 48 wide × 57 tall
+          // (48 + 9 tail). Anchor at the tail tip (24, 57).
+          icon = L.divIcon({ className: '', html: html, iconSize: [48, 57], iconAnchor: [24, 57] });
+        }
+        var marker = L.marker([m.lat, m.lng], { icon: icon, regionColor: m.ringColor });
         marker.__appId = m.id;
         marker.on('click', function() { window.__post({ type: 'spotPress', id: m.id }); });
         batch.push(marker);
@@ -376,6 +413,7 @@ interface SpotMapViewProps {
   userLocation: LatLng | null;
   centerGeo: readonly [number, number] | null;
   centerZoom: number;
+  markerMode: MapMarkerMode;
   /**
    * Id of the spot currently selected in the chip strip above the map. When
    * this changes, the WebView pans/zooms to that spot so the chip strip
@@ -395,6 +433,7 @@ function SpotMapView({
   userLocation,
   centerGeo,
   centerZoom,
+  markerMode,
   focusSpotId,
   onSpotPress,
   onClusterPick,
@@ -474,10 +513,11 @@ function SpotMapView({
         ep: spot.ep,
         ringColor,
         visited: visited[spot.id] === true,
+        markerMode,
       });
     }
     return out;
-  }, [spots, visited, ringColor]);
+  }, [spots, visited, ringColor, markerMode]);
 
   useEffect(() => {
     if (!ready || !webviewRef.current) return;
@@ -611,6 +651,8 @@ interface SpotRowProps {
   themeColorFg: string;
   distanceKm: number | null;
   visited: boolean;
+  saved: boolean;
+  planned: boolean;
   hasCapture: boolean;
   theme: ThemePalette;
   onPress: (spot: AnitabiPoint) => void;
@@ -625,6 +667,8 @@ function SpotRow({
   themeColorFg,
   distanceKm,
   visited,
+  saved,
+  planned,
   hasCapture,
   theme,
   onPress,
@@ -695,11 +739,7 @@ function SpotRow({
               color={theme.text.tertiary}
             />
             <ThemedText variant="captionSmall" tone="tertiary" numberOfLines={1}>
-              {sceneCount > 1
-                ? `${sceneCount} scenes`
-                : spot.ep > 0
-                  ? `EP ${spot.ep}`
-                  : 'Scene'}
+              {sceneCount > 1 ? `${sceneCount} scenes` : spot.ep > 0 ? `EP ${spot.ep}` : 'Scene'}
               {titles.secondary ? ` · ${titles.secondary}` : ''}
             </ThemedText>
             {distanceKm != null ? (
@@ -741,6 +781,8 @@ function SpotRow({
               {visited ? 'Visited' : 'Visit'}
             </ThemedText>
           </Pressable>
+          {planned ? <Ionicons name="flag" size={15} color={theme.status.warning} /> : null}
+          {saved ? <Ionicons name="bookmark" size={14} color={theme.status.info} /> : null}
           <Pressable
             onPress={() => onOpenMaps(spot)}
             disabled={!hasGeo}
@@ -774,6 +816,8 @@ interface SceneTileProps {
   themeColorFg: string;
   distanceKm: number | null;
   visited: boolean;
+  saved: boolean;
+  planned: boolean;
   hasCapture: boolean;
   captureUri: string | null;
   theme: ThemePalette;
@@ -789,6 +833,8 @@ function SceneTile({
   themeColorFg,
   distanceKm,
   visited,
+  saved,
+  planned,
   hasCapture,
   captureUri,
   theme,
@@ -844,11 +890,7 @@ function SceneTile({
       />
       {hasCapture ? (
         <View
-          style={[
-            styles.cornerBadge,
-            styles.cornerLeft,
-            { backgroundColor: `${themeColor}E6` },
-          ]}>
+          style={[styles.cornerBadge, styles.cornerLeft, { backgroundColor: `${themeColor}E6` }]}>
           <Ionicons name="camera" size={10} color={themeColorFg} />
         </View>
       ) : null}
@@ -862,12 +904,17 @@ function SceneTile({
           <Ionicons name="checkmark" size={11} color={readableTextOn(theme.status.success)} />
         </View>
       ) : null}
+      {planned || saved ? (
+        <View style={[styles.intentBadge, { backgroundColor: theme.background.secondary }]}>
+          <Ionicons
+            name={planned ? 'flag' : 'bookmark'}
+            size={11}
+            color={planned ? theme.status.warning : theme.status.info}
+          />
+        </View>
+      ) : null}
       <View style={styles.captionWrap} pointerEvents="none">
-        <ThemedText
-          variant="bodySmall"
-          weight="700"
-          numberOfLines={1}
-          style={styles.captionTitle}>
+        <ThemedText variant="bodySmall" weight="700" numberOfLines={1} style={styles.captionTitle}>
           {titles.primary}
         </ThemedText>
         <ThemedText
@@ -888,11 +935,7 @@ function SceneTile({
         ]}
         accessibilityRole="button"
         accessibilityLabel={
-          captureUri
-            ? flipped
-              ? 'Show scene image'
-              : 'Show your photo'
-            : 'Take comparison photo'
+          captureUri ? (flipped ? 'Show scene image' : 'Show your photo') : 'Take comparison photo'
         }>
         <Ionicons
           name={captureUri ? 'swap-horizontal' : 'camera-outline'}
@@ -911,10 +954,14 @@ interface SpotSheetProps {
   themeColorFg: string;
   distanceKm: number | null;
   visited: boolean;
+  saved: boolean;
+  planned: boolean;
   hasCapture: boolean;
   theme: ThemePalette;
   onClose: () => void;
   onToggleVisited: (spot: AnitabiPoint) => void;
+  onToggleSaved: (spot: AnitabiPoint) => void;
+  onTogglePlanned: (spot: AnitabiPoint) => void;
   onOpenMaps: (spot: AnitabiPoint) => void;
   onFrameShot: (spot: AnitabiPoint) => void;
 }
@@ -926,10 +973,14 @@ function SpotSheet({
   themeColorFg,
   distanceKm,
   visited,
+  saved,
+  planned,
   hasCapture,
   theme,
   onClose,
   onToggleVisited,
+  onToggleSaved,
+  onTogglePlanned,
   onOpenMaps,
   onFrameShot,
 }: SpotSheetProps) {
@@ -1040,6 +1091,60 @@ function SpotSheet({
               </Pressable>
             </View>
 
+            <View style={styles.intentActions}>
+              <Pressable
+                onPress={() => onToggleSaved(spot)}
+                style={({ pressed }) => [
+                  styles.intentBtn,
+                  saved
+                    ? { backgroundColor: `${theme.status.info}22`, borderColor: theme.status.info }
+                    : {
+                        backgroundColor: theme.background.tertiary,
+                        borderColor: theme.glassBorder,
+                      },
+                  pressed && { opacity: 0.84 },
+                ]}>
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={16}
+                  color={saved ? theme.status.info : theme.text.secondary}
+                />
+                <ThemedText
+                  variant="bodySmall"
+                  weight="700"
+                  style={{ color: saved ? theme.status.info : theme.text.secondary }}>
+                  Save
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => onTogglePlanned(spot)}
+                style={({ pressed }) => [
+                  styles.intentBtn,
+                  planned
+                    ? {
+                        backgroundColor: `${theme.status.warning}22`,
+                        borderColor: theme.status.warning,
+                      }
+                    : {
+                        backgroundColor: theme.background.tertiary,
+                        borderColor: theme.glassBorder,
+                      },
+                  pressed && { opacity: 0.84 },
+                ]}>
+                <Ionicons
+                  name={planned ? 'flag' : 'flag-outline'}
+                  size={16}
+                  color={planned ? theme.status.warning : theme.text.secondary}
+                />
+                <ThemedText
+                  variant="bodySmall"
+                  weight="700"
+                  style={{ color: planned ? theme.status.warning : theme.text.secondary }}>
+                  Plan
+                </ThemedText>
+              </Pressable>
+            </View>
+
             <Pressable
               onPress={() => onFrameShot(spot)}
               style={({ pressed }) => [
@@ -1118,9 +1223,12 @@ export default function PilgrimageDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [listLayout, setListLayout] = useState<'grid' | 'rows'>('grid');
+  const [mapMarkerMode, setMapMarkerMode] = useState<MapMarkerMode>('photo');
   const [spotFilter, setSpotFilter] = useState<SpotFilter>('all');
+  const [spotSearchQuery, setSpotSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const [visited, setVisited] = useState<VisitedMap>({});
+  const [spotIntents, setSpotIntents] = useState<SpotIntentMap>({});
   const [browseSource, setBrowseSource] = useState<PlatformType>(dataSourceConfig.browseSource);
   const [activeSpot, setActiveSpot] = useState<AnitabiPoint | null>(null);
   const [clusterSpots, setClusterSpots] = useState<readonly AnitabiPoint[] | null>(null);
@@ -1182,8 +1290,7 @@ export default function PilgrimageDetailScreen() {
         // background and upgrades the points when it lands.
         setLoading(false);
         try {
-          const detailed: AnitabiPoint[] =
-            await anitabiService.getDetailedPoints(validBangumiId);
+          const detailed: AnitabiPoint[] = await anitabiService.getDetailedPoints(validBangumiId);
           if (!cancelled && detailed.length > 0) {
             setPoints(detailed);
           }
@@ -1207,6 +1314,16 @@ export default function PilgrimageDetailScreen() {
     let cancelled = false;
     loadVisitedSpots().then((map) => {
       if (!cancelled) setVisited(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSpotIntents().then((map) => {
+      if (!cancelled) setSpotIntents(map);
     });
     return () => {
       cancelled = true;
@@ -1273,19 +1390,6 @@ export default function PilgrimageDetailScreen() {
     return { spotCount, visitedCount, capturedCount, radiusKm };
   }, [anime, points, visited, captures]);
 
-  const filteredPoints = useMemo(() => {
-    switch (spotFilter) {
-      case 'visited':
-        return points.filter((p) => visited[p.id] === true);
-      case 'unvisited':
-        return points.filter((p) => visited[p.id] !== true);
-      case 'photos':
-        return points.filter((p) => !!captures[p.id]);
-      default:
-        return points;
-    }
-  }, [points, spotFilter, visited, captures]);
-
   // Anitabi returns one point per scene-cut, so a single shrine is often many
   // same-named points. Collapse cuts of the same real-world location into one
   // spot — the list then shows one row per place (with a scene count) instead
@@ -1293,39 +1397,62 @@ export default function PilgrimageDetailScreen() {
   // handles overlapping markers.
   const groupedSpots = useMemo(() => groupPointsIntoSpots(points), [points]);
 
-  const sortedGroupedSpots = useMemo(
+  const groupedSpotByPointId = useMemo(() => {
+    const map = new Map<string, AnitabiSpot>();
+    for (const spot of groupedSpots) {
+      for (const scene of spot.scenes) map.set(scene.id, spot);
+    }
+    return map;
+  }, [groupedSpots]);
+
+  const distanceSortedGroupedSpots = useMemo(
     () => sortSpotsByDistance(groupedSpots, userLocation),
     [groupedSpots, userLocation]
   );
 
-  const filteredGroupedSpots = useMemo(() => {
-    switch (spotFilter) {
-      case 'visited':
-        return sortedGroupedSpots.filter((s) => s.scenes.some((p) => visited[p.id] === true));
-      case 'unvisited':
-        return sortedGroupedSpots.filter((s) => !s.scenes.some((p) => visited[p.id] === true));
-      case 'photos':
-        return sortedGroupedSpots.filter((s) => s.scenes.some((p) => !!captures[p.id]));
-      default:
-        return sortedGroupedSpots;
-    }
-  }, [sortedGroupedSpots, spotFilter, visited, captures]);
+  const sortedGroupedSpots = useMemo(
+    () => sortPilgrimageSpotsByIntent(distanceSortedGroupedSpots, spotIntents),
+    [distanceSortedGroupedSpots, spotIntents]
+  );
 
-  // Filter-pill badges count locations (matching the list rows below them).
-  const groupedCounts = useMemo(() => {
-    let visitedSpots = 0;
-    let photoSpots = 0;
-    for (const s of groupedSpots) {
-      if (s.scenes.some((p) => visited[p.id] === true)) visitedSpots += 1;
-      if (s.scenes.some((p) => !!captures[p.id])) photoSpots += 1;
-    }
-    return {
-      all: groupedSpots.length,
-      visited: visitedSpots,
-      unvisited: groupedSpots.length - visitedSpots,
-      photos: photoSpots,
-    };
-  }, [groupedSpots, visited, captures]);
+  const normalizedSpotSearchQuery = useMemo(
+    () => normalizePilgrimageSearchQuery(spotSearchQuery),
+    [spotSearchQuery]
+  );
+
+  const searchedGroupedSpots = useMemo(
+    () => filterPilgrimageSpots(sortedGroupedSpots, { query: spotSearchQuery }),
+    [sortedGroupedSpots, spotSearchQuery]
+  );
+
+  const filteredGroupedSpots = useMemo(
+    () =>
+      filterPilgrimageSpots(searchedGroupedSpots, {
+        filter: spotFilter,
+        visited,
+        captures,
+        intents: spotIntents,
+      }),
+    [searchedGroupedSpots, spotFilter, visited, captures, spotIntents]
+  );
+
+  const filteredPoints = useMemo(
+    () =>
+      filterPilgrimagePoints(points, {
+        query: spotSearchQuery,
+        filter: spotFilter,
+        visited,
+        captures,
+        intents: spotIntents,
+      }),
+    [points, spotSearchQuery, spotFilter, visited, captures, spotIntents]
+  );
+
+  // Filter-pill badges count searched locations, matching the list rows below.
+  const groupedCounts = useMemo(
+    () => countPilgrimageSpotFilters(searchedGroupedSpots, visited, captures, spotIntents),
+    [searchedGroupedSpots, visited, captures, spotIntents]
+  );
 
   // When the visible spot list changes (filter switch, data load) keep the
   // selection valid: if the current pick was filtered out, fall back to the
@@ -1375,6 +1502,20 @@ export default function PilgrimageDetailScreen() {
     [userLocation]
   );
 
+  const hasIntentForGroup = useCallback(
+    (spot: AnitabiSpot, intent: SpotIntentKind): boolean =>
+      spot.scenes.some((point) => spotIntents[point.id]?.[intent] === true),
+    [spotIntents]
+  );
+
+  const hasIntentForPoint = useCallback(
+    (spot: AnitabiPoint, intent: SpotIntentKind): boolean => {
+      const group = groupedSpotByPointId.get(spot.id);
+      return group ? hasIntentForGroup(group, intent) : spotIntents[spot.id]?.[intent] === true;
+    },
+    [groupedSpotByPointId, hasIntentForGroup, spotIntents]
+  );
+
   const handleToggleVisited = useCallback((spot: AnitabiPoint) => {
     Haptics.selectionAsync().catch(() => undefined);
     setVisited((prev) => {
@@ -1388,6 +1529,28 @@ export default function PilgrimageDetailScreen() {
       return next;
     });
   }, []);
+
+  const handleToggleSpotIntent = useCallback(
+    (spot: AnitabiPoint, intent: SpotIntentKind) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      const group = groupedSpotByPointId.get(spot.id);
+      const ids = group ? group.scenes.map((p) => p.id) : [spot.id];
+      setSpotIntents((prev) => {
+        const shouldRemove = ids.some((id) => prev[id]?.[intent] === true);
+        const next: SpotIntentMap = { ...prev };
+        for (const id of ids) {
+          const nextIntent = { ...(next[id] ?? {}) };
+          if (shouldRemove) delete nextIntent[intent];
+          else nextIntent[intent] = true;
+          if (nextIntent.saved || nextIntent.planned) next[id] = nextIntent;
+          else delete next[id];
+        }
+        void saveSpotIntents(next);
+        return next;
+      });
+    },
+    [groupedSpotByPointId]
+  );
 
   // A grouped spot is one location; "visited" applies to every cut filmed
   // there, so the whole place flips with a single tap.
@@ -1520,6 +1683,8 @@ export default function PilgrimageDetailScreen() {
   }, [browseSource]);
 
   const activeSpotVisited = activeSpot ? visited[activeSpot.id] === true : false;
+  const activeSpotSaved = activeSpot ? hasIntentForPoint(activeSpot, 'saved') : false;
+  const activeSpotPlanned = activeSpot ? hasIntentForPoint(activeSpot, 'planned') : false;
   const activeSpotDistance = activeSpot ? distanceFor(activeSpot) : null;
   const activeSpotHasCapture = activeSpot ? !!captures[activeSpot.id] : false;
 
@@ -1742,122 +1907,209 @@ export default function PilgrimageDetailScreen() {
 
             {!isEmpty && anime ? (
               <>
-                <View style={styles.tabsRow}>
-                  <ViewModeTab
-                    active={viewMode === 'list'}
-                    label="List"
-                    icon="view-list"
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    count={filteredGroupedSpots.length}
-                    theme={theme}
-                    onPress={() => handleViewToggle('list')}
-                  />
-                  <ViewModeTab
-                    active={viewMode === 'map'}
-                    label="Map"
-                    icon="map"
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    count={filteredPoints.filter((p) => hasValidGeo(p.geo)).length}
-                    theme={theme}
-                    onPress={() => handleViewToggle('map')}
-                  />
+                <View style={styles.controlsPanel}>
+                  <View style={styles.searchBox}>
+                    <Ionicons name="search" size={16} color={theme.text.tertiary} />
+                    <TextInput
+                      value={spotSearchQuery}
+                      onChangeText={setSpotSearchQuery}
+                      placeholder="Search spot or EP"
+                      placeholderTextColor={theme.text.tertiary}
+                      returnKeyType="search"
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      selectionColor={themeColor}
+                      clearButtonMode="never"
+                      accessibilityLabel="Search pilgrimage spots or episodes"
+                      style={[styles.searchInput, { color: theme.text.primary }]}
+                    />
+                    {normalizedSpotSearchQuery ? (
+                      <Pressable
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => undefined);
+                          setSpotSearchQuery('');
+                        }}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear search"
+                        style={({ pressed }) => [
+                          styles.searchClearBtn,
+                          pressed && { opacity: 0.7 },
+                        ]}>
+                        <Ionicons name="close-circle" size={18} color={theme.text.tertiary} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.controlModeRow}>
+                    <View style={styles.modeTabsGroup}>
+                      <ViewModeTab
+                        active={viewMode === 'list'}
+                        label="List"
+                        icon="view-list"
+                        themeColor={themeColor}
+                        themeColorFg={themeColorFg}
+                        count={filteredGroupedSpots.length}
+                        theme={theme}
+                        onPress={() => handleViewToggle('list')}
+                      />
+                      <ViewModeTab
+                        active={viewMode === 'map'}
+                        label="Map"
+                        icon="map"
+                        themeColor={themeColor}
+                        themeColorFg={themeColorFg}
+                        count={filteredPoints.filter((p) => hasValidGeo(p.geo)).length}
+                        theme={theme}
+                        onPress={() => handleViewToggle('map')}
+                      />
+                    </View>
+                    <View style={styles.layoutToggleGroup}>
+                      {viewMode === 'list' ? (
+                        <>
+                          <LayoutModeButton
+                            icon="apps"
+                            active={listLayout === 'grid'}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            theme={theme}
+                            accessibilityLabel="Album grid layout"
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setListLayout('grid');
+                            }}
+                          />
+                          <LayoutModeButton
+                            icon="reorder-three"
+                            active={listLayout === 'rows'}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            theme={theme}
+                            accessibilityLabel="Compare rows layout"
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setListLayout('rows');
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <LayoutModeButton
+                            icon="image-outline"
+                            active={mapMarkerMode === 'photo'}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            theme={theme}
+                            accessibilityLabel="Photo map markers"
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setMapMarkerMode('photo');
+                            }}
+                          />
+                          <LayoutModeButton
+                            icon="ellipse"
+                            active={mapMarkerMode === 'dot'}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            theme={theme}
+                            accessibilityLabel="Dot map markers"
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setMapMarkerMode('dot');
+                            }}
+                          />
+                        </>
+                      )}
+                    </View>
+                  </View>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.pillsRow}>
+                    <FilterPill
+                      label="All"
+                      active={spotFilter === 'all'}
+                      badge={groupedCounts.all}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
+                        setSpotFilter('all');
+                      }}
+                    />
+                    <FilterPill
+                      label="Unvisited"
+                      active={spotFilter === 'unvisited'}
+                      badge={groupedCounts.unvisited}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
+                        setSpotFilter('unvisited');
+                      }}
+                    />
+                    <FilterPill
+                      label="Visited"
+                      active={spotFilter === 'visited'}
+                      badge={groupedCounts.visited}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
+                        setSpotFilter('visited');
+                      }}
+                    />
+                    {groupedCounts.planned > 0 || spotFilter === 'planned' ? (
+                      <FilterPill
+                        label="Planned"
+                        active={spotFilter === 'planned'}
+                        badge={groupedCounts.planned}
+                        themeColor={themeColor}
+                        themeColorFg={themeColorFg}
+                        theme={theme}
+                        icon="flag"
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => undefined);
+                          setSpotFilter('planned');
+                        }}
+                      />
+                    ) : null}
+                    {groupedCounts.saved > 0 || spotFilter === 'saved' ? (
+                      <FilterPill
+                        label="Saved"
+                        active={spotFilter === 'saved'}
+                        badge={groupedCounts.saved}
+                        themeColor={themeColor}
+                        themeColorFg={themeColorFg}
+                        theme={theme}
+                        icon="bookmark"
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => undefined);
+                          setSpotFilter('saved');
+                        }}
+                      />
+                    ) : null}
+                    {groupedCounts.photos > 0 || spotFilter === 'photos' ? (
+                      <FilterPill
+                        label="Photos"
+                        active={spotFilter === 'photos'}
+                        badge={groupedCounts.photos}
+                        themeColor={themeColor}
+                        themeColorFg={themeColorFg}
+                        theme={theme}
+                        icon="camera"
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => undefined);
+                          setSpotFilter('photos');
+                        }}
+                      />
+                    ) : null}
+                  </ScrollView>
                 </View>
-
-                {/* JapanWalker-style filter pills row. */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pillsRow}>
-                  <FilterPill
-                    label="All"
-                    active={spotFilter === 'all'}
-                    badge={groupedCounts.all}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
-                      setSpotFilter('all');
-                    }}
-                  />
-                  <FilterPill
-                    label="Unvisited"
-                    active={spotFilter === 'unvisited'}
-                    badge={groupedCounts.unvisited}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
-                      setSpotFilter('unvisited');
-                    }}
-                  />
-                  <FilterPill
-                    label="Visited"
-                    active={spotFilter === 'visited'}
-                    badge={groupedCounts.visited}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
-                      setSpotFilter('visited');
-                    }}
-                  />
-                  <FilterPill
-                    label="Photos"
-                    active={spotFilter === 'photos'}
-                    badge={groupedCounts.photos}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    icon="camera"
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => undefined);
-                      setSpotFilter('photos');
-                    }}
-                  />
-                </ScrollView>
-
-                {viewMode === 'map' ? (
-                  <View style={styles.sectionHeader}>
-                    <ThemedText variant="titleLarge" weight="700">
-                      Map view
-                    </ThemedText>
-                    <ThemedText variant="bodySmall" tone="tertiary">
-                      Tap a marker to view the scene
-                    </ThemedText>
-                  </View>
-                ) : (
-                  <View style={styles.layoutToggleRow}>
-                    <LayoutModeButton
-                      icon="apps"
-                      active={listLayout === 'grid'}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      theme={theme}
-                      accessibilityLabel="Album grid layout"
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setListLayout('grid');
-                      }}
-                    />
-                    <LayoutModeButton
-                      icon="reorder-three"
-                      active={listLayout === 'rows'}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      theme={theme}
-                      accessibilityLabel="Compare rows layout"
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => undefined);
-                        setListLayout('rows');
-                      }}
-                    />
-                  </View>
-                )}
               </>
             ) : null}
 
@@ -1891,7 +2143,9 @@ export default function PilgrimageDetailScreen() {
               filteredGroupedSpots.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <ThemedText variant="bodyMedium" tone="secondary" align="center">
-                    No scenes match this filter.
+                    {normalizedSpotSearchQuery
+                      ? 'No spots match this search.'
+                      : 'No scenes match this filter.'}
                   </ThemedText>
                 </View>
               ) : listLayout === 'grid' ? (
@@ -1910,6 +2164,8 @@ export default function PilgrimageDetailScreen() {
                               themeColorFg={themeColorFg}
                               distanceKm={distanceForGroup(gs)}
                               visited={gs.scenes.some((p) => visited[p.id] === true)}
+                              saved={hasIntentForGroup(gs, 'saved')}
+                              planned={hasIntentForGroup(gs, 'planned')}
                               hasCapture={!!captured}
                               captureUri={captured ? (captures[captured.id]?.uri ?? null) : null}
                               theme={theme}
@@ -1937,6 +2193,8 @@ export default function PilgrimageDetailScreen() {
                         themeColorFg={themeColorFg}
                         distanceKm={distanceForGroup(gs)}
                         visited={gs.scenes.some((p) => visited[p.id] === true)}
+                        saved={hasIntentForGroup(gs, 'saved')}
+                        planned={hasIntentForGroup(gs, 'planned')}
                         hasCapture={gs.scenes.some((p) => !!captures[p.id])}
                         theme={theme}
                         onPress={() => handleGroupedSpotPress(gs)}
@@ -1963,7 +2221,10 @@ export default function PilgrimageDetailScreen() {
                           active={gs.scenes.some((p) => p.id === selectedSpotId)}
                           themeColor={themeColor}
                           themeColorFg={themeColorFg}
+                          distanceKm={distanceForGroup(gs)}
                           visited={gs.scenes.some((p) => visited[p.id] === true)}
+                          saved={hasIntentForGroup(gs, 'saved')}
+                          planned={hasIntentForGroup(gs, 'planned')}
                           hasCapture={gs.scenes.some((p) => !!captures[p.id])}
                           theme={theme}
                           onPress={handleSpotChipPress}
@@ -1984,6 +2245,7 @@ export default function PilgrimageDetailScreen() {
                     userLocation={userLocation}
                     centerGeo={anime?.geo ?? null}
                     centerZoom={anime?.zoom ?? 12}
+                    markerMode={mapMarkerMode}
                     focusSpotId={selectedSpotId}
                     theme={theme}
                     onSpotPress={(spot) => {
@@ -2010,10 +2272,14 @@ export default function PilgrimageDetailScreen() {
           themeColorFg={themeColorFg}
           distanceKm={activeSpotDistance}
           visited={activeSpotVisited}
+          saved={activeSpotSaved}
+          planned={activeSpotPlanned}
           hasCapture={activeSpotHasCapture}
           theme={theme}
           onClose={() => setActiveSpot(null)}
           onToggleVisited={handleToggleVisited}
+          onToggleSaved={(spot) => handleToggleSpotIntent(spot, 'saved')}
+          onTogglePlanned={(spot) => handleToggleSpotIntent(spot, 'planned')}
           onOpenMaps={handleOpenMaps}
           onFrameShot={handleFrameShot}
         />
@@ -2096,7 +2362,10 @@ interface SpotChipProps {
   active: boolean;
   themeColor: string;
   themeColorFg: string;
+  distanceKm: number | null;
   visited: boolean;
+  saved: boolean;
+  planned: boolean;
   hasCapture: boolean;
   theme: ThemePalette;
   onPress: (spot: AnitabiPoint) => void;
@@ -2107,7 +2376,10 @@ function SpotChip({
   active,
   themeColor,
   themeColorFg,
+  distanceKm,
   visited,
+  saved,
+  planned,
   hasCapture,
   theme,
   onPress,
@@ -2146,6 +2418,24 @@ function SpotChip({
         style={[styles.chipLabel, active ? { color: theme.text.primary } : null]}>
         {label}
       </ThemedText>
+      {distanceKm != null ? (
+        <View
+          style={[
+            styles.distanceBadge,
+            active
+              ? { backgroundColor: `${themeColor}22` }
+              : { backgroundColor: theme.background.tertiary },
+          ]}>
+          <ThemedText
+            variant="captionSmall"
+            weight="700"
+            style={{ color: active ? themeColor : theme.text.secondary }}>
+            {formatDistanceKm(distanceKm)}
+          </ThemedText>
+        </View>
+      ) : null}
+      {planned ? <Ionicons name="flag" size={13} color={theme.status.warning} /> : null}
+      {saved ? <Ionicons name="bookmark" size={12} color={theme.status.info} /> : null}
       {visited ? <Ionicons name="checkmark-circle" size={14} color={theme.status.success} /> : null}
       {hasCapture ? (
         <Ionicons name="camera" size={12} color={active ? themeColor : theme.text.tertiary} />
@@ -2483,17 +2773,61 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       height: 28,
       backgroundColor: theme.glassBorder,
     },
-    tabsRow: {
-      flexDirection: 'row',
-      gap: Spacing.xs,
+    controlsPanel: {
       marginHorizontal: Spacing.screenPadding,
       marginTop: Spacing.md,
-      marginBottom: Spacing.sm,
+      padding: Spacing.sm,
+      gap: Spacing.sm,
+      borderRadius: Radius.lg,
+      backgroundColor: theme.background.secondary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    searchBox: {
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingLeft: 12,
+      paddingRight: 8,
+      borderRadius: Radius.md,
+      backgroundColor: theme.background.tertiary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 42,
+      paddingVertical: 0,
+      ...Typography.bodyMedium,
+      letterSpacing: 0,
+    },
+    searchClearBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    controlModeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    modeTabsGroup: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: Spacing.xs,
+      minWidth: 0,
+    },
+    layoutToggleGroup: {
+      flexDirection: 'row',
+      gap: 6,
     },
     pillsRow: {
       gap: 8,
-      paddingHorizontal: Spacing.screenPadding,
-      paddingVertical: 4,
+      paddingRight: 2,
     },
     spotChipRow: {
       gap: 8,
@@ -2501,22 +2835,9 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       paddingTop: Spacing.xs,
       paddingBottom: Spacing.xs,
     },
-    sectionHeader: {
-      paddingHorizontal: Spacing.screenPadding,
-      marginTop: Spacing.sm,
-      marginBottom: Spacing.xs,
-      gap: 2,
-    },
     list: {
       paddingHorizontal: Spacing.screenPadding,
       gap: Spacing.sm,
-      paddingTop: Spacing.xs,
-    },
-    layoutToggleRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: 6,
-      paddingHorizontal: Spacing.screenPadding,
       paddingTop: Spacing.xs,
     },
     gridList: {
@@ -2649,7 +2970,7 @@ function makeSpotChipStyles(theme: ThemePalette) {
       paddingVertical: 6,
       borderRadius: Radius.full,
       borderWidth: 1,
-      maxWidth: 220,
+      maxWidth: 280,
       minHeight: 36,
     },
     epBadge: {
@@ -2663,6 +2984,13 @@ function makeSpotChipStyles(theme: ThemePalette) {
     chipLabel: {
       flexShrink: 1,
       color: theme.text.secondary,
+    },
+    distanceBadge: {
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: Radius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 }
@@ -2801,6 +3129,18 @@ function makeTileStyles(theme: ThemePalette) {
     },
     cornerLeft: { left: 8 },
     cornerRight: { right: 8 },
+    intentBadge: {
+      position: 'absolute',
+      top: 36,
+      right: 8,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
     captionWrap: {
       position: 'absolute',
       left: 10,
@@ -2892,6 +3232,11 @@ function makeSheetStyles(theme: ThemePalette) {
       flexDirection: 'row',
       gap: Spacing.sm,
     },
+    intentActions: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginTop: Spacing.sm,
+    },
     actionBtn: {
       flex: 1,
       flexDirection: 'row',
@@ -2900,6 +3245,16 @@ function makeSheetStyles(theme: ThemePalette) {
       gap: 6,
       height: 44,
       borderRadius: Radius.md,
+    },
+    intentBtn: {
+      flex: 1,
+      height: 40,
+      borderRadius: Radius.md,
+      borderWidth: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
     },
     frameShotBtn: {
       flexDirection: 'row',
