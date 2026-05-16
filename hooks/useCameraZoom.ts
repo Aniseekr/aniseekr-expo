@@ -6,17 +6,18 @@
 // Stop→zoom is COMPUTED from an exponential inverse (see STOP_TO_ZOOM below),
 // not hand-calibrated. It still relies on an assumed videoMaxZoomFactor, so
 // treat 2×/3× as approximate and field-test before relying on exact parity.
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Gesture, type PinchGesture } from 'react-native-gesture-handler';
 import {
   Easing,
   runOnJS,
-  useDerivedValue,
+  useAnimatedReaction,
   useSharedValue,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import type { FocalStop, ZoomValue } from '../components/pilgrimage/camera/types';
+import { shouldReseedZoomState } from '../libs/services/pilgrimage/camera-zoom-state';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 
 // expo-camera maps this normalized `zoom` (0..1) to the iOS videoZoomFactor
@@ -129,25 +130,35 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
   const zoomShared = useSharedValue<number>(stopZoom[initial]);
   const savedZoom = useSharedValue<number>(stopZoom[initial]);
   const lastUpdate = useSharedValue<number>(0);
+  const previousInitialZoomRef = useRef<number>(stopZoom[initial]);
 
   const [zoom, setZoomState] = useState<number>(stopZoom[initial]);
 
   useLayoutEffect(() => {
     const target = stopZoom[initial];
+    const previousInitialZoom = previousInitialZoomRef.current;
+    previousInitialZoomRef.current = target;
+    if (!shouldReseedZoomState({ currentZoom: zoomShared.value, previousInitialZoom })) {
+      return;
+    }
     zoomShared.value = target;
     savedZoom.value = target;
     setZoomState(target);
   }, [initial, savedZoom, stopZoom, zoomShared]);
 
-  // Throttled JS-state mirror of the shared value. Same shape as the rotation
-  // throttle in useOverlayTransform — keeps React renders bounded while the
-  // shared value drives CameraView.zoom directly on the UI thread.
-  useDerivedValue(() => {
-    const now = Date.now();
-    if (now - lastUpdate.value < THROTTLE_MS) return;
-    lastUpdate.value = now;
-    runOnJS(setZoomState)(zoomShared.value);
-  });
+  // Throttled JS-state mirror of the shared value. This reacts only to actual
+  // zoom changes; the previous useDerivedValue read+wrote its own throttle
+  // SharedValue and could keep the camera screen re-rendering while idle.
+  useAnimatedReaction(
+    () => zoomShared.value,
+    (current, previous) => {
+      if (previous !== null && Math.abs(current - previous) < 0.000001) return;
+      const now = Date.now();
+      if (now - lastUpdate.value < THROTTLE_MS) return;
+      lastUpdate.value = now;
+      runOnJS(setZoomState)(current);
+    }
+  );
 
   const snapToStop = useCallback((stop: FocalStop) => {
     hapticsBridge.selection();
@@ -178,7 +189,10 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
           }
           if (target !== null) {
             zoomShared.value = withTiming(target, ZOOM_TWEEN);
+            runOnJS(setZoomState)(target);
             if (snapped !== null) runOnJS(snapToStop)(snapped);
+          } else {
+            runOnJS(setZoomState)(zoomShared.value);
           }
         }),
     [zoomShared, savedZoom, minZoom, maxZoom, stops, stopZoom, snapToStop]
