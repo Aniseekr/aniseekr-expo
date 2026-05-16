@@ -258,7 +258,18 @@ export default function PilgrimageAlbumScreen() {
         animeTitle: animeTitles.primary,
         themeColor: entry.anime.color || theme.accent,
         heading: entry.capture.heading != null ? String(entry.capture.heading) : '',
+        shotSource:
+          entry.capture.source === 'library'
+            ? 'library'
+            : entry.capture.source === 'auto'
+              ? 'auto'
+              : 'manual',
+        note: entry.capture.note ?? '',
       };
+      if (entry.capture.userLocation) {
+        params.userLat = String(entry.capture.userLocation.latitude);
+        params.userLng = String(entry.capture.userLocation.longitude);
+      }
       const [lat, lng] = entry.spot.geo;
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
         params.spotLat = String(lat);
@@ -368,11 +379,16 @@ export default function PilgrimageAlbumScreen() {
             </ThemedText>
           </View>
           <Pressable
+            onPress={handleAddNew}
             hitSlop={14}
             accessibilityRole="button"
-            accessibilityLabel="Filter"
+            accessibilityLabel={isDetail ? 'Add photo to this folder' : 'Start new pilgrimage'}
             style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}>
-            <Ionicons name="options-outline" size={18} color={theme.text.primary} />
+            <Ionicons
+              name={isDetail ? 'images-outline' : 'add'}
+              size={20}
+              color={theme.text.primary}
+            />
           </Pressable>
         </View>
 
@@ -888,7 +904,7 @@ function CompareCard({
           />
           <View style={[styles.cornerTag, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
             <ThemedText weight="700" style={{ color: '#FFFFFF', fontSize: 9 }}>
-              YOURS
+              {entry.capture.source === 'library' ? 'LIBRARY' : 'YOURS'}
             </ThemedText>
           </View>
         </View>
@@ -905,6 +921,15 @@ function CompareCard({
         <ThemedText variant="captionSmall" weight="700" numberOfLines={1} style={{ fontSize: 12 }}>
           {spotTitles.primary}
         </ThemedText>
+        {entry.capture.note ? (
+          <ThemedText
+            variant="captionSmall"
+            tone="secondary"
+            numberOfLines={2}
+            style={{ fontSize: 10 }}>
+            {entry.capture.note}
+          </ThemedText>
+        ) : null}
         <View style={styles.compareMetaRow}>
           <ThemedText
             variant="captionSmall"
@@ -920,6 +945,19 @@ function CompareCard({
             EP {entry.spot.ep}
           </ThemedText>
         </View>
+        {entry.capture.userLocation ? (
+          <View style={styles.compareMetaRow}>
+            <Ionicons name="location-outline" size={10} color={theme.text.tertiary} />
+            <ThemedText
+              variant="captionSmall"
+              tone="tertiary"
+              numberOfLines={1}
+              style={{ flex: 1, fontSize: 9 }}>
+              {entry.capture.userLocation.latitude.toFixed(4)},{' '}
+              {entry.capture.userLocation.longitude.toFixed(4)}
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
