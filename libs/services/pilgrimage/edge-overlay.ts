@@ -9,9 +9,9 @@ export interface EdgeOverlayConfig {
 export const EDGE_INTENSITIES: readonly EdgeIntensity[] = ['low', 'mid', 'high'] as const;
 
 const CONFIG: Record<EdgeIntensity, EdgeOverlayConfig> = {
-  low: { threshold: 0.12, inkOpacity: 0.72, sourceOpacity: 0.18 },
-  mid: { threshold: 0.18, inkOpacity: 0.88, sourceOpacity: 0 },
-  high: { threshold: 0.1, inkOpacity: 1, sourceOpacity: 0 },
+  low: { threshold: 0.24, inkOpacity: 0.42, sourceOpacity: 0.24 },
+  mid: { threshold: 0.14, inkOpacity: 0.52, sourceOpacity: 0 },
+  high: { threshold: 0.07, inkOpacity: 0.68, sourceOpacity: 0 },
 };
 
 const LABEL: Record<EdgeIntensity, string> = {
