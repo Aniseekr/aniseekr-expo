@@ -16,6 +16,7 @@ import { ThemedSurface, ThemedText } from '../../../../components/themed';
 import { recordCapture, type SensorSnapshot } from '../../../../libs/services/pilgrimage/captures';
 import { toFullResImageUrl } from '../../../../libs/services/pilgrimage/anitabi-image';
 import { scoreSnapshot } from '../../../../libs/services/pilgrimage/alignment-scoring';
+import { buildCaptureSessionShotFromRoute } from '../../../../libs/services/pilgrimage/capture-preview-route';
 import {
   computeFrameMatch,
   type FrameMatch,
@@ -63,7 +64,13 @@ export default function ComparePreviewScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const params = useLocalSearchParams();
-  const { shots, removeShot } = useCaptureSession();
+  const { shots: sessionShots, removeShot } = useCaptureSession();
+  const routeShot = useMemo(() => buildCaptureSessionShotFromRoute(params), [params]);
+  const shots = useMemo(
+    () => (sessionShots.length > 0 ? sessionShots : routeShot ? [routeShot] : []),
+    [sessionShots, routeShot]
+  );
+  const routeOnlyPreview = sessionShots.length === 0 && routeShot !== null;
 
   // Spot-level metadata still arrives via route params. The per-shot data
   // (uri + sensors) now comes from the capture-session store, not params.
@@ -75,16 +82,21 @@ export default function ComparePreviewScreen() {
   const sceneName = getStringParam(params, 'name') ?? 'Scene';
   const ep = getStringParam(params, 'ep');
   const animeId = getStringParam(params, 'animeId');
+  const animeIdNumber = getNumberParam(params, 'animeId');
   const animeTitle = getStringParam(params, 'animeTitle');
   const themeColor = getStringParam(params, 'themeColor') || theme.accent;
   const spotLat = getStringParam(params, 'spotLat');
   const spotLng = getStringParam(params, 'spotLng');
+  const epNumber = getNumberParam(params, 'ep');
+  const spotGeo = useMemo<[number, number] | undefined>(() => {
+    const lat = spotLat != null ? Number(spotLat) : Number.NaN;
+    const lng = spotLng != null ? Number(spotLng) : Number.NaN;
+    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : undefined;
+  }, [spotLat, spotLng]);
 
   // ── Album focus + selection ────────────────────────────────────────────
   // `focusedShotId` drives the comparison stage. `selectedIds` drives Save.
-  const [focusedShotId, setFocusedShotId] = useState<string | null>(
-    () => shots[0]?.id ?? null
-  );
+  const [focusedShotId, setFocusedShotId] = useState<string | null>(() => shots[0]?.id ?? null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(shots[0] ? [shots[0].id] : [])
   );
@@ -270,9 +282,16 @@ export default function ComparePreviewScreen() {
         capturedAt: shot.createdAt,
         heading: shot.heading ?? undefined,
         sensorSnapshot: enrichedSnapshot,
+        animeId: animeIdNumber ?? undefined,
+        animeTitle: animeTitle ?? undefined,
+        animeColor: themeColor,
+        spotName: sceneName,
+        spotImage: imageUrl,
+        spotEp: epNumber ?? undefined,
+        spotGeo,
       });
     },
-    [spotId]
+    [animeIdNumber, animeTitle, epNumber, imageUrl, sceneName, spotGeo, spotId, themeColor]
   );
 
   const snapshotComposite = useCallback(async (): Promise<string | null> => {
@@ -339,7 +358,7 @@ export default function ComparePreviewScreen() {
         await persistShot(
           shot,
           isFocused ? frameMatch : null,
-          isFocused ? composite ?? undefined : undefined
+          isFocused ? (composite ?? undefined) : undefined
         );
         persistedRef.current.add(shot.id);
       }
@@ -427,17 +446,17 @@ export default function ComparePreviewScreen() {
 
   const handleDeleteShot = useCallback(
     (id: string) => {
+      if (routeOnlyPreview) return;
       hapticsBridge.warning();
       removeShot(id);
     },
-    [removeShot]
+    [removeShot, routeOnlyPreview]
   );
 
   // ── Empty state ────────────────────────────────────────────────────────
   if (shots.length === 0) {
     return (
-      <GestureHandlerRootView
-        style={[styles.root, { backgroundColor: theme.background.primary }]}>
+      <GestureHandlerRootView style={[styles.root, { backgroundColor: theme.background.primary }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
           <View style={styles.header}>
@@ -526,6 +545,7 @@ export default function ComparePreviewScreen() {
             selectedIds={selectedIds}
             accent={themeColor}
             theme={theme}
+            canDelete={!routeOnlyPreview}
             onFocus={handleFocusShot}
             onToggleSelect={handleToggleSelect}
             onDelete={handleDeleteShot}
@@ -921,11 +941,7 @@ export default function ComparePreviewScreen() {
               <Ionicons name={saved ? 'checkmark' : 'download'} size={18} color="#000" />
             )}
             <ThemedText variant="bodyMedium" weight="700" style={{ color: '#000' }}>
-              {saved
-                ? 'Saved'
-                : selectedCount > 1
-                  ? `Save ${selectedCount}`
-                  : 'Save'}
+              {saved ? 'Saved' : selectedCount > 1 ? `Save ${selectedCount}` : 'Save'}
             </ThemedText>
           </Pressable>
         </View>
@@ -940,6 +956,7 @@ function Filmstrip({
   selectedIds,
   accent,
   theme,
+  canDelete,
   onFocus,
   onToggleSelect,
   onDelete,
@@ -949,6 +966,7 @@ function Filmstrip({
   selectedIds: Set<string>;
   accent: string;
   theme: ThemePalette;
+  canDelete: boolean;
   onFocus: (id: string) => void;
   onToggleSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -965,7 +983,7 @@ function Filmstrip({
           <View key={shot.id} style={styles.thumbWrap}>
             <Pressable
               onPress={() => onFocus(shot.id)}
-              onLongPress={() => onDelete(shot.id)}
+              onLongPress={canDelete ? () => onDelete(shot.id) : undefined}
               style={({ pressed }) => [
                 styles.thumb,
                 {
@@ -1003,14 +1021,16 @@ function Filmstrip({
               accessibilityLabel={selected ? 'Deselect shot' : 'Select shot'}>
               {selected ? <Ionicons name="checkmark" size={14} color="#000" /> : null}
             </Pressable>
-            <Pressable
-              onPress={() => onDelete(shot.id)}
-              hitSlop={10}
-              style={[styles.thumbDelete, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
-              accessibilityRole="button"
-              accessibilityLabel="Delete shot">
-              <Ionicons name="close" size={13} color="#fff" />
-            </Pressable>
+            {canDelete ? (
+              <Pressable
+                onPress={() => onDelete(shot.id)}
+                hitSlop={10}
+                style={[styles.thumbDelete, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+                accessibilityRole="button"
+                accessibilityLabel="Delete shot">
+                <Ionicons name="close" size={13} color="#fff" />
+              </Pressable>
+            ) : null}
           </View>
         );
       })}
@@ -1044,8 +1064,7 @@ function CaptureExifInfoCard({
       ? `${latNum.toFixed(4)}, ${lngNum.toFixed(4)}`
       : null;
 
-  const headingText =
-    heading != null && Number.isFinite(heading) ? `${heading.toFixed(0)}°` : null;
+  const headingText = heading != null && Number.isFinite(heading) ? `${heading.toFixed(0)}°` : null;
 
   if (!animeWithEpisode && !gpsText && !headingText) return null;
 
@@ -1058,10 +1077,7 @@ function CaptureExifInfoCard({
         <View style={styles.exifRows}>
           {animeWithEpisode ? (
             <View style={styles.exifRow}>
-              <ThemedText
-                variant="bodySmall"
-                weight="600"
-                style={{ color: theme.text.secondary }}>
+              <ThemedText variant="bodySmall" weight="600" style={{ color: theme.text.secondary }}>
                 Anime
               </ThemedText>
               <ThemedText
@@ -1075,10 +1091,7 @@ function CaptureExifInfoCard({
           ) : null}
           {gpsText ? (
             <View style={styles.exifRow}>
-              <ThemedText
-                variant="bodySmall"
-                weight="600"
-                style={{ color: theme.text.secondary }}>
+              <ThemedText variant="bodySmall" weight="600" style={{ color: theme.text.secondary }}>
                 GPS
               </ThemedText>
               <ThemedText
@@ -1091,10 +1104,7 @@ function CaptureExifInfoCard({
           ) : null}
           {headingText ? (
             <View style={styles.exifRow}>
-              <ThemedText
-                variant="bodySmall"
-                weight="600"
-                style={{ color: theme.text.secondary }}>
+              <ThemedText variant="bodySmall" weight="600" style={{ color: theme.text.secondary }}>
                 Heading
               </ThemedText>
               <ThemedText
