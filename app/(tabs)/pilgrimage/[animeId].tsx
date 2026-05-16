@@ -414,6 +414,7 @@ interface SpotMapViewProps {
   centerGeo: readonly [number, number] | null;
   centerZoom: number;
   markerMode: MapMarkerMode;
+  offlineOnly: boolean;
   /**
    * Id of the spot currently selected in the chip strip above the map. When
    * this changes, the WebView pans/zooms to that spot so the chip strip
@@ -434,6 +435,7 @@ function SpotMapView({
   centerGeo,
   centerZoom,
   markerMode,
+  offlineOnly,
   focusSpotId,
   onSpotPress,
   onClusterPick,
@@ -527,6 +529,14 @@ function SpotMapView({
       true;
     `);
   }, [markers, ready]);
+
+  useEffect(() => {
+    if (!ready || !webviewRef.current) return;
+    webviewRef.current.injectJavaScript(`
+      try { window.__setOfflineOnly && window.__setOfflineOnly(${offlineOnly ? 'true' : 'false'}); } catch(e) {}
+      true;
+    `);
+  }, [offlineOnly, ready]);
 
   useEffect(() => {
     if (!ready || !webviewRef.current || !focusSpotId) return;
@@ -1224,6 +1234,7 @@ export default function PilgrimageDetailScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [listLayout, setListLayout] = useState<'grid' | 'rows'>('grid');
   const [mapMarkerMode, setMapMarkerMode] = useState<MapMarkerMode>('photo');
+  const [mapOfflineOnly, setMapOfflineOnly] = useState(false);
   const [spotFilter, setSpotFilter] = useState<SpotFilter>('all');
   const [spotSearchQuery, setSpotSearchQuery] = useState('');
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
@@ -2018,6 +2029,18 @@ export default function PilgrimageDetailScreen() {
                               setMapMarkerMode('dot');
                             }}
                           />
+                          <LayoutModeButton
+                            icon="cloud-offline-outline"
+                            active={mapOfflineOnly}
+                            themeColor={themeColor}
+                            themeColorFg={themeColorFg}
+                            theme={theme}
+                            accessibilityLabel="Use cached map tiles only"
+                            onPress={() => {
+                              Haptics.selectionAsync().catch(() => undefined);
+                              setMapOfflineOnly((value) => !value);
+                            }}
+                          />
                         </>
                       )}
                     </View>
@@ -2246,6 +2269,7 @@ export default function PilgrimageDetailScreen() {
                     centerGeo={anime?.geo ?? null}
                     centerZoom={anime?.zoom ?? 12}
                     markerMode={mapMarkerMode}
+                    offlineOnly={mapOfflineOnly}
                     focusSpotId={selectedSpotId}
                     theme={theme}
                     onSpotPress={(spot) => {
