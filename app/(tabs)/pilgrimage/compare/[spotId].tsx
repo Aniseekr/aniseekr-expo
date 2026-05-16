@@ -345,8 +345,13 @@ export default function CompareCaptureScreen() {
     settings.captureMode,
     androidNativeCapabilities
   );
-  const androidNativeHdrReady =
-    androidNativeHdrTargeted && androidNativeCapabilities?.activeExtensionMode === 'hdr';
+  const androidZoomRange =
+    Platform.OS === 'android' && useAndroidNativeZoom && androidNativeCapabilities
+      ? {
+          minZoomRatio: androidNativeCapabilities.minZoomRatio,
+          maxZoomRatio: androidNativeCapabilities.maxZoomRatio,
+        }
+      : null;
   const androidZoomRatio =
     Platform.OS === 'android' && useAndroidNativeZoom
       ? zoomRatioForZoomValue(zoom.zoom, androidNativeCapabilities)
@@ -888,7 +893,7 @@ export default function CompareCaptureScreen() {
 
   const runHdr = useCallback(
     async (source: 'manual' | 'auto' = 'manual'): Promise<CaptureSessionShot | null> => {
-      if (androidNativeHdrReady) {
+      if (androidNativeHdrTargeted) {
         return runSingle(source, 'hdr');
       }
       const result = await hdr.run();
@@ -909,7 +914,7 @@ export default function CompareCaptureScreen() {
         source,
       });
     },
-    [androidNativeHdrReady, runSingle, hdr, tapFocus, maybeCompositeSubjectShot, recordShot]
+    [androidNativeHdrTargeted, runSingle, hdr, tapFocus, maybeCompositeSubjectShot, recordShot]
   );
 
   const anyCapturing = capturing || burst.capturing || hdr.capturing;
@@ -1124,7 +1129,9 @@ export default function CompareCaptureScreen() {
             cameraRef={cameraRef}
             facing={facing}
             zoom={zoom.zoom}
+            zoomShared={zoom.zoomShared}
             androidZoomRatio={androidZoomRatio}
+            androidZoomRange={androidZoomRange}
             androidCameraExtensionMode={androidCameraExtensionMode}
             autofocus={tapFocus.autofocus}
             flashMode={cameraFlash}
