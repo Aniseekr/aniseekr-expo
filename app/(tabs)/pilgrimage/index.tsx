@@ -15,9 +15,8 @@
 //      cares about and should anchor every rail/list.
 //   2. FEATURED_PILGRIMAGE_ANIME backfills until the rails feel populated.
 //
-// Featured Spots are picked by city cluster: each city contributes one
-// representative spot (image preferred, geo required), then we shuffle so
-// the list rotates between launches instead of always anchoring on Tokyo.
+// Featured Spots rank real distance first. Planned landmarks and collection
+// entries get bounded boosts so intent matters without burying nearby spots.
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -33,6 +32,11 @@ import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/fea
 import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
 import { locationService, type LatLng } from '../../../libs/services/pilgrimage/location-service';
 import { loadVisitedSpots, type VisitedMap } from '../../../libs/services/pilgrimage/visited-prefs';
+import {
+  loadSpotIntents,
+  type SpotIntentMap,
+} from '../../../libs/services/pilgrimage/spot-intents';
+import { rankFeaturedSpotsByPriority } from '../../../libs/services/pilgrimage/featured-spots';
 import {
   getPilgrimageHubSnapshot,
   updatePilgrimageHubSnapshot,
@@ -59,6 +63,7 @@ interface FeaturedSpot {
   anime: AnitabiBangumi;
   distanceKm?: number;
   fromCollection: boolean;
+  planned: boolean;
 }
 
 interface AnimeCard {
@@ -94,57 +99,6 @@ function formatKm(km: number): string {
   return `${Math.round(km)} km`;
 }
 
-// Mulberry32 — tiny seeded PRNG. Used so the "random" rotation across cities
-// is stable for a given (date, pool size) pair, which keeps the list calm
-// during a single session and not jittery on every re-render.
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t = (t + 0x6d2b79f5) >>> 0;
-    let r = t;
-    r = Math.imul(r ^ (r >>> 15), r | 1);
-    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function pickCityRepresentatives(
-  pool: FeaturedSpot[],
-  limit: number,
-  seed: number
-): FeaturedSpot[] {
-  if (pool.length === 0) return [];
-  const buckets = new Map<string, FeaturedSpot[]>();
-  for (const item of pool) {
-    const city = item.anime.city || item.anime.cn || item.anime.title || 'unknown';
-    const arr = buckets.get(city);
-    if (arr) arr.push(item);
-    else buckets.set(city, [item]);
-  }
-  const rand = mulberry32(seed);
-  const cityOrder = [...buckets.keys()].sort(() => rand() - 0.5);
-  const picked: FeaturedSpot[] = [];
-  // First pass: one representative per city.
-  for (const city of cityOrder) {
-    const bucket = buckets.get(city);
-    if (!bucket || bucket.length === 0) continue;
-    const idx = Math.floor(rand() * bucket.length);
-    const chosen = bucket.splice(idx, 1)[0];
-    if (chosen) picked.push(chosen);
-    if (picked.length >= limit) return picked;
-  }
-  // Second pass: fill remaining slots from any leftover spots so we don't
-  // under-fill when there are fewer cities than the limit.
-  const leftovers: FeaturedSpot[] = [];
-  for (const bucket of buckets.values()) leftovers.push(...bucket);
-  leftovers.sort(() => rand() - 0.5);
-  for (const item of leftovers) {
-    if (picked.length >= limit) break;
-    picked.push(item);
-  }
-  return picked;
-}
-
 function hasSnapshotSlice<K extends keyof PilgrimageHubSnapshot>(
   snapshot: PilgrimageHubSnapshot | null,
   key: K
@@ -171,6 +125,7 @@ export default function PilgrimageHubScreen() {
   const [collectionLoading, setCollectionLoading] = useState(!hasInitialCollection);
   const [featuredLoading, setFeaturedLoading] = useState(!hasInitialFeatured);
   const [visited, setVisited] = useState<VisitedMap>(() => initialSnapshot?.visited ?? {});
+  const [spotIntents, setSpotIntents] = useState<SpotIntentMap>({});
   const [userLocation, setUserLocation] = useState<LatLng | null>(
     () => initialSnapshot?.userLocation ?? null
   );
@@ -253,6 +208,16 @@ export default function PilgrimageHubScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    loadSpotIntents().then((m) => {
+      if (!cancelled) setSpotIntents(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     locationService
       .getCurrentLocation()
       .then((loc) => {
@@ -313,11 +278,17 @@ export default function PilgrimageHubScreen() {
           });
           if (Number.isFinite(d)) distanceKm = d;
         }
-        list.push({ spot, anime: card.anime, distanceKm, fromCollection: card.fromCollection });
+        list.push({
+          spot,
+          anime: card.anime,
+          distanceKm,
+          fromCollection: card.fromCollection,
+          planned: spotIntents[spot.id]?.planned === true,
+        });
       }
     }
     return list;
-  }, [animeCards, userLocation]);
+  }, [animeCards, userLocation, spotIntents]);
 
   // Walk through tiers until we find a non-empty one, so users outside Japan
   // still see something meaningful (even if it just says "in Japan" with the
@@ -338,11 +309,8 @@ export default function PilgrimageHubScreen() {
   const nearbyAnime = nearby.list;
   const nearestAnime = nearbyAnime[0] ?? null;
 
-  // Daily-stable seed so the city rotation feels deliberate, not jittery.
   const featuredSpots = useMemo<FeaturedSpot[]>(() => {
-    const day = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-    const seed = (day * 31 + allSpots.length) >>> 0;
-    return pickCityRepresentatives(allSpots, FEATURED_SPOT_LIMIT, seed);
+    return rankFeaturedSpotsByPriority(allSpots).slice(0, FEATURED_SPOT_LIMIT);
   }, [allSpots]);
 
   const handleAnimePress = useCallback(
@@ -402,6 +370,7 @@ export default function PilgrimageHubScreen() {
     getIndexVersion
   );
   const tourism88Covers = useMemo(() => {
+    void anitabiIndexVersion;
     const m = new Map<number, string>();
     for (const e of getAllIndexed()) {
       if (e.cover) m.set(e.id, e.cover);
