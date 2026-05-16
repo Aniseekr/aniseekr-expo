@@ -3,6 +3,7 @@ import {
   SEGMENT_PX,
   buildDetents,
   dialSpanPx,
+  dragPositionForTranslation,
   nearestDetent,
   positionForStop,
   positionForZoom,
@@ -61,6 +62,23 @@ describe('dialSpanPx', () => {
 
   it('is zero for an empty detent list', () => {
     expect(dialSpanPx([])).toBe(0);
+  });
+});
+
+describe('dragPositionForTranslation', () => {
+  it('inverts horizontal translation and clamps inside the dial span', () => {
+    const span = SEGMENT_PX * 3;
+
+    expect(dragPositionForTranslation(SEGMENT_PX, -24, span)).toBe(SEGMENT_PX + 24);
+    expect(dragPositionForTranslation(SEGMENT_PX, 24, span)).toBe(SEGMENT_PX - 24);
+    expect(dragPositionForTranslation(10, 999, span)).toBe(0);
+    expect(dragPositionForTranslation(span - 10, -999, span)).toBe(span);
+  });
+
+  it('treats non-finite gesture values as a safe no-op', () => {
+    expect(dragPositionForTranslation(Number.NaN, 10, SEGMENT_PX)).toBe(0);
+    expect(dragPositionForTranslation(10, Number.NaN, SEGMENT_PX)).toBe(10);
+    expect(dragPositionForTranslation(10, 5, Number.NaN)).toBe(0);
   });
 });
 

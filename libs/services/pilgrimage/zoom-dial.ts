@@ -67,6 +67,11 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+function isFiniteNumber(value: number): boolean {
+  'worklet';
+  return value === value && value !== Infinity && value !== -Infinity;
+}
+
 /**
  * Builds the ordered detent list for the dial. `stops` is the ascending list
  * of focal stops the device exposes (e.g. `[1,2,3]` digital-only, `[0.5,1,2,3]`
@@ -100,6 +105,24 @@ export function dialSpanPx(detents: readonly Detent[], segPx: number = SEGMENT_P
   'worklet';
   if (detents.length === 0) return 0;
   return detents[detents.length - 1].px + segPx;
+}
+
+/**
+ * Gesture translation -> strip position.
+ *
+ * A leftward drag has a negative translationX, but it should move the strip
+ * toward larger px / larger zoom values, so the translation is inverted.
+ */
+export function dragPositionForTranslation(
+  startPx: number,
+  translationX: number,
+  spanPx: number
+): number {
+  'worklet';
+  const safeStart = isFiniteNumber(startPx) ? startPx : 0;
+  const safeTranslation = isFiniteNumber(translationX) ? translationX : 0;
+  const safeSpan = isFiniteNumber(spanPx) ? Math.max(0, spanPx) : 0;
+  return clampNumber(safeStart - safeTranslation, 0, safeSpan);
 }
 
 /**

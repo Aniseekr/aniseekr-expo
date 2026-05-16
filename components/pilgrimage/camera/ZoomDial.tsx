@@ -11,26 +11,23 @@
 //
 // PERFORMANCE
 // The continuous drag must NOT re-render the heavy compare screen. The pan
-// gesture writes `zoomShared.value` (the SharedValue from useCameraZoom) on the
-// UI thread; the strip's own `translateX` is an animated style off a local
-// drag SharedValue. React state is only touched on a detent CROSS (a handful
-// of times per drag) and via `runOnJS` for haptics / committing the pick.
+// gesture writes `zoomShared.value` (the SharedValue from useCameraZoom)
+// without touching React state on every frame; the strip's own `translateX` is
+// an animated style off a local drag SharedValue. React state is only touched
+// on a detent CROSS (a handful of times per drag).
 //
 // RULE 8 (no fake data)
 // Only the real detents get a text label (0.5/1/2/3x). Every other tick is
 // neutral. Past the last detent the strip keeps neutral ticks with NO labels —
 // the app does not know the device's true max zoom factor, so it must never
 // print an invented value like "4.2x".
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
-  useAnimatedReaction,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -44,6 +41,7 @@ import {
   TICK_SPACING_PX,
   buildDetents,
   dialSpanPx,
+  dragPositionForTranslation,
   nearestDetent,
   positionForStop,
   positionForZoom,
@@ -147,6 +145,7 @@ export default function ZoomDial({
   // The detent whose label is highlighted — the only per-drag React state, and
   // it changes only on a detent cross (a few times per drag, not per frame).
   const [highlightStop, setHighlightStop] = useState<FocalStop | null>(activeStop);
+  const lastCrossStop = useRef<FocalStop | null>(activeStop);
 
   // Seed/resync the strip from the live zoom when zoom changes from OUTSIDE the
   // dial (a focal-stop pick, pinch, mount). Skipped mid-drag so we don't fight
@@ -157,22 +156,20 @@ export default function ZoomDial({
     const target = positionForZoom(zoomShared.value, detents);
     dragPx.value = withTiming(target, { duration: 180 });
     setHighlightStop(activeStop);
+    lastCrossStop.current = activeStop;
     // zoomShared / dragPx / dragging are stable SharedValues — reading once is
     // intentional; continuous updates flow through the gesture, not this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detents, interactive, activeStop]);
 
   // Haptic + highlight feedback when a labeled detent crosses the center line.
-  const onDetentCross = useCallback((stop: FocalStop | null) => {
-    if (stop !== null) hapticsBridge.selection();
-    setHighlightStop(stop);
-  }, []);
-  useAnimatedReaction(
-    () => nearestDetent(dragPx.value, detents, SNAP_TOLERANCE_PX),
-    (current, previous) => {
-      if (previous !== undefined && current !== previous) {
-        runOnJS(onDetentCross)(current);
-      }
+  const syncDetentHighlight = useCallback(
+    (px: number) => {
+      const stop = nearestDetent(px, detents, SNAP_TOLERANCE_PX);
+      if (stop === lastCrossStop.current) return;
+      lastCrossStop.current = stop;
+      if (stop !== null) hapticsBridge.selection();
+      setHighlightStop(stop);
     },
     [detents]
   );
@@ -187,21 +184,27 @@ export default function ZoomDial({
     [onPickFocalStop]
   );
 
-  // Pan gesture: writes zoomShared on the UI thread (no React re-render).
+  // Pan gesture: writes SharedValues without re-rendering on every move.
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
+        // Keep this tiny control on the JS thread. Dragging used to send the
+        // detent object array + imported helpers into Reanimated's UI runtime;
+        // on some devices that path crashes as soon as the gesture updates.
+        .runOnJS(true)
         .enabled(interactive)
         .onBegin(() => {
           startPx.value = dragPx.value;
           dragging.value = true;
+          lastCrossStop.current = nearestDetent(dragPx.value, detents, SNAP_TOLERANCE_PX);
         })
         // Dragging the strip LEFT brings its higher-zoom ticks toward the
         // center, so a leftward translation increases zoom — invert translationX.
         .onUpdate((e) => {
-          const next = Math.max(0, Math.min(spanPx, startPx.value - e.translationX));
+          const next = dragPositionForTranslation(startPx.value, e.translationX, spanPx);
           dragPx.value = next;
           zoomShared.value = zoomForPosition(next, detents);
+          syncDetentHighlight(next);
         })
         .onEnd(() => {
           const snapStop = nearestDetent(dragPx.value, detents, SNAP_TOLERANCE_PX);
@@ -213,13 +216,25 @@ export default function ZoomDial({
                 duration: 160,
               });
             }
-            runOnJS(commitRelease)(snapStop);
+            lastCrossStop.current = snapStop;
+            setHighlightStop(snapStop);
+            commitRelease(snapStop);
           }
         })
         .onFinalize(() => {
           dragging.value = false;
         }),
-    [interactive, spanPx, detents, dragPx, startPx, dragging, zoomShared, commitRelease]
+    [
+      interactive,
+      spanPx,
+      detents,
+      dragPx,
+      startPx,
+      dragging,
+      zoomShared,
+      commitRelease,
+      syncDetentHighlight,
+    ]
   );
 
   // Strip translateX so the current dragPx sits under the fixed center line.
@@ -236,6 +251,8 @@ export default function ZoomDial({
       hapticsBridge.selection();
       dragPx.value = withTiming(px, { duration: 160 });
       zoomShared.value = withTiming(zoomForPosition(px, detents), { duration: 160 });
+      lastCrossStop.current = stop;
+      setHighlightStop(stop);
       onPickFocalStop(stop);
     },
     [interactive, detents, onPickFocalStop, dragPx, zoomShared]
@@ -301,11 +318,7 @@ export default function ZoomDial({
               { backgroundColor: virtualActive ? themeColor : 'rgba(255,255,255,0.14)' },
               pressed && { opacity: 0.6 },
             ]}>
-            <Ionicons
-              name="aperture-outline"
-              size={16}
-              color={virtualActive ? activeFg : '#fff'}
-            />
+            <Ionicons name="aperture-outline" size={16} color={virtualActive ? activeFg : '#fff'} />
           </Pressable>
         ) : null}
       </View>
