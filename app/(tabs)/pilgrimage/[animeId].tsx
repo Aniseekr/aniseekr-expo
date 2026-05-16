@@ -164,6 +164,9 @@ function buildSpotMapHtml(initial: {
 <style>${MAP_BASE_CSS}</style>
 <style>
   :root { ${themeVarsCss} }
+  /* +/- zoom buttons reuse the shared .map-btn FAB; .disabled dims one
+     once the map hits a zoom limit, like Leaflet's native control. */
+  .map-btn.disabled { opacity: 0.4; pointer-events: none; }
   /* Same balloon language as the other two maps. The EP chip is a small
      white pill in the top-left so the photo dominates. Visited state is
      a green ring (Google Maps "saved" green #34A853), not a thicker border. */
@@ -255,6 +258,44 @@ ${MAP_BASE_BODY}
     }
     map.flyTo(initialCenter, initialZoom, { duration: 0.4 });
   });
+
+  // This map is embedded in a vertical ScrollView, so pinch-zoom competes
+  // with page scroll — explicit +/- buttons are the reliable way to zoom
+  // here (the fullscreen pilgrimage maps stay pinch-only by design). They
+  // stack above the shared recenter FAB inside #map-controls.
+  (function() {
+    var controls = document.getElementById('map-controls');
+    if (!controls) return;
+    var recenter = controls.querySelector('[data-act="re"]');
+    function makeZoomBtn(act, label, iconPath) {
+      var btn = document.createElement('div');
+      btn.className = 'map-btn';
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('data-act', act);
+      btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + iconPath + '"/></svg>';
+      btn.addEventListener('click', function() {
+        if (act === 'zoom-in') map.zoomIn();
+        else map.zoomOut();
+      });
+      return btn;
+    }
+    var zoomIn = makeZoomBtn('zoom-in', 'Zoom in', 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z');
+    var zoomOut = makeZoomBtn('zoom-out', 'Zoom out', 'M19 13H5v-2h14v2z');
+    if (recenter) {
+      controls.insertBefore(zoomIn, recenter);
+      controls.insertBefore(zoomOut, recenter);
+    } else {
+      controls.appendChild(zoomIn);
+      controls.appendChild(zoomOut);
+    }
+    function syncZoomLimits() {
+      zoomIn.classList.toggle('disabled', map.getZoom() >= map.getMaxZoom());
+      zoomOut.classList.toggle('disabled', map.getZoom() <= map.getMinZoom());
+    }
+    map.on('zoomend', syncZoomLimits);
+    syncZoomLimits();
+  })();
 
   var markerLayer = window.__makeClusterGroup({ ringColor: initial.ringColor, disableAt: 16 });
   markerLayer.addTo(map);
