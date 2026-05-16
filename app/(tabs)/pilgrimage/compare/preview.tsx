@@ -16,7 +16,11 @@ import { ThemedSurface, ThemedText } from '../../../../components/themed';
 import { recordCapture, type SensorSnapshot } from '../../../../libs/services/pilgrimage/captures';
 import { toFullResImageUrl } from '../../../../libs/services/pilgrimage/anitabi-image';
 import { scoreSnapshot } from '../../../../libs/services/pilgrimage/alignment-scoring';
-import { buildCaptureSessionShotFromRoute } from '../../../../libs/services/pilgrimage/capture-preview-route';
+import {
+  buildCaptureSessionShotFromRoute,
+  reconcileCapturePreviewSelection,
+  resolveCapturePreviewFocus,
+} from '../../../../libs/services/pilgrimage/capture-preview-route';
 import {
   computeFrameMatch,
   type FrameMatch,
@@ -65,12 +69,6 @@ export default function ComparePreviewScreen() {
   const { theme } = useTheme();
   const params = useLocalSearchParams();
   const { shots: sessionShots, removeShot } = useCaptureSession();
-  const routeShot = useMemo(() => buildCaptureSessionShotFromRoute(params), [params]);
-  const shots = useMemo(
-    () => (sessionShots.length > 0 ? sessionShots : routeShot ? [routeShot] : []),
-    [sessionShots, routeShot]
-  );
-  const routeOnlyPreview = sessionShots.length === 0 && routeShot !== null;
 
   // Spot-level metadata still arrives via route params. The per-shot data
   // (uri + sensors) now comes from the capture-session store, not params.
@@ -88,6 +86,47 @@ export default function ComparePreviewScreen() {
   const spotLat = getStringParam(params, 'spotLat');
   const spotLng = getStringParam(params, 'spotLng');
   const epNumber = getNumberParam(params, 'ep');
+  const shotUriParam = getStringParam(params, 'shotUri');
+  const shotWidthParam = getStringParam(params, 'shotWidth');
+  const shotHeightParam = getStringParam(params, 'shotHeight');
+  const capturedAtParam = getStringParam(params, 'capturedAt');
+  const headingParam = getStringParam(params, 'heading');
+  const distanceMetersParam = getStringParam(params, 'distanceMeters');
+  const headingDeltaDegParam = getStringParam(params, 'headingDeltaDeg');
+  const tiltParam = getStringParam(params, 'tilt');
+  const captureModeParam = getStringParam(params, 'captureMode');
+  const routeShot = useMemo(
+    () =>
+      buildCaptureSessionShotFromRoute({
+        spotId,
+        shotUri: shotUriParam ?? undefined,
+        shotWidth: shotWidthParam ?? undefined,
+        shotHeight: shotHeightParam ?? undefined,
+        capturedAt: capturedAtParam ?? undefined,
+        heading: headingParam ?? undefined,
+        distanceMeters: distanceMetersParam ?? undefined,
+        headingDeltaDeg: headingDeltaDegParam ?? undefined,
+        tilt: tiltParam ?? undefined,
+        captureMode: captureModeParam ?? undefined,
+      }),
+    [
+      spotId,
+      shotUriParam,
+      shotWidthParam,
+      shotHeightParam,
+      capturedAtParam,
+      headingParam,
+      distanceMetersParam,
+      headingDeltaDegParam,
+      tiltParam,
+      captureModeParam,
+    ]
+  );
+  const shots = useMemo(
+    () => (sessionShots.length > 0 ? sessionShots : routeShot ? [routeShot] : []),
+    [sessionShots, routeShot]
+  );
+  const routeOnlyPreview = sessionShots.length === 0 && routeShot !== null;
   const spotGeo = useMemo<[number, number] | undefined>(() => {
     const lat = spotLat != null ? Number(spotLat) : Number.NaN;
     const lng = spotLng != null ? Number(spotLng) : Number.NaN;
@@ -105,18 +144,8 @@ export default function ComparePreviewScreen() {
   // round-trip adds a new shot; a delete removes one). Never crash, never
   // point at a stale id.
   useEffect(() => {
-    setFocusedShotId((prev) => {
-      if (prev && shots.some((s) => s.id === prev)) return prev;
-      // Focused shot gone (deleted) or never set → focus the newest.
-      return shots[0]?.id ?? null;
-    });
-    setSelectedIds((prev) => {
-      const valid = new Set<string>();
-      for (const s of shots) if (prev.has(s.id)) valid.add(s.id);
-      // If a fresh visit left nothing selected but shots exist, select newest.
-      if (valid.size === 0 && shots[0]) valid.add(shots[0].id);
-      return valid;
-    });
+    setFocusedShotId((prev) => resolveCapturePreviewFocus(prev, shots));
+    setSelectedIds((prev) => reconcileCapturePreviewSelection(prev, shots));
   }, [shots]);
 
   const focusedShot = useMemo(
