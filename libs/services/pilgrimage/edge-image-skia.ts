@@ -1,12 +1,15 @@
 // Tracing-paper edge overlay for the pilgrimage compare flow.
-// Decodes a URI image via Skia, runs Sobel edge detection (or a softer
-// sketch-style blend) through a `RuntimeEffect` SKSL shader, snapshots the
-// result, and exposes it as a React-friendly hook. Failures resolve to
-// `{image: null, error}` — never a hash-seeded "plausible" placeholder
-// (CLAUDE.md Rule 8).
+// Resolves the remote scene image to a local file (Skia's remote fetch is
+// unreliable for large CDN images), decodes it via Skia, runs Sobel edge
+// detection (or a softer sketch-style blend) through a `RuntimeEffect` SKSL
+// shader, snapshots the result, and exposes it as a React-friendly hook.
+// Failures resolve to `{image: null, error}` — never a hash-seeded
+// "plausible" placeholder (CLAUDE.md Rule 8).
 
 import { Skia, TileMode, FilterMode, MipmapMode } from '@shopify/react-native-skia';
 import type { SkImage, SkRuntimeEffect } from '@shopify/react-native-skia';
+import { Image as ExpoImage } from 'expo-image';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useEffect, useState } from 'react';
 
 export interface EdgeImageOptions {
@@ -112,6 +115,65 @@ function getSketchEffect(): SkRuntimeEffect {
 const renderCache = new Map<string, SkImage>();
 const sketchCache = new Map<string, SkImage>();
 
+// Memoised remote→local resolutions so repeated edge/sketch builds for the
+// same scene don't re-download or re-probe the cache.
+const localUriCache = new Map<string, string>();
+
+// Skia's `Data.fromURI` remote fetch is unreliable for large CDN images, so we
+// hand it a local `file://` path instead. `expo-image` already downloaded the
+// same URL for the `anime` overlay, so reuse its disk cache first; only fall
+// back to a direct download when that path isn't available. Last resort: the
+// remote URL itself, so a build is attempted rather than failing outright.
+async function resolveLocalUri(remoteUrl: string): Promise<string> {
+  if (!/^https?:/i.test(remoteUrl)) return remoteUrl;
+
+  const cached = localUriCache.get(remoteUrl);
+  if (cached) return cached;
+
+  try {
+    await ExpoImage.prefetch(remoteUrl);
+    const cachePath = await ExpoImage.getCachePathAsync(remoteUrl);
+    if (cachePath) {
+      const localUri = cachePath.startsWith('file://') ? cachePath : `file://${cachePath}`;
+      localUriCache.set(remoteUrl, localUri);
+      return localUri;
+    }
+  } catch {
+    // Fall through to a direct download.
+  }
+
+  const cacheDir = FileSystem.cacheDirectory;
+  if (cacheDir) {
+    try {
+      const ext = remoteUrl.split('?')[0].split('.').pop()?.toLowerCase();
+      const safeExt = ext && ext.length <= 5 ? ext : 'img';
+      const fileName = `edge-src-${hashString(remoteUrl)}.${safeExt}`;
+      const dest = `${cacheDir}${fileName}`;
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists) {
+        localUriCache.set(remoteUrl, dest);
+        return dest;
+      }
+      const { uri } = await FileSystem.downloadAsync(remoteUrl, dest);
+      localUriCache.set(remoteUrl, uri);
+      return uri;
+    } catch {
+      // Fall through to the remote URL.
+    }
+  }
+
+  return remoteUrl;
+}
+
+function hashString(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 function parseHexToRgb(hex: string): { r: number; g: number; b: number } {
   const cleaned = hex.replace('#', '').trim();
   const normalized =
@@ -141,7 +203,8 @@ async function buildEdgeImage(
   inkColor: string,
   inkOpacity: number
 ): Promise<SkImage> {
-  const data = await Skia.Data.fromURI(uri);
+  const localUri = await resolveLocalUri(uri);
+  const data = await Skia.Data.fromURI(localUri);
   if (!data) throw new Error('Failed to load image data');
 
   const image = Skia.Image.MakeImageFromEncoded(data);
@@ -242,7 +305,8 @@ async function buildSketchImage(
   inkColor: string,
   inkOpacity: number
 ): Promise<SkImage> {
-  const data = await Skia.Data.fromURI(uri);
+  const localUri = await resolveLocalUri(uri);
+  const data = await Skia.Data.fromURI(localUri);
   if (!data) throw new Error('Failed to load image data');
 
   const image = Skia.Image.MakeImageFromEncoded(data);
