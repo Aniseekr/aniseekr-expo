@@ -5,9 +5,8 @@
 // {-1, 0, +1} and composites them via Skia Plus-blend weighted average.
 //
 // Rule 8: this is not true HDR (no hardware bracketing — see composite-hdr.ts
-// header). And we never composite a partial stack: if any frame capture
-// throws, we abort and return null rather than producing a "half" HDR that
-// silently behaves like a single shot.
+// header). We never composite a partial stack. If fewer than 3 frames succeed,
+// we return one real captured frame and mark the result as non-HDR.
 //
 // EXIF is sourced from the FIRST frame only, then re-embedded into the final
 // composite (or the mid-frame fallback) after Skia re-encodes the bytes.
@@ -19,6 +18,10 @@ import type { LatLng } from '../libs/services/pilgrimage/location-service';
 import { buildAdditionalExif } from '../libs/services/pilgrimage/build-exif-metadata';
 import { mergeCaptureExif } from '../libs/services/pilgrimage/camera-capture';
 import { compositeHdr } from '../libs/services/pilgrimage/composite-hdr';
+import {
+  choosePseudoHdrFallbackFrame,
+  type PseudoHdrFrame,
+} from '../libs/services/pilgrimage/pseudo-hdr';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 
 export interface PseudoHdrSensorSnapshot {
@@ -113,64 +116,75 @@ export function usePseudoHDR(input: UsePseudoHdrInput): UsePseudoHdrOutput {
     setCapturing(true);
     setCaptured(0);
 
-    const uris: string[] = [];
+    const frames: PseudoHdrFrame[] = [];
     let compositeExif: Record<string, unknown> | null = null;
 
     try {
       for (let i = 0; i < FRAME_COUNT; i++) {
         const camera = cameraRefRef.current.current;
         if (!camera) {
-          // No camera = no capture at all. Rule 8: abort, don't fake.
-          return null;
+          break;
         }
 
-        // EXIF only on the first frame — compositing re-encodes and drops it.
-        let additionalExif: Record<string, unknown> | undefined;
-        if (i === 0) {
-          const snapshot = getSnapshotRef.current();
-          const meta = metadataRef.current;
-          additionalExif = buildAdditionalExif({
-            spotId: meta.spotId,
-            spotName: meta.spotName,
-            animeId: meta.animeId,
-            animeTitle: meta.animeTitle,
-            episode: meta.episode,
-            userLocation: snapshot.userLocation,
-            heading: snapshot.heading,
-            tilt: snapshot.tilt,
+        try {
+          // EXIF only on the first successful frame — compositing re-encodes
+          // and drops it. If frame 0 fails but frame 1 succeeds, we still stamp
+          // that real fallback capture instead of failing the whole flow.
+          const shouldCaptureExif = compositeExif === null;
+          let additionalExif: Record<string, unknown> | undefined;
+          if (shouldCaptureExif) {
+            const snapshot = getSnapshotRef.current();
+            const meta = metadataRef.current;
+            additionalExif = buildAdditionalExif({
+              spotId: meta.spotId,
+              spotName: meta.spotName,
+              animeId: meta.animeId,
+              animeTitle: meta.animeTitle,
+              episode: meta.episode,
+              userLocation: snapshot.userLocation,
+              heading: snapshot.heading,
+              tilt: snapshot.tilt,
+            });
+          }
+
+          const photo = await camera.takePictureAsync({
+            quality: qualityRef.current,
+            exif: shouldCaptureExif,
+            ...(additionalExif ? { additionalExif } : {}),
+            shutterSound: !silentRef.current,
+            skipProcessing: skipProcessingRef.current,
           });
-        }
+          if (!photo?.uri) continue;
+          if (shouldCaptureExif) {
+            compositeExif = mergeCaptureExif(photo.exif, additionalExif);
+          }
 
-        const photo = await camera.takePictureAsync({
-          quality: qualityRef.current,
-          exif: i === 0,
-          ...(additionalExif ? { additionalExif } : {}),
-          shutterSound: !silentRef.current,
-          skipProcessing: skipProcessingRef.current,
-        });
-        if (!photo?.uri) {
-          // Missing URI on any frame = incomplete stack. Abort.
-          return null;
+          frames.push({ uri: photo.uri, width: photo.width || 0, height: photo.height || 0 });
+          setCaptured(frames.length);
+        } catch (frameError) {
+          console.warn('[usePseudoHDR] frame failed', frameError);
         }
-        if (i === 0) {
-          compositeExif = mergeCaptureExif(photo.exif, additionalExif);
-        }
-
-        uris.push(photo.uri);
-        setCaptured(uris.length);
-        hapticsBridge.tap();
 
         if (i < FRAME_COUNT - 1) {
           await delay(frameDelayMsRef.current);
         }
       }
 
-      if (uris.length !== FRAME_COUNT) {
-        // Defensive — every iteration either pushes a URI or returns null.
-        return null;
+      if (frames.length !== FRAME_COUNT) {
+        const fallback = choosePseudoHdrFallbackFrame(frames);
+        if (!fallback) return null;
+        return {
+          uri: fallback.uri,
+          width: fallback.width,
+          height: fallback.height,
+          wasHdr: false,
+        };
       }
 
-      const frameUris: [string, string, string] = [uris[0], uris[1], uris[2]];
+      const frameUris: [string, string, string] = [frames[0].uri, frames[1].uri, frames[2].uri];
+      if (!frameUris[0] || !frameUris[1] || !frameUris[2]) {
+        return null;
+      }
       const composite = await compositeHdr({
         frameUris,
         evStops: evStopsRef.current,
