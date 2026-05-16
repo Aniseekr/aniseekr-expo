@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
   addShot,
+  buildLibraryCaptureSessionShot,
   clearSession,
   getShots,
   removeShot,
+  sanitizeCaptureNote,
   subscribe,
   type CaptureSessionShot,
 } from '../../../libs/services/pilgrimage/capture-session';
@@ -23,6 +25,7 @@ function makeShot(overrides: Partial<CaptureSessionShot> = {}): CaptureSessionSh
     distanceMeters: null,
     headingDeltaDeg: null,
     tilt: null,
+    userLocation: null,
     ...overrides,
   };
 }
@@ -78,12 +81,52 @@ describe('capture-session store', () => {
       distanceMeters: 12.5,
       headingDeltaDeg: -3.1,
       tilt: 1.2,
+      userLocation: { latitude: 35.6812, longitude: 139.7671 },
       burstTotal: 6,
       burstUris: ['file:///0.jpg', 'file:///1.jpg'],
       burstBestIndex: 1,
     });
     addShot(shot);
     expect(getShots()[0]).toEqual(shot);
+  });
+
+  it('builds an imported library shot with real dimensions and GPS', () => {
+    const shot = buildLibraryCaptureSessionShot({
+      asset: { uri: 'file:///picked.jpg', width: 3024, height: 4032 },
+      createdAt: 1710000000000,
+      userLocation: { latitude: 35.6812, longitude: 139.7671 },
+      heading: 92.4,
+      distanceMeters: 18.5,
+      headingDeltaDeg: -7.2,
+      tilt: 1.5,
+    });
+
+    expect(shot).toEqual({
+      id: 'library:1710000000000:file:///picked.jpg',
+      uri: 'file:///picked.jpg',
+      width: 3024,
+      height: 4032,
+      captureMode: 'single',
+      source: 'library',
+      createdAt: 1710000000000,
+      heading: 92.4,
+      distanceMeters: 18.5,
+      headingDeltaDeg: -7.2,
+      tilt: 1.5,
+      userLocation: { latitude: 35.6812, longitude: 139.7671 },
+    });
+  });
+});
+
+describe('capture note sanitising', () => {
+  it('trims and collapses user-entered notes before album persistence', () => {
+    expect(sanitizeCaptureNote('  dusk   angle\nnear the ticket gate  ')).toBe(
+      'dusk angle near the ticket gate'
+    );
+  });
+
+  it('returns undefined for blank notes', () => {
+    expect(sanitizeCaptureNote('  \n\t  ')).toBeUndefined();
   });
 });
 
