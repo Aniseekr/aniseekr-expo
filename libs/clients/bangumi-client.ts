@@ -75,6 +75,10 @@ export interface BangumiV0SearchResponse {
   total?: number;
 }
 
+export interface BangumiRelatedSubject extends BangumiV0Subject {
+  relation: string;
+}
+
 /** Calendar weekday group response. */
 export interface BangumiCalendarGroup {
   weekday?: {
@@ -171,6 +175,22 @@ export class BangumiClient {
       opts
     );
     return result ?? { data: [] };
+  }
+
+  /**
+   * GET `/v0/subjects/{id}/subjects` — related subjects. The response mixes
+   * anime, books, music and other entry types; callers should filter by type.
+   */
+  static async getRelatedSubjects(
+    id: number | string,
+    opts: FetchOptions = {}
+  ): Promise<BangumiRelatedSubject[]> {
+    const result = await BangumiClient.request<BangumiRelatedSubject[]>(
+      `/v0/subjects/${encodeURIComponent(String(id))}/subjects`,
+      { method: 'GET' },
+      opts
+    );
+    return Array.isArray(result) ? result : [];
   }
 
   /** GET `/calendar` — current week's broadcasting anime. */
