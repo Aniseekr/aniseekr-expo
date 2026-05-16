@@ -3,7 +3,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { LocationService } from '../../../libs/services/pilgrimage/location-service';
+import {
+  LocationService,
+  resolveHeadingDegrees,
+} from '../../../libs/services/pilgrimage/location-service';
 
 interface FakePermission {
   status: 'granted' | 'denied' | 'undetermined';
@@ -147,5 +150,26 @@ describe('LocationService', () => {
       canAskAgain: true,
     });
     expect(await svc.requestPermission()).toBe(false);
+  });
+});
+
+describe('resolveHeadingDegrees', () => {
+  it('prefers true north when it is a usable value', () => {
+    expect(resolveHeadingDegrees({ trueHeading: 91, magHeading: 88 })).toBe(91);
+  });
+
+  it('falls back to magnetic north when true heading is unavailable', () => {
+    expect(resolveHeadingDegrees({ trueHeading: -1, magHeading: 270 })).toBe(270);
+  });
+
+  it('wraps values into the 0–360 range', () => {
+    expect(resolveHeadingDegrees({ trueHeading: 360 })).toBe(0);
+    expect(resolveHeadingDegrees({ trueHeading: 450 })).toBe(90);
+  });
+
+  it('returns null when no usable heading is present', () => {
+    expect(resolveHeadingDegrees(null)).toBeNull();
+    expect(resolveHeadingDegrees({ trueHeading: -1, magHeading: -1 })).toBeNull();
+    expect(resolveHeadingDegrees({ trueHeading: Number.NaN })).toBeNull();
   });
 });

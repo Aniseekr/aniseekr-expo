@@ -16,6 +16,32 @@ export interface LatLng {
 /** Disposer returned by {@link LocationService.subscribeToUpdates}. */
 export type Unsubscribe = () => void;
 
+/** A raw compass-heading reading (subset of expo-location's heading shape). */
+export interface HeadingReading {
+  /** Heading vs. true (geographic) north; negative/absent when unavailable. */
+  trueHeading?: number | null;
+  /** Heading vs. magnetic north. */
+  magHeading?: number | null;
+}
+
+/**
+ * Normalise a compass-heading reading to a 0–360° bearing (0 = north,
+ * increasing clockwise). Prefers true north and falls back to magnetic north;
+ * returns `null` when neither value is usable so callers can render no
+ * direction instead of a fake one.
+ */
+export function resolveHeadingDegrees(
+  reading: HeadingReading | null | undefined
+): number | null {
+  if (!reading) return null;
+  for (const value of [reading.trueHeading, reading.magHeading]) {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return ((value % 360) + 360) % 360;
+    }
+  }
+  return null;
+}
+
 interface ServiceOptions {
   /** Override now() (used by tests for cache TTL boundaries). */
   now?: () => number;
@@ -182,6 +208,39 @@ export class LocationService {
         );
       } catch (err) {
         console.warn('[LocationService] watchPositionAsync failed:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      watcher?.remove();
+      watcher = null;
+    };
+  }
+
+  /**
+   * Subscribe to device compass-heading updates. The callback receives a
+   * 0–360° bearing (0 = north, clockwise). Returns a disposer. Falls back to a
+   * no-op when the platform cannot deliver a heading (e.g. a simulator with no
+   * magnetometer) — the caller then simply shows no direction.
+   */
+  subscribeToHeading(callback: (headingDegrees: number) => void): Unsubscribe {
+    let cancelled = false;
+    let watcher: { remove: () => void } | null = null;
+
+    (async () => {
+      try {
+        const sub = await this.module.watchHeadingAsync((reading) => {
+          const degrees = resolveHeadingDegrees(reading);
+          if (degrees !== null) callback(degrees);
+        });
+        if (cancelled) {
+          sub.remove();
+          return;
+        }
+        watcher = sub;
+      } catch (err) {
+        console.warn('[LocationService] watchHeadingAsync failed:', err);
       }
     })();
 
