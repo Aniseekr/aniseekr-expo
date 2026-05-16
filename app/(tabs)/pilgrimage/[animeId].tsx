@@ -83,6 +83,11 @@ import {
 } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { getPilgrimageDetailBackRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import { groupPointsIntoSpots } from '../../../libs/services/pilgrimage/anitabi-points';
+import {
+  getNearestSceneForSpot,
+  getSpotDistanceKm,
+  sortSpotsByDistance,
+} from '../../../libs/services/pilgrimage/spot-distance-sort';
 import type {
   AnitabiBangumi,
   AnitabiPoint,
@@ -1288,18 +1293,23 @@ export default function PilgrimageDetailScreen() {
   // handles overlapping markers.
   const groupedSpots = useMemo(() => groupPointsIntoSpots(points), [points]);
 
+  const sortedGroupedSpots = useMemo(
+    () => sortSpotsByDistance(groupedSpots, userLocation),
+    [groupedSpots, userLocation]
+  );
+
   const filteredGroupedSpots = useMemo(() => {
     switch (spotFilter) {
       case 'visited':
-        return groupedSpots.filter((s) => s.scenes.some((p) => visited[p.id] === true));
+        return sortedGroupedSpots.filter((s) => s.scenes.some((p) => visited[p.id] === true));
       case 'unvisited':
-        return groupedSpots.filter((s) => !s.scenes.some((p) => visited[p.id] === true));
+        return sortedGroupedSpots.filter((s) => !s.scenes.some((p) => visited[p.id] === true));
       case 'photos':
-        return groupedSpots.filter((s) => s.scenes.some((p) => !!captures[p.id]));
+        return sortedGroupedSpots.filter((s) => s.scenes.some((p) => !!captures[p.id]));
       default:
-        return groupedSpots;
+        return sortedGroupedSpots;
     }
-  }, [groupedSpots, spotFilter, visited, captures]);
+  }, [sortedGroupedSpots, spotFilter, visited, captures]);
 
   // Filter-pill badges count locations (matching the list rows below them).
   const groupedCounts = useMemo(() => {
@@ -1332,9 +1342,11 @@ export default function PilgrimageDetailScreen() {
       ? filteredPoints.some((p) => p.id === selectedSpotId)
       : false;
     if (stillVisible) return;
-    const firstValid = filteredGroupedSpots.find((s) => hasValidGeo(s.geo));
+    const firstValid = filteredGroupedSpots
+      .map((s) => getNearestSceneForSpot(s, userLocation))
+      .find((p) => hasValidGeo(p.geo));
     setSelectedSpotId(firstValid ? firstValid.id : null);
-  }, [viewMode, filteredPoints, filteredGroupedSpots, selectedSpotId]);
+  }, [viewMode, filteredPoints, filteredGroupedSpots, selectedSpotId, userLocation]);
 
   const handleSpotChipPress = useCallback((spot: AnitabiPoint) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -1350,6 +1362,16 @@ export default function PilgrimageDetailScreen() {
       });
       return Number.isFinite(d) ? d : null;
     },
+    [userLocation]
+  );
+
+  const distanceForGroup = useCallback(
+    (spot: AnitabiSpot): number | null => getSpotDistanceKm(spot, userLocation),
+    [userLocation]
+  );
+
+  const representativeForGroup = useCallback(
+    (spot: AnitabiSpot): AnitabiPoint => getNearestSceneForSpot(spot, userLocation),
     [userLocation]
   );
 
@@ -1877,7 +1899,7 @@ export default function PilgrimageDetailScreen() {
                   {chunkPairs(filteredGroupedSpots).map((pair) => (
                     <View key={pair[0].id + (pair[1]?.id ?? '_solo')} style={styles.gridRow}>
                       {pair.map((gs) => {
-                        const rep = gs.scenes[0];
+                        const rep = representativeForGroup(gs);
                         const captured = gs.scenes.find((p) => captures[p.id]);
                         return (
                           <View key={gs.id} style={styles.gridCell}>
@@ -1886,7 +1908,7 @@ export default function PilgrimageDetailScreen() {
                               sceneCount={gs.scenes.length}
                               themeColor={themeColor}
                               themeColorFg={themeColorFg}
-                              distanceKm={distanceFor(rep)}
+                              distanceKm={distanceForGroup(gs)}
                               visited={gs.scenes.some((p) => visited[p.id] === true)}
                               hasCapture={!!captured}
                               captureUri={captured ? (captures[captured.id]?.uri ?? null) : null}
@@ -1905,7 +1927,7 @@ export default function PilgrimageDetailScreen() {
               ) : (
                 <View style={styles.list}>
                   {filteredGroupedSpots.map((gs) => {
-                    const rep = gs.scenes[0];
+                    const rep = representativeForGroup(gs);
                     return (
                       <SpotRow
                         key={gs.id}
@@ -1913,7 +1935,7 @@ export default function PilgrimageDetailScreen() {
                         sceneCount={gs.scenes.length}
                         themeColor={themeColor}
                         themeColorFg={themeColorFg}
-                        distanceKm={distanceFor(rep)}
+                        distanceKm={distanceForGroup(gs)}
                         visited={gs.scenes.some((p) => visited[p.id] === true)}
                         hasCapture={gs.scenes.some((p) => !!captures[p.id])}
                         theme={theme}
@@ -1933,12 +1955,12 @@ export default function PilgrimageDetailScreen() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.spotChipRow}>
                     {filteredGroupedSpots.map((gs) => {
-                      const rep = gs.scenes[0];
+                      const rep = representativeForGroup(gs);
                       return (
                         <SpotChip
                           key={gs.id}
                           spot={rep}
-                          active={rep.id === selectedSpotId}
+                          active={gs.scenes.some((p) => p.id === selectedSpotId)}
                           themeColor={themeColor}
                           themeColorFg={themeColorFg}
                           visited={gs.scenes.some((p) => visited[p.id] === true)}
