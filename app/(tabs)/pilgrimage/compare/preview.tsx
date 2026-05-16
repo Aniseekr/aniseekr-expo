@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { bottomPad } from '../../../../constants/DesignSystem';
+import { bottomPad, Size } from '../../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
 import { ThemedSurface, ThemedText } from '../../../../components/themed';
@@ -20,6 +20,7 @@ import {
   computeFrameMatch,
   type FrameMatch,
 } from '../../../../libs/services/pilgrimage/frame-match';
+import { useCaptureSession, type CaptureSessionShot } from '../../../../hooks/useCaptureSession';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 
 function getRetakeTip(s: SensorSnapshot | null): string | null {
@@ -47,6 +48,14 @@ function formatSignedDeg(value: number): string {
   return '0°';
 }
 
+/** Pull a shot's capture-time sensor snapshot, or null if it carries none. */
+function snapshotFromShot(shot: CaptureSessionShot | null): SensorSnapshot | null {
+  if (!shot) return null;
+  const { distanceMeters, headingDeltaDeg, tilt } = shot;
+  if (distanceMeters == null && headingDeltaDeg == null && tilt == null) return null;
+  return { distanceMeters, headingDeltaDeg, tilt };
+}
+
 type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider';
 
 export default function ComparePreviewScreen() {
@@ -54,22 +63,59 @@ export default function ComparePreviewScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const params = useLocalSearchParams();
+  const { shots, removeShot } = useCaptureSession();
 
+  // Spot-level metadata still arrives via route params. The per-shot data
+  // (uri + sensors) now comes from the capture-session store, not params.
   const spotId = getStringParam(params, 'spotId') ?? '';
   // Strip Anitabi's `?plan=h160` thumbnail token so the side-by-side / overlay
   // / slider stage renders the original 1920×1080 frame instead of pixelating
-  // the 284×160 thumb. Defensive — [spotId].tsx already upgrades it, but the
-  // album screen still hands in the raw thumbnail URL.
+  // the 284×160 thumb.
   const imageUrl = toFullResImageUrl(getStringParam(params, 'imageUrl') ?? '');
-  const shotUri = getStringParam(params, 'shotUri') ?? '';
   const sceneName = getStringParam(params, 'name') ?? 'Scene';
   const ep = getStringParam(params, 'ep');
   const animeId = getStringParam(params, 'animeId');
   const animeTitle = getStringParam(params, 'animeTitle');
   const themeColor = getStringParam(params, 'themeColor') || theme.accent;
-  const heading = getNumberParam(params, 'heading');
   const spotLat = getStringParam(params, 'spotLat');
   const spotLng = getStringParam(params, 'spotLng');
+
+  // ── Album focus + selection ────────────────────────────────────────────
+  // `focusedShotId` drives the comparison stage. `selectedIds` drives Save.
+  const [focusedShotId, setFocusedShotId] = useState<string | null>(
+    () => shots[0]?.id ?? null
+  );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(shots[0] ? [shots[0].id] : [])
+  );
+
+  // Reconcile focus/selection when the store changes underneath us (a "再拍"
+  // round-trip adds a new shot; a delete removes one). Never crash, never
+  // point at a stale id.
+  useEffect(() => {
+    setFocusedShotId((prev) => {
+      if (prev && shots.some((s) => s.id === prev)) return prev;
+      // Focused shot gone (deleted) or never set → focus the newest.
+      return shots[0]?.id ?? null;
+    });
+    setSelectedIds((prev) => {
+      const valid = new Set<string>();
+      for (const s of shots) if (prev.has(s.id)) valid.add(s.id);
+      // If a fresh visit left nothing selected but shots exist, select newest.
+      if (valid.size === 0 && shots[0]) valid.add(shots[0].id);
+      return valid;
+    });
+  }, [shots]);
+
+  const focusedShot = useMemo(
+    () => shots.find((s) => s.id === focusedShotId) ?? shots[0] ?? null,
+    [shots, focusedShotId]
+  );
+  const shotUri = focusedShot?.uri ?? '';
+  const selectedCount = useMemo(
+    () => shots.reduce((n, s) => (selectedIds.has(s.id) ? n + 1 : n), 0),
+    [shots, selectedIds]
+  );
 
   const [mode, setMode] = useState<Mode>('stacked');
   const [overlayOpacity, setOverlayOpacity] = useState(0.5);
@@ -80,28 +126,28 @@ export default function ComparePreviewScreen() {
   });
   const [stagePx, setStagePx] = useState({ width: 0, height: 0 });
 
-  // Alignment sensor snapshot — strictly real data from capture-time sensors.
-  // Returns null when no sensor reading was passed; the UI then omits the
-  // alignment cards instead of inventing a score.
-  const sensorSnapshot = useMemo<SensorSnapshot | null>(() => {
-    const dist = getNumberParam(params, 'distanceMeters');
-    const head = getNumberParam(params, 'headingDeltaDeg');
-    const tlt = getNumberParam(params, 'tilt');
-    if (dist == null && head == null && tlt == null) return null;
-    return { distanceMeters: dist, headingDeltaDeg: head, tilt: tlt };
-  }, [params]);
+  // A new shot invalidates the "Saved" badge — the user took more photos.
+  useEffect(() => {
+    setSaved(false);
+  }, [shots]);
 
-  // Position lock from sensors — what the live camera badge measured. cos²
-  // falloff via the shared scoreSnapshot helper so this screen, the live
-  // badge, and the share card all use one formula.
+  // Alignment sensor snapshot — strictly real data, taken from the FOCUSED
+  // shot's own capture-time fields. Each shot carries its own snapshot, so the
+  // album shows the right one per shot.
+  const sensorSnapshot = useMemo<SensorSnapshot | null>(
+    () => snapshotFromShot(focusedShot),
+    [focusedShot]
+  );
+  const focusedHeading = focusedShot?.heading ?? null;
+
+  // Position lock from sensors — same cos² formula the live badge uses.
   const positionScore = useMemo(
     () => (sensorSnapshot ? scoreSnapshot(sensorSnapshot) : null),
     [sensorSnapshot]
   );
 
-  // Frame match — does the photo actually look like the anime reference?
-  // Computed on mount via Skia (one decode per side at 64×64). Loading state
-  // is honest: we show "—" rather than a fake placeholder.
+  // Frame match — does the focused photo actually look like the anime
+  // reference? Recomputed whenever the focused shot changes.
   const [frameMatch, setFrameMatch] = useState<FrameMatch | null>(null);
   const [frameLoading, setFrameLoading] = useState(true);
 
@@ -142,8 +188,6 @@ export default function ComparePreviewScreen() {
 
   const retakeTip = useMemo(() => getRetakeTip(sensorSnapshot), [sensorSnapshot]);
 
-  // The big number = frame match (what the user perceives as "did my photo
-  // match"). Position lock is shown alongside but smaller.
   const frameTone = useMemo(() => {
     if (frameMatch?.total == null) return theme.accent;
     if (!frameMatch.valid) return theme.status.error;
@@ -207,26 +251,28 @@ export default function ComparePreviewScreen() {
     [stageWidth]
   );
 
-  const persistCapture = useCallback(
-    async (compositeUri?: string) => {
-      const enrichedSnapshot: SensorSnapshot | undefined = sensorSnapshot
+  // Persist one session shot's capture record so the spot shows "captured".
+  const persistShot = useCallback(
+    async (shot: CaptureSessionShot, frame: FrameMatch | null, compositeUri?: string) => {
+      const snap = snapshotFromShot(shot);
+      const enrichedSnapshot: SensorSnapshot | undefined = snap
         ? {
-            ...sensorSnapshot,
-            frameMatch: frameMatch?.total ?? null,
-            frameValid: frameMatch ? frameMatch.valid : null,
-            frameReason: frameMatch?.reason ?? null,
+            ...snap,
+            frameMatch: frame?.total ?? null,
+            frameValid: frame ? frame.valid : null,
+            frameReason: frame?.reason ?? null,
           }
         : undefined;
       await recordCapture({
         spotId,
-        uri: shotUri,
+        uri: shot.uri,
         compositeUri,
-        capturedAt: Date.now(),
-        heading: heading ?? undefined,
+        capturedAt: shot.createdAt,
+        heading: shot.heading ?? undefined,
         sensorSnapshot: enrichedSnapshot,
       });
     },
-    [spotId, shotUri, heading, sensorSnapshot, frameMatch]
+    [spotId]
   );
 
   const snapshotComposite = useCallback(async (): Promise<string | null> => {
@@ -250,8 +296,25 @@ export default function ComparePreviewScreen() {
     return next.granted;
   }, [mediaPerm, requestMediaPerm]);
 
+  // Persist the newest shot on mount / whenever a new shot arrives so even if
+  // the user backs out without saving, the spot still shows "captured". Keyed
+  // by shot id so a "再拍" round-trip persists the freshly added shot too,
+  // without re-persisting older ones.
+  const persistedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const newest = shots[0];
+    if (!newest || persistedRef.current.has(newest.id)) return;
+    persistedRef.current.add(newest.id);
+    void persistShot(newest, null);
+  }, [shots, persistShot]);
+
   const handleSave = useCallback(async () => {
     if (saving) return;
+    // Save the selected shots; if none are selected, fall back to the focused
+    // shot. Never a silent no-op.
+    const toSave = shots.filter((s) => selectedIds.has(s.id));
+    const targets = toSave.length > 0 ? toSave : focusedShot ? [focusedShot] : [];
+    if (targets.length === 0) return;
     setSaving(true);
     hapticsBridge.success();
     try {
@@ -260,26 +323,50 @@ export default function ComparePreviewScreen() {
         setSaving(false);
         return;
       }
+      // The comparison composite is only meaningful for the focused shot's
+      // stage, so capture it once and save it alongside.
       const composite = await snapshotComposite();
-      await MediaLibrary.saveToLibraryAsync(shotUri);
+      for (const shot of targets) {
+        await MediaLibrary.saveToLibraryAsync(shot.uri);
+      }
       if (composite) {
         await MediaLibrary.saveToLibraryAsync(composite);
       }
-      await persistCapture(composite ?? undefined);
+      // Persist the focused shot's record with its frame-match analysis +
+      // composite; other selected shots persist their raw record.
+      for (const shot of targets) {
+        const isFocused = shot.id === focusedShot?.id;
+        await persistShot(
+          shot,
+          isFocused ? frameMatch : null,
+          isFocused ? composite ?? undefined : undefined
+        );
+        persistedRef.current.add(shot.id);
+      }
       setSaved(true);
     } catch (err) {
       console.warn('save failed', err);
     } finally {
       setSaving(false);
     }
-  }, [saving, ensureMediaPerm, snapshotComposite, shotUri, persistCapture]);
+  }, [
+    saving,
+    shots,
+    selectedIds,
+    focusedShot,
+    ensureMediaPerm,
+    snapshotComposite,
+    persistShot,
+    frameMatch,
+  ]);
 
   const handleShare = useCallback(() => {
+    if (!focusedShot) return;
     hapticsBridge.tap();
     const shareParams: Record<string, string> = {
       spotId,
       imageUrl,
-      shotUri,
+      shotUri: focusedShot.uri,
       name: sceneName,
       ep: ep ?? '',
       animeId: animeId ?? '',
@@ -288,9 +375,6 @@ export default function ComparePreviewScreen() {
       spotLat: spotLat ?? '',
       spotLng: spotLng ?? '',
     };
-    // matchScore is now the *frame* match (what the user perceives as "did my
-    // photo match the anime"). The position lock travels separately so the
-    // share card can show both honestly.
     if (frameMatch?.total != null) {
       shareParams.matchScore = String(Math.round(frameMatch.total * 100));
     }
@@ -307,9 +391,9 @@ export default function ComparePreviewScreen() {
     });
   }, [
     router,
+    focusedShot,
     spotId,
     imageUrl,
-    shotUri,
     sceneName,
     ep,
     animeId,
@@ -326,11 +410,78 @@ export default function ComparePreviewScreen() {
     router.back();
   }, [router]);
 
-  useEffect(() => {
-    // Persist the raw shot immediately on mount so even if user backs out
-    // without saving, the spot still shows "captured" status.
-    void persistCapture();
-  }, [persistCapture]);
+  const handleFocusShot = useCallback((id: string) => {
+    hapticsBridge.selection();
+    setFocusedShotId(id);
+  }, []);
+
+  const handleToggleSelect = useCallback((id: string) => {
+    hapticsBridge.selection();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleDeleteShot = useCallback(
+    (id: string) => {
+      hapticsBridge.warning();
+      removeShot(id);
+    },
+    [removeShot]
+  );
+
+  // ── Empty state ────────────────────────────────────────────────────────
+  if (shots.length === 0) {
+    return (
+      <GestureHandlerRootView
+        style={[styles.root, { backgroundColor: theme.background.primary }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={14}
+              style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Back">
+              <Ionicons name="chevron-back" size={22} color={theme.text.primary} />
+            </Pressable>
+            <View style={styles.headerMid}>
+              <ThemedText variant="titleLarge" weight="700" align="center" numberOfLines={1}>
+                Comparison Result
+              </ThemedText>
+            </View>
+            <View style={styles.headerBtn} />
+          </View>
+          <View style={styles.emptyWrap}>
+            <Ionicons name="images-outline" size={48} color={theme.text.tertiary} />
+            <ThemedText variant="titleMedium" weight="700" align="center">
+              No shots yet
+            </ThemedText>
+            <ThemedText variant="bodySmall" tone="secondary" align="center">
+              Head back to the camera to capture this spot.
+            </ThemedText>
+            <Pressable
+              onPress={handleRetake}
+              style={({ pressed }) => [
+                styles.emptyBtn,
+                { backgroundColor: themeColor, opacity: pressed ? 0.88 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Retake">
+              <Ionicons name="camera" size={18} color="#000" />
+              <ThemedText variant="bodyMedium" weight="700" style={{ color: '#000' }}>
+                Retake
+              </ThemedText>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={[styles.root, { backgroundColor: theme.background.primary }]}>
@@ -352,6 +503,7 @@ export default function ComparePreviewScreen() {
             <ThemedText variant="captionSmall" tone="secondary" align="center" numberOfLines={1}>
               {ep ? `EP ${ep} · ` : ''}
               {sceneName}
+              {shots.length > 1 ? ` · ${shots.length} shots` : ''}
             </ThemedText>
           </View>
           <Pressable
@@ -368,6 +520,17 @@ export default function ComparePreviewScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
+          <Filmstrip
+            shots={shots}
+            focusedShotId={focusedShot?.id ?? null}
+            selectedIds={selectedIds}
+            accent={themeColor}
+            theme={theme}
+            onFocus={handleFocusShot}
+            onToggleSelect={handleToggleSelect}
+            onDelete={handleDeleteShot}
+          />
+
           {frameBannerText ? (
             <View
               style={[
@@ -715,7 +878,7 @@ export default function ComparePreviewScreen() {
             episode={ep}
             spotLat={spotLat}
             spotLng={spotLng}
-            heading={heading}
+            heading={focusedHeading}
           />
         </ScrollView>
 
@@ -739,28 +902,119 @@ export default function ComparePreviewScreen() {
           </Pressable>
           <Pressable
             onPress={handleSave}
-            disabled={saving || saved}
+            disabled={saving}
             style={({ pressed }) => [
               styles.footerBtn,
               {
                 backgroundColor: themeColor,
-                opacity: saving || saved ? 0.7 : pressed ? 0.88 : 1,
+                borderColor: themeColor,
+                opacity: saving ? 0.7 : pressed ? 0.88 : 1,
               },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Save to library">
+            accessibilityLabel={
+              selectedCount > 0 ? `Save ${selectedCount} shots to library` : 'Save to library'
+            }>
             {saving ? (
               <ActivityIndicator size="small" color="#000" />
             ) : (
               <Ionicons name={saved ? 'checkmark' : 'download'} size={18} color="#000" />
             )}
             <ThemedText variant="bodyMedium" weight="700" style={{ color: '#000' }}>
-              {saved ? 'Saved' : 'Save'}
+              {saved
+                ? 'Saved'
+                : selectedCount > 1
+                  ? `Save ${selectedCount}`
+                  : 'Save'}
             </ThemedText>
           </Pressable>
         </View>
       </SafeAreaView>
     </GestureHandlerRootView>
+  );
+}
+
+function Filmstrip({
+  shots,
+  focusedShotId,
+  selectedIds,
+  accent,
+  theme,
+  onFocus,
+  onToggleSelect,
+  onDelete,
+}: {
+  shots: readonly CaptureSessionShot[];
+  focusedShotId: string | null;
+  selectedIds: Set<string>;
+  accent: string;
+  theme: ThemePalette;
+  onFocus: (id: string) => void;
+  onToggleSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.filmstrip}>
+      {shots.map((shot) => {
+        const focused = shot.id === focusedShotId;
+        const selected = selectedIds.has(shot.id);
+        return (
+          <View key={shot.id} style={styles.thumbWrap}>
+            <Pressable
+              onPress={() => onFocus(shot.id)}
+              onLongPress={() => onDelete(shot.id)}
+              style={({ pressed }) => [
+                styles.thumb,
+                {
+                  borderColor: focused ? accent : theme.glassBorder,
+                  borderWidth: focused ? 2.5 : 1,
+                },
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={focused ? 'Focused shot' : 'Focus this shot'}>
+              <Image source={{ uri: shot.uri }} style={styles.thumbImage} contentFit="cover" />
+              {shot.captureMode !== 'single' ? (
+                <View style={[styles.thumbModeBadge, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+                  <ThemedText
+                    variant="captionSmall"
+                    weight="700"
+                    style={{ color: '#fff', fontSize: 9 }}>
+                    {shot.captureMode === 'burst' ? 'BURST' : 'HDR'}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable
+              onPress={() => onToggleSelect(shot.id)}
+              hitSlop={10}
+              style={[
+                styles.thumbSelect,
+                {
+                  backgroundColor: selected ? accent : 'rgba(0,0,0,0.55)',
+                  borderColor: selected ? accent : 'rgba(255,255,255,0.7)',
+                },
+              ]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={selected ? 'Deselect shot' : 'Select shot'}>
+              {selected ? <Ionicons name="checkmark" size={14} color="#000" /> : null}
+            </Pressable>
+            <Pressable
+              onPress={() => onDelete(shot.id)}
+              hitSlop={10}
+              style={[styles.thumbDelete, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Delete shot">
+              <Ionicons name="close" size={13} color="#fff" />
+            </Pressable>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -973,6 +1227,72 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 12,
     gap: 12,
+  },
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    minHeight: Size.minTouchTarget,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  filmstrip: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+  },
+  thumbWrap: {
+    width: 76,
+    height: 100,
+  },
+  thumb: {
+    width: 76,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbModeBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  thumbSelect: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbDelete: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scoreCard: {
     flexDirection: 'row',
