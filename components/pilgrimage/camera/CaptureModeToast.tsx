@@ -25,9 +25,9 @@ interface ModeCopy {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
-// Frame counts are the real values the capture hooks use — useBurstCapture
-// fires 6 frames, usePseudoHDR blends 3 exposures. Keep these in sync if those
-// hooks change (CLAUDE.md Rule 8 — copy must not claim a count we don't ship).
+// Frame counts are the real values the capture hooks use. Android may use
+// CameraX HDR extension instead of the pseudo-HDR stack when the device
+// reports it, so HDR copy is resolved at render time.
 const MODE_COPY: Record<CaptureMode, ModeCopy> = {
   single: { label: 'Photo', hint: 'One sharp shot', icon: 'camera-outline' },
   burst: {
@@ -50,6 +50,7 @@ interface CaptureModeToastProps {
   /** `null` until the first mode change; a fresh object each change re-fires. */
   toast: CaptureModeToastValue | null;
   themeColor: string;
+  nativeHdrActive?: boolean;
 }
 
 /**
@@ -58,7 +59,11 @@ interface CaptureModeToastProps {
  * permanent caption near the shutter, so this is the moment of feedback that
  * tells the user what the next shutter press will do.
  */
-export default function CaptureModeToast({ toast, themeColor }: CaptureModeToastProps) {
+export default function CaptureModeToast({
+  toast,
+  themeColor,
+  nativeHdrActive = false,
+}: CaptureModeToastProps) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(8);
 
@@ -80,7 +85,13 @@ export default function CaptureModeToast({ toast, themeColor }: CaptureModeToast
   }));
 
   if (!toast) return null;
-  const copy = MODE_COPY[toast.mode];
+  const copy =
+    toast.mode === 'hdr' && nativeHdrActive
+      ? {
+          ...MODE_COPY.hdr,
+          hint: 'Uses Android native HDR when available',
+        }
+      : MODE_COPY[toast.mode];
 
   return (
     <Animated.View pointerEvents="none" style={[styles.toast, animatedStyle]}>

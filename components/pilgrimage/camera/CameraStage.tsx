@@ -13,7 +13,7 @@
 // with a spinner + label, used by the parent while waiting for the first
 // `onCameraReady` after a (re-)mount.
 import type { RefObject } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import {
   CameraView,
   type AvailableLenses,
@@ -30,6 +30,7 @@ import {
   type TapGesture,
 } from 'react-native-gesture-handler';
 import { useTheme } from '../../../context/ThemeContext';
+import type { AndroidCameraExtensionMode } from '../../../libs/services/pilgrimage/native-camera';
 import { ThemedText } from '../../themed';
 import BrightnessPreview from './BrightnessPreview';
 
@@ -37,6 +38,8 @@ interface CameraStageProps {
   cameraRef: RefObject<CameraView | null>;
   facing: CameraType;
   zoom: number;
+  androidZoomRatio?: number;
+  androidCameraExtensionMode?: AndroidCameraExtensionMode;
   autofocus: FocusMode;
   flashMode: FlashMode;
   enableTorch: boolean;
@@ -75,6 +78,8 @@ export default function CameraStage({
   cameraRef,
   facing,
   zoom,
+  androidZoomRatio,
+  androidCameraExtensionMode,
   autofocus,
   flashMode,
   enableTorch,
@@ -95,11 +100,20 @@ export default function CameraStage({
   showWarmup,
 }: CameraStageProps) {
   const { theme } = useTheme();
+  const androidNativeProps =
+    Platform.OS === 'android'
+      ? ({
+          zoomRatio: androidZoomRatio,
+          cameraExtensionMode: androidCameraExtensionMode ?? 'none',
+        } as Record<string, unknown>)
+      : {};
+
   return (
     <View style={styles.root}>
       <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, tapGesture)}>
         <View style={StyleSheet.absoluteFill}>
           <CameraView
+            {...androidNativeProps}
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
             facing={facing}
@@ -130,8 +144,7 @@ export default function CameraStage({
                 StyleSheet.absoluteFill,
                 styles.warmup,
                 { backgroundColor: theme.background.primary, opacity: 0.5 },
-              ]}
-            >
+              ]}>
               <View style={styles.warmupInner}>
                 <ActivityIndicator color={theme.accent} />
                 <ThemedText variant="bodyMedium" tone="secondary" style={styles.warmupLabel}>

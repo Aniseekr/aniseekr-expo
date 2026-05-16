@@ -166,6 +166,20 @@ describe('zoomForPosition with a 0.5x ultrawide detent', () => {
     expect(positionForZoom(STOP_ZOOM[2], detents)).toBeCloseTo(SEGMENT_PX * 2, 6);
     expect(positionForZoom(STOP_ZOOM[3], detents)).toBeCloseTo(SEGMENT_PX * 3, 6);
   });
+
+  it('supports Android native zoom-out when 1x has its own zoom value', () => {
+    const nativeZoom: StopZoomMap = {
+      0.5: 0,
+      1: 0.25,
+      2: 0.5,
+      3: 0.65,
+    };
+    const nativeDetents = buildDetents([0.5, 1, 2, 3], nativeZoom);
+
+    expect(zoomForPosition(0, nativeDetents)).toBeCloseTo(nativeZoom[0.5], 10);
+    expect(zoomForPosition(SEGMENT_PX, nativeDetents)).toBeCloseTo(nativeZoom[1], 10);
+    expect(zoomForPosition(SEGMENT_PX / 2, nativeDetents)).toBeCloseTo(0.125, 10);
+  });
 });
 
 describe('nearestDetent', () => {

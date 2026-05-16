@@ -43,6 +43,13 @@ import {
   pickAutoVirtualLens,
   stopForLens,
 } from '../../../../libs/services/pilgrimage/lens-switching';
+import {
+  androidCameraExtensionModeForCapture,
+  androidNativeStopsForCapabilities,
+  androidStopZoomMap,
+  shouldUseAndroidNativeHdr,
+  zoomRatioForZoomValue,
+} from '../../../../libs/services/pilgrimage/native-camera';
 import CameraErrorBoundary from '../../../../components/pilgrimage/camera/CameraErrorBoundary';
 import CameraStage from '../../../../components/pilgrimage/camera/CameraStage';
 import OverlayLayer from '../../../../components/pilgrimage/camera/OverlayLayer';
@@ -92,6 +99,7 @@ import { useCaptureCountdown } from '../../../../hooks/useCaptureCountdown';
 import { usePseudoHDR } from '../../../../hooks/usePseudoHDR';
 import { useAutoCapture } from '../../../../hooks/useAutoCapture';
 import { useCaptureSession } from '../../../../hooks/useCaptureSession';
+import { useAndroidCameraNativeCapabilities } from '../../../../hooks/useAndroidCameraNativeCapabilities';
 import {
   getShots as getCaptureSessionShots,
   type CaptureSessionShot,
@@ -191,8 +199,24 @@ export default function CompareCaptureScreen() {
 
   const { settings, setSettings } = useCameraSettings();
   const lifecycle = useCameraLifecycle(true);
+  const { capabilities: androidNativeCapabilities, refresh: refreshAndroidNativeCapabilities } =
+    useAndroidCameraNativeCapabilities({ cameraRef });
+  const androidNativeStops = useMemo(
+    () => androidNativeStopsForCapabilities(androidNativeCapabilities),
+    [androidNativeCapabilities]
+  );
+  const androidNativeStopZoom = useMemo(
+    () => androidStopZoomMap(androidNativeCapabilities),
+    [androidNativeCapabilities]
+  );
+  const useAndroidNativeZoom =
+    Platform.OS === 'android' && facing === 'back' && androidNativeCapabilities !== null;
 
-  const zoom = useCameraZoom({ initial: 1 });
+  const zoom = useCameraZoom({
+    initial: 1,
+    stops: useAndroidNativeZoom ? androidNativeStops : undefined,
+    stopZoom: useAndroidNativeZoom ? androidNativeStopZoom : undefined,
+  });
   const tapFocus = useTapToFocus({ lockTimeoutMs: 5000 });
   const lensSwitcher = useLensSwitcher({ cameraRef });
   const {
@@ -288,6 +312,7 @@ export default function CompareCaptureScreen() {
   const handleCameraReady = useCallback(() => {
     onCameraReady();
     void refreshAvailableLenses();
+    void refreshAndroidNativeCapabilities();
     const cam = cameraRef.current;
     if (cam && typeof cam.getAvailablePictureSizesAsync === 'function') {
       cam
@@ -297,11 +322,27 @@ export default function CompareCaptureScreen() {
         })
         .catch(() => undefined);
     }
-  }, [onCameraReady, refreshAvailableLenses]);
+  }, [onCameraReady, refreshAvailableLenses, refreshAndroidNativeCapabilities]);
 
   // CameraView.flash only accepts 'on'|'off'|'auto'; torch surfaces via enableTorch.
   const enableTorch = flashMode === 'torch';
   const cameraFlash: 'on' | 'off' | 'auto' = flashMode === 'torch' ? 'off' : flashMode;
+  const androidCameraExtensionMode = androidCameraExtensionModeForCapture(
+    Platform.OS,
+    settings.captureMode,
+    androidNativeCapabilities
+  );
+  const androidNativeHdrTargeted = shouldUseAndroidNativeHdr(
+    Platform.OS,
+    settings.captureMode,
+    androidNativeCapabilities
+  );
+  const androidNativeHdrReady =
+    androidNativeHdrTargeted && androidNativeCapabilities?.activeExtensionMode === 'hdr';
+  const androidZoomRatio =
+    Platform.OS === 'android' && useAndroidNativeZoom
+      ? zoomRatioForZoomValue(zoom.zoom, androidNativeCapabilities)
+      : undefined;
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -330,7 +371,8 @@ export default function CompareCaptureScreen() {
   // different physical lens set per camera) so the zoom dial reflects reality.
   useEffect(() => {
     void refreshAvailableLenses();
-  }, [facing, refreshAvailableLenses]);
+    void refreshAndroidNativeCapabilities();
+  }, [facing, refreshAvailableLenses, refreshAndroidNativeCapabilities]);
 
   const toggleFacing = useCallback(() => {
     hapticsBridge.selection();
@@ -626,7 +668,10 @@ export default function CompareCaptureScreen() {
   );
 
   const runSingle = useCallback(
-    async (source: 'manual' | 'auto' = 'manual'): Promise<CaptureSessionShot | null> => {
+    async (
+      source: 'manual' | 'auto' = 'manual',
+      captureMode: CaptureMode = 'single'
+    ): Promise<CaptureSessionShot | null> => {
       if (!cameraRef.current) return null;
       setCapturing(true);
       try {
@@ -720,7 +765,7 @@ export default function CompareCaptureScreen() {
           uri: baked.uri,
           width: baked.width || captured.width,
           height: baked.height || captured.height,
-          captureMode: 'single',
+          captureMode,
           source,
         });
       } catch (e) {
@@ -770,6 +815,9 @@ export default function CompareCaptureScreen() {
 
   const runHdr = useCallback(
     async (source: 'manual' | 'auto' = 'manual'): Promise<CaptureSessionShot | null> => {
+      if (androidNativeHdrReady) {
+        return runSingle(source, 'hdr');
+      }
       const result = await hdr.run();
       if (!result) return null;
       tapFocus.releaseLock();
@@ -783,7 +831,7 @@ export default function CompareCaptureScreen() {
         source,
       });
     },
-    [hdr, tapFocus, recordShot]
+    [androidNativeHdrReady, runSingle, hdr, tapFocus, recordShot]
   );
 
   const anyCapturing = capturing || burst.capturing || hdr.capturing;
@@ -938,6 +986,12 @@ export default function CompareCaptureScreen() {
   const activeFocalStop = hasOpticalZoom
     ? (stopForLens(selectedLens) as FocalStop | null)
     : zoom.activeStop;
+  const dialAvailableStops = hasOpticalZoom
+    ? availableStops
+    : useAndroidNativeZoom
+      ? androidNativeStops
+      : undefined;
+  const dialStopZoom = useAndroidNativeZoom ? androidNativeStopZoom : STOP_TO_ZOOM;
   // Android edge-to-edge can report insets.bottom as 0 even when the gesture
   // navigation bar (海帶條) is drawn over the window — floor it so the shutter
   // row + HUD layers always clear the system bar. iOS insets are used as-is.
@@ -969,9 +1023,9 @@ export default function CompareCaptureScreen() {
       zoomShared={zoom.zoomShared}
       activeStop={activeFocalStop}
       themeColor={themeColor}
-      availableStops={hasOpticalZoom ? availableStops : undefined}
+      availableStops={dialAvailableStops}
       isFrontFacing={facing === 'front'}
-      stopZoom={STOP_TO_ZOOM}
+      stopZoom={dialStopZoom}
       onPickFocalStop={onPickFocalStop}
       virtualLenses={virtualLenses}
       virtualActive={isVirtualLensActive}
@@ -992,6 +1046,8 @@ export default function CompareCaptureScreen() {
             cameraRef={cameraRef}
             facing={facing}
             zoom={zoom.zoom}
+            androidZoomRatio={androidZoomRatio}
+            androidCameraExtensionMode={androidCameraExtensionMode}
             autofocus={tapFocus.autofocus}
             flashMode={cameraFlash}
             enableTorch={enableTorch}
@@ -1268,7 +1324,11 @@ export default function CompareCaptureScreen() {
                 }
               : { left: 0, right: 0, bottom: bottomBarHeight + 84 },
           ]}>
-          <CaptureModeToast toast={captureModeToast} themeColor={themeColor} />
+          <CaptureModeToast
+            toast={captureModeToast}
+            themeColor={themeColor}
+            nativeHdrActive={androidNativeHdrTargeted}
+          />
           <OverlayOpacityToast toast={overlayOpacityToast} themeColor={themeColor} />
           <AutoCaptureToast toast={autoCaptureToast} themeColor={themeColor} />
         </View>

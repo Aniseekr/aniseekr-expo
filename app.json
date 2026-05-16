@@ -11,6 +11,7 @@
       "tsconfigPaths": true
     },
     "plugins": [
+      "./plugins/with-android-camera-native-layer.js",
       "./plugins/with-vibration-bridge.js",
       [
         "expo-notifications",
@@ -81,9 +82,7 @@
       "resizeMode": "cover",
       "backgroundColor": "#0A1929"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "kidneyweakx.aniseeker",

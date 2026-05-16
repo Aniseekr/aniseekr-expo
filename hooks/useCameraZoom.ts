@@ -6,7 +6,7 @@
 // Stop→zoom is COMPUTED from an exponential inverse (see STOP_TO_ZOOM below),
 // not hand-calibrated. It still relies on an assumed videoMaxZoomFactor, so
 // treat 2×/3× as approximate and field-test before relying on exact parity.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { Gesture, type PinchGesture } from 'react-native-gesture-handler';
 import {
   Easing,
@@ -76,6 +76,7 @@ export interface UseCameraZoomInput {
   maxZoom?: number;
   stops?: FocalStop[];
   initial?: FocalStop;
+  stopZoom?: Record<FocalStop, ZoomValue>;
 }
 
 export interface UseCameraZoomOutput {
@@ -100,11 +101,15 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
-function nearestStopJS(z: number, stops: FocalStop[]): FocalStop | null {
+function nearestStopJS(
+  z: number,
+  stops: FocalStop[],
+  stopZoom: Record<FocalStop, ZoomValue>
+): FocalStop | null {
   let best: FocalStop | null = null;
   let bestDelta = Infinity;
   for (const stop of stops) {
-    const delta = Math.abs(z - STOP_TO_ZOOM[stop]);
+    const delta = Math.abs(z - stopZoom[stop]);
     if (delta < bestDelta) {
       bestDelta = delta;
       best = stop;
@@ -119,12 +124,20 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
   const maxZoom = input?.maxZoom ?? 1;
   const stops = input?.stops ?? DEFAULT_STOPS;
   const initial = input?.initial ?? 1;
+  const stopZoom = input?.stopZoom ?? STOP_TO_ZOOM;
 
-  const zoomShared = useSharedValue<number>(STOP_TO_ZOOM[initial]);
-  const savedZoom = useSharedValue<number>(STOP_TO_ZOOM[initial]);
+  const zoomShared = useSharedValue<number>(stopZoom[initial]);
+  const savedZoom = useSharedValue<number>(stopZoom[initial]);
   const lastUpdate = useSharedValue<number>(0);
 
-  const [zoom, setZoomState] = useState<number>(STOP_TO_ZOOM[initial]);
+  const [zoom, setZoomState] = useState<number>(stopZoom[initial]);
+
+  useLayoutEffect(() => {
+    const target = stopZoom[initial];
+    zoomShared.value = target;
+    savedZoom.value = target;
+    setZoomState(target);
+  }, [initial, savedZoom, stopZoom, zoomShared]);
 
   // Throttled JS-state mirror of the shared value. Same shape as the rotation
   // throttle in useOverlayTransform — keeps React renders bounded while the
@@ -156,9 +169,9 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
           let target: number | null = null;
           let snapped: FocalStop | null = null;
           for (const stop of stops) {
-            const delta = Math.abs(zoomShared.value - STOP_TO_ZOOM[stop]);
+            const delta = Math.abs(zoomShared.value - stopZoom[stop]);
             if (delta < SNAP_TOLERANCE) {
-              target = STOP_TO_ZOOM[stop];
+              target = stopZoom[stop];
               snapped = stop;
               break;
             }
@@ -168,7 +181,7 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
             if (snapped !== null) runOnJS(snapToStop)(snapped);
           }
         }),
-    [zoomShared, savedZoom, minZoom, maxZoom, stops, snapToStop]
+    [zoomShared, savedZoom, minZoom, maxZoom, stops, stopZoom, snapToStop]
   );
 
   const setZoom = useCallback(
@@ -182,17 +195,17 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
 
   const setStop = useCallback(
     (s: FocalStop) => {
-      const target = STOP_TO_ZOOM[s];
+      const target = stopZoom[s];
       zoomShared.value = withTiming(target, ZOOM_TWEEN);
       setZoomState(target);
       hapticsBridge.selection();
     },
-    [zoomShared]
+    [zoomShared, stopZoom]
   );
 
   const activeStop = useMemo<FocalStop | null>(
-    () => nearestStopJS(zoom, stops),
-    [zoom, stops]
+    () => nearestStopJS(zoom, stops, stopZoom),
+    [zoom, stops, stopZoom]
   );
 
   return { zoom, activeStop, setZoom, setStop, pinchGesture, zoomShared };
