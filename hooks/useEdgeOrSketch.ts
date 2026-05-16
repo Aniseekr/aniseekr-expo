@@ -14,6 +14,7 @@ interface UseEdgeOrSketchInput {
 interface UseEdgeOrSketchOutput {
   image: SkImage | null;
   loading: boolean;
+  error: Error | null;
 }
 
 export function useEdgeOrSketch({
@@ -21,20 +22,28 @@ export function useEdgeOrSketch({
   hiResImageUrl,
   themeColor,
 }: UseEdgeOrSketchInput): UseEdgeOrSketchOutput {
-  const { edgeImage, loading: edgeLoading } = useEdgeImage(
-    mode === 'edge' ? hiResImageUrl : null,
-    { inkColor: themeColor, inkOpacity: 1 }
-  );
-  const { sketchImage, loading: sketchLoading } = useSketchImage(
-    mode === 'sketch' ? hiResImageUrl : null,
-    { inkColor: '#1A1A1A', inkOpacity: 1 }
-  );
+  const {
+    edgeImage,
+    loading: edgeLoading,
+    error: edgeError,
+  } = useEdgeImage(mode === 'edge' ? hiResImageUrl : null, {
+    inkColor: themeColor,
+    inkOpacity: 1,
+  });
+  const {
+    sketchImage,
+    loading: sketchLoading,
+    error: sketchError,
+  } = useSketchImage(mode === 'sketch' ? hiResImageUrl : null, {
+    inkColor: '#1A1A1A',
+    inkOpacity: 1,
+  });
 
   if (mode === 'edge') {
-    return { image: edgeImage, loading: edgeLoading };
+    return { image: edgeImage, loading: edgeLoading, error: edgeError };
   }
   if (mode === 'sketch') {
-    return { image: sketchImage, loading: sketchLoading };
+    return { image: sketchImage, loading: sketchLoading, error: sketchError };
   }
-  return { image: null, loading: false };
+  return { image: null, loading: false, error: null };
 }

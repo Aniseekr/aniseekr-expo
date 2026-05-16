@@ -7,6 +7,7 @@ import Animated from 'react-native-reanimated';
 import type { AnimatedStyle } from 'react-native-reanimated';
 import { Canvas, Image as SkiaImage } from '@shopify/react-native-skia';
 import type { SkImage } from '@shopify/react-native-skia';
+import { ThemedText } from '../../themed';
 import type { OverlayMode } from './types';
 
 interface OverlayLayerProps {
@@ -21,6 +22,7 @@ interface OverlayLayerProps {
   animatedStyle: StyleProp<AnimatedStyle<ViewStyle>>;
   edgeOrSketchImage: SkImage | null;
   edgeOrSketchLoading: boolean;
+  edgeOrSketchError?: Error | null;
 }
 
 export default function OverlayLayer({
@@ -35,6 +37,7 @@ export default function OverlayLayer({
   animatedStyle,
   edgeOrSketchImage,
   edgeOrSketchLoading,
+  edgeOrSketchError = null,
 }: OverlayLayerProps) {
   const content = (
     <OverlayContent
@@ -46,6 +49,7 @@ export default function OverlayLayer({
       themeColor={themeColor}
       edgeOrSketchImage={edgeOrSketchImage}
       edgeOrSketchLoading={edgeOrSketchLoading}
+      edgeOrSketchError={edgeOrSketchError}
     />
   );
 
@@ -79,6 +83,7 @@ interface OverlayContentProps {
   themeColor: string;
   edgeOrSketchImage: SkImage | null;
   edgeOrSketchLoading: boolean;
+  edgeOrSketchError: Error | null;
 }
 
 function OverlayContent({
@@ -90,6 +95,7 @@ function OverlayContent({
   themeColor,
   edgeOrSketchImage,
   edgeOrSketchLoading,
+  edgeOrSketchError,
 }: OverlayContentProps) {
   if (mode === 'anime') {
     return (
@@ -108,8 +114,20 @@ function OverlayContent({
       </View>
     );
   }
-  // Rule 8: no placeholder when the Skia image is missing and not loading.
-  // Caller decides whether to render a "preview unavailable" tile.
+  // Rule 8: a Skia failure must read as a real error, never a blank screen.
+  // The compact scrim tile sits over the live camera (camera-scrim exception).
+  if (!edgeOrSketchImage && edgeOrSketchError) {
+    return (
+      <View style={[styles.overlayWrap, styles.edgeLoader]}>
+        <View style={styles.errorTile}>
+          <ThemedText variant="captionSmall" weight="700" style={styles.errorText}>
+            無法載入描邊
+          </ThemedText>
+        </View>
+      </View>
+    );
+  }
+  // No image, no error, not loading — nothing to draw.
   if (!edgeOrSketchImage) return null;
   return (
     <Canvas style={[styles.overlayImage, { width: winW, height: winH, opacity }]}>
@@ -142,4 +160,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // rgba scrim over the live camera preview (CLAUDE.md camera-scrim exception).
+  errorTile: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  errorText: { color: '#fff' },
 });
