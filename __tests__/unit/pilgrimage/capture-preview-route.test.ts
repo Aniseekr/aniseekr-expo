@@ -20,6 +20,10 @@ describe('capture preview route shot hydration', () => {
       distanceMeters: '12.5',
       headingDeltaDeg: '-4.25',
       tilt: '1.5',
+      userLat: '35.6812',
+      userLng: '139.7671',
+      shotSource: 'library',
+      note: 'Near the west exit',
     };
 
     expect(buildCaptureSessionShotFromRoute(params)).toEqual({
@@ -28,12 +32,14 @@ describe('capture preview route shot hydration', () => {
       width: 1440,
       height: 1080,
       captureMode: 'single',
-      source: 'manual',
+      source: 'library',
       createdAt: 1710000000000,
       heading: 182.4,
       distanceMeters: 12.5,
       headingDeltaDeg: -4.25,
       tilt: 1.5,
+      userLocation: { latitude: 35.6812, longitude: 139.7671 },
+      note: 'Near the west exit',
     });
   });
 
@@ -55,6 +61,7 @@ function shot(id: string): CaptureSessionShot {
     distanceMeters: null,
     headingDeltaDeg: null,
     tilt: null,
+    userLocation: null,
   };
 }
 
