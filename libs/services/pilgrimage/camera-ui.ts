@@ -17,12 +17,6 @@ export interface CameraActiveInput {
   settingsOpen: boolean;
 }
 
-export interface CameraOrientationSettleInput {
-  previousIsLandscape: boolean | null;
-  isLandscape: boolean;
-  resyncPending: boolean;
-}
-
 // Fixed camera chrome — solid black letterbox bars. Portrait pins a bar top +
 // bottom; landscape turns it into a pillarbox (left rail + right rail). These
 // content sizes EXCLUDE the safe-area inset / home-indicator pad; the screen
@@ -122,13 +116,6 @@ export function cameraOrientationLockIntent(
   mode: CameraOrientationMode
 ): CameraOrientationLockIntent {
   return mode === 'landscape' ? 'landscape' : 'unlock';
-}
-
-export function shouldRemountCameraForOrientationSettle(
-  input: CameraOrientationSettleInput
-): boolean {
-  if (input.resyncPending) return true;
-  return input.previousIsLandscape !== null && input.previousIsLandscape !== input.isLandscape;
 }
 
 export function roundExposureValue(value: number): number {

@@ -39,7 +39,6 @@ import {
   resolveCameraToolMenuAnchor,
   resolveCameraActive,
   resolveTransientCameraHudVisibility,
-  shouldRemountCameraForOrientationSettle,
   type CameraOrientationMode,
 } from '../../../../libs/services/pilgrimage/camera-ui';
 import {
@@ -491,7 +490,6 @@ export default function CompareCaptureScreen() {
   const [cameraEpoch, setCameraEpoch] = useState(0);
   const orientationResyncPending = useRef(false);
   const orientationInitDone = useRef(false);
-  const previousIsLandscape = useRef<boolean | null>(null);
 
   useEffect(() => {
     const lockIntent = cameraOrientationLockIntent(orientationMode);
@@ -516,19 +514,22 @@ export default function CompareCaptureScreen() {
     return () => clearTimeout(disarm);
   }, [orientationMode]);
 
-  // Once a rotation settles (window dimensions swap), remount CameraView so a
-  // fresh native capture session adopts the new surface dimensions. This is
-  // needed both for the LAND chip and for physical rotations in auto mode:
-  // CameraX/AVCapture can leave the old preview surface black after the React
-  // layout flips under an already-running session.
+  // Remount CameraView once after the LAND chip's *programmatic* rotation
+  // settles. iOS CameraView never observes the rotation expo-screen-orientation
+  // performs, so its live preview stays sideways until the native capture
+  // session is rebuilt. `orientationResyncPending` is armed by the chip effect
+  // above and consumed here when the rotation finally swaps the window
+  // dimensions — `isLandscape` is only the trigger, not read in the body.
+  //
+  // A *physical* rotation in auto mode must NOT remount: expo-camera realigns
+  // its own preview surface natively (Android re-lays the PreviewView on the
+  // size change, iOS handles `orientationDidChangeNotification`). Remounting
+  // there instead races CameraX's process-wide `ProcessCameraProvider` — the
+  // torn-down view's `unbindAll()` can unbind the freshly-bound new camera and
+  // leave the preview black with no spinner and no error. So this effect acts
+  // only on the armed resync flag, never on a bare `isLandscape` change.
   useEffect(() => {
-    const shouldRemount = shouldRemountCameraForOrientationSettle({
-      previousIsLandscape: previousIsLandscape.current,
-      isLandscape,
-      resyncPending: orientationResyncPending.current,
-    });
-    previousIsLandscape.current = isLandscape;
-    if (!shouldRemount) return;
+    if (!orientationResyncPending.current) return;
     orientationResyncPending.current = false;
     resetCameraLifecycle();
     setCameraEpoch((epoch) => epoch + 1);
