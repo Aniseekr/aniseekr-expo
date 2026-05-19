@@ -9,15 +9,36 @@ import {
   COUNTDOWN_SECONDS,
   RESOLUTION_TIERS,
   type CameraSettings,
+  type CaptureMode,
   type CountdownSeconds,
   type ResolutionTier,
 } from '../../../hooks/useCameraSettings';
+import type { AspectRatio } from './types';
+
+const CAPTURE_MODES: CaptureMode[] = ['single', 'burst', 'hdr'];
+const CAPTURE_MODE_LABEL: Record<CaptureMode, string> = {
+  single: 'Single',
+  burst: 'Burst',
+  hdr: 'HDR',
+};
+
+const ASPECT_RATIOS: AspectRatio[] = ['16:9', '4:3', '1:1', 'full'];
+const ASPECT_LABEL: Record<AspectRatio, string> = {
+  '16:9': '16:9',
+  '4:3': '4:3',
+  '1:1': '1:1',
+  full: 'Full',
+};
 
 export interface CameraSettingsSheetProps {
   visible: boolean;
   onClose: () => void;
   settings: CameraSettings;
   onSettingsChange: (patch: Partial<CameraSettings>) => void;
+  aspect: AspectRatio;
+  onAspectChange: (a: AspectRatio) => void;
+  captureMode: CaptureMode;
+  onCaptureModeChange: (m: CaptureMode) => void;
 }
 
 const COUNTDOWN_LABEL: Record<CountdownSeconds, string> = {
@@ -37,6 +58,10 @@ export default function CameraSettingsSheet({
   onClose,
   settings,
   onSettingsChange,
+  aspect,
+  onAspectChange,
+  captureMode,
+  onCaptureModeChange,
 }: CameraSettingsSheetProps) {
   const { theme } = useTheme();
 
@@ -88,6 +113,31 @@ export default function CameraSettingsSheet({
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
+            <SettingsSection title="Capture mode">
+              <SegmentedRow
+                options={CAPTURE_MODES.map((m) => ({ value: m, label: CAPTURE_MODE_LABEL[m] }))}
+                value={captureMode}
+                onSelect={(m) => {
+                  hapticsBridge.selection();
+                  onCaptureModeChange(m);
+                }}
+              />
+              <ThemedText variant="caption" tone="secondary">
+                Single: one shot. Burst: 6 frames, keeps the sharpest. HDR: blends 3 exposures.
+              </ThemedText>
+            </SettingsSection>
+
+            <SettingsSection title="Aspect ratio">
+              <SegmentedRow
+                options={ASPECT_RATIOS.map((a) => ({ value: a, label: ASPECT_LABEL[a] }))}
+                value={aspect}
+                onSelect={(a) => {
+                  hapticsBridge.selection();
+                  onAspectChange(a);
+                }}
+              />
+            </SettingsSection>
+
             <SettingsSection title="Resolution">
               <SegmentedRow
                 options={RESOLUTION_TIERS.map((t) => ({ value: t, label: RESOLUTION_LABEL[t] }))}
@@ -166,7 +216,11 @@ interface SegmentedRowProps<T extends string | number> {
   onSelect: (next: T) => void;
 }
 
-function SegmentedRow<T extends string | number>({ options, value, onSelect }: SegmentedRowProps<T>) {
+function SegmentedRow<T extends string | number>({
+  options,
+  value,
+  onSelect,
+}: SegmentedRowProps<T>) {
   const { theme } = useTheme();
   return (
     <View style={styles.segmentedRow}>

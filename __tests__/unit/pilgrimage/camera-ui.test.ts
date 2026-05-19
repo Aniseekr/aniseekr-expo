@@ -3,17 +3,15 @@ import {
   ANDROID_GESTURE_NAV_MIN_INSET,
   cameraOrientationLockIntent,
   CAMERA_BOTTOM_BAR_CONTENT_HEIGHT,
-  CAMERA_SIDE_RAIL_WIDTH,
-  CAMERA_TOOL_MENU_MIN_PANEL_WIDTH,
-  CAMERA_TOOL_MENU_PANEL_GAP,
-  CAMERA_TOOL_MENU_PANEL_WIDTH,
+  CAMERA_LANDSCAPE_CLUSTER_RESERVE,
+  CAMERA_SHUTTER_ROW_HEIGHT,
   CAMERA_TOP_BAR_CONTENT_HEIGHT,
+  CAMERA_TOP_BAR_ROW2_HEIGHT,
   formatCameraHeader,
   isCameraCapturePath,
   resolveCameraBottomInset,
-  resolveCameraToolMenuAnchor,
-  resolveCameraPlaceBadgeLayout,
   resolveCameraActive,
+  resolveCameraTopChromeHeight,
   resolveTransientCameraHudVisibility,
   roundExposureValue,
 } from '../../../libs/services/pilgrimage/camera-ui';
@@ -61,81 +59,48 @@ describe('camera UI helpers', () => {
     expect(resolveCameraActive({ appIsForeground: true, settingsOpen: true })).toBe(false);
   });
 
-  it('keeps the camera tool menu panel wide enough for the nested control views', () => {
-    expect(CAMERA_TOOL_MENU_PANEL_WIDTH).toBeGreaterThanOrEqual(CAMERA_TOOL_MENU_MIN_PANEL_WIDTH);
-  });
-
-  it('drops the tool menu popover just below the fixed top bar in portrait', () => {
-    const anchor = resolveCameraToolMenuAnchor({
-      topInset: 47,
-      isLandscape: false,
-    });
-
-    expect(anchor.topOffset).toBe(47 + CAMERA_TOP_BAR_CONTENT_HEIGHT + CAMERA_TOOL_MENU_PANEL_GAP);
-    expect(anchor.rightOffset).toBe(16);
-    expect(anchor.leftOffset).toBeUndefined();
-  });
-
-  it('opens the landscape tool menu clear of the left rail', () => {
-    const anchor = resolveCameraToolMenuAnchor({
-      topInset: 24,
-      isLandscape: true,
-    });
-
-    expect(anchor.topOffset).toBe(24 + CAMERA_TOOL_MENU_PANEL_GAP);
-    expect(anchor.leftOffset).toBe(CAMERA_SIDE_RAIL_WIDTH + CAMERA_TOOL_MENU_PANEL_GAP);
-    expect(anchor.rightOffset).toBeUndefined();
-  });
-
-  it('sizes the fixed letterbox chrome large enough for its controls', () => {
+  it('keeps the slim camera chrome large enough for its controls', () => {
+    // Row 1 must clear an iOS HIG touch target; the collapsible Row-2 strip
+    // must fit its chips (36px chip + 14px padding = 50px, bound at 52).
+    // The bottom panel is shutter-only; overlay controls live in a dock that
+    // can collapse instead of permanently consuming the lower viewport.
     expect(CAMERA_TOP_BAR_CONTENT_HEIGHT).toBeGreaterThanOrEqual(44);
-    expect(CAMERA_BOTTOM_BAR_CONTENT_HEIGHT).toBeGreaterThanOrEqual(120);
-    expect(CAMERA_SIDE_RAIL_WIDTH).toBeGreaterThanOrEqual(72);
+    expect(CAMERA_BOTTOM_BAR_CONTENT_HEIGHT).toBeGreaterThanOrEqual(CAMERA_SHUTTER_ROW_HEIGHT);
+    expect(CAMERA_BOTTOM_BAR_CONTENT_HEIGHT).toBeLessThan(120);
+    expect(CAMERA_TOP_BAR_ROW2_HEIGHT).toBeGreaterThanOrEqual(44);
+    expect(CAMERA_LANDSCAPE_CLUSTER_RESERVE).toBeGreaterThanOrEqual(78);
   });
 
-  it('places the portrait place badge below the top camera function bar', () => {
+  it('adds Row-2 height only while quick controls are expanded', () => {
+    expect(resolveCameraTopChromeHeight({ quickControlsOpen: false })).toBe(
+      CAMERA_TOP_BAR_CONTENT_HEIGHT
+    );
+    expect(resolveCameraTopChromeHeight({ quickControlsOpen: true })).toBe(
+      CAMERA_TOP_BAR_CONTENT_HEIGHT + CAMERA_TOP_BAR_ROW2_HEIGHT
+    );
+  });
+
+  it('hides transient HUD layers while the overlay dock is open', () => {
     expect(
-      resolveCameraPlaceBadgeLayout({
-        isLandscape: false,
-        topInset: 44,
-        leftInset: 0,
-        rightInset: 0,
-        rightRailWidth: 0,
-      })
+      resolveTransientCameraHudVisibility({ afLocked: true, overlayControlsOpen: true })
     ).toEqual({
-      top: 104,
-      left: 16,
-      right: 16,
-    });
-  });
-
-  it('places the landscape place badge across the top of the camera window', () => {
-    expect(
-      resolveCameraPlaceBadgeLayout({
-        isLandscape: true,
-        topInset: 0,
-        leftInset: 10,
-        rightInset: 6,
-        rightRailWidth: 124,
-      })
-    ).toEqual({
-      top: 12,
-      left: 126,
-      right: 142,
-    });
-  });
-
-  it('hides transient camera HUD layers while the More menu is open', () => {
-    expect(resolveTransientCameraHudVisibility({ toolMenuOpen: true, afLocked: true })).toEqual({
       showAutoCaptureBadge: false,
       showCaptureHistory: false,
       showFocusExposureBar: false,
     });
 
-    expect(resolveTransientCameraHudVisibility({ toolMenuOpen: false, afLocked: true })).toEqual({
+    expect(
+      resolveTransientCameraHudVisibility({ afLocked: true, overlayControlsOpen: false })
+    ).toEqual({
       showAutoCaptureBadge: true,
       showCaptureHistory: true,
       showFocusExposureBar: true,
+    });
+
+    expect(resolveTransientCameraHudVisibility({ afLocked: false })).toEqual({
+      showAutoCaptureBadge: true,
+      showCaptureHistory: true,
+      showFocusExposureBar: false,
     });
   });
 

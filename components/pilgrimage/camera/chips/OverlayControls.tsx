@@ -50,8 +50,8 @@ const MODES: ModeMeta[] = [
 
 /**
  * Overlay tool controls — mode pills, opacity slider, flip toggle. Renders as
- * a flat block in normal flow (no chip, no absolute pop-out); it is mounted by
- * CameraToolMenu's drill-in sub-view, so it just needs to fill the panel width.
+ * a flat block in normal flow (no chip, no absolute pop-out); it is mounted
+ * inside the OverlayDock slide-up panel, so it just fills the panel width.
  */
 export default function OverlayControls({
   mode,
@@ -283,7 +283,10 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modePill: {
     flexGrow: 1,
-    flexBasis: '47%',
+    // Four modes across one row in the wide overlay panel; wraps on a narrow
+    // panel rather than overflowing.
+    flexBasis: '22%',
+    minWidth: 74,
     minHeight: 40,
     borderRadius: 12,
     paddingHorizontal: 8,

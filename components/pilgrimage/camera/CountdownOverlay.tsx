@@ -19,12 +19,22 @@ const POP_TO_SCALE = 1;
 const OPACITY_DURATION_MS = 160;
 const SPRING_CONFIG = { damping: 12, stiffness: 180, mass: 0.6 };
 
-export function CountdownOverlay({ remaining, themeColor: _themeColor, onCancel }: CountdownOverlayProps) {
+export function CountdownOverlay({
+  remaining,
+  themeColor: _themeColor,
+  onCancel,
+}: CountdownOverlayProps) {
   if (remaining === null || remaining < 1) return null;
   return <CountdownOverlayInner remaining={remaining} onCancel={onCancel} />;
 }
 
-function CountdownOverlayInner({ remaining, onCancel }: { remaining: number; onCancel: () => void }) {
+function CountdownOverlayInner({
+  remaining,
+  onCancel,
+}: {
+  remaining: number;
+  onCancel: () => void;
+}) {
   const scale = useSharedValue(POP_FROM_SCALE);
   const opacity = useSharedValue(0);
 
@@ -63,6 +73,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
+    // Above every camera chrome layer, including the overlay dock (z 95).
+    zIndex: 110,
   },
   center: {
     alignItems: 'center',

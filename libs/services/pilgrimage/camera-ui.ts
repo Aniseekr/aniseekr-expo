@@ -17,15 +17,27 @@ export interface CameraActiveInput {
   settingsOpen: boolean;
 }
 
-// Fixed camera chrome — solid black letterbox bars. Portrait pins a bar top +
-// bottom; landscape turns it into a pillarbox (left rail + right rail). These
-// content sizes EXCLUDE the safe-area inset / home-indicator pad; the screen
-// adds `topInset` / `bottomPad(insets)` / side insets on top.
-export const CAMERA_TOP_BAR_CONTENT_HEIGHT = 52;
-export const CAMERA_BOTTOM_BAR_CONTENT_HEIGHT = 164;
-// Landscape collapses the top-bar content into a LEFT rail of this width,
-// mirroring the right shutter rail so the camera is framed left + right.
-export const CAMERA_SIDE_RAIL_WIDTH = 100;
+// Camera chrome heights — these EXCLUDE the safe-area inset; the screen adds
+// `topInset` / `bottomPad(insets)` on top.
+//
+// The chrome is intentionally light: a soft translucent top strip and a set of
+// translucent floating controls along the bottom. There is no solid letterbox
+// bar — the live camera preview runs edge to edge behind every control.
+export const CAMERA_TOP_BAR_CONTENT_HEIGHT = 56;
+// The Row-2 chip strip (inner content) when expanded. Chips are 36px tall;
+// the inner view adds 4px top + 10px bottom padding = 50px. Rounded up to 52
+// as a static bound for tests. Actual height is measured via onLayout.
+export const CAMERA_TOP_BAR_ROW2_HEIGHT = 52;
+// Portrait shutter row — the floating capture controls (library / shutter /
+// flip). Tall enough for the 72px shutter plus a little breathing room.
+export const CAMERA_SHUTTER_ROW_HEIGHT = 88;
+// Landscape floats the shutter cluster on the right edge instead of a solid
+// rail; this is the horizontal space that cluster reserves so HUD layers stay
+// clear of it.
+export const CAMERA_LANDSCAPE_CLUSTER_RESERVE = 96;
+// Portrait bottom chrome: shutter row (72px) + breathing room. Overlay
+// controls live in OverlayDock above this strip and can collapse.
+export const CAMERA_BOTTOM_BAR_CONTENT_HEIGHT = 96;
 
 // Minimum bottom inset (px) the camera chrome assumes for the Android gesture
 // navigation bar — the "海帶條" pill. Some Android edge-to-edge configurations
@@ -36,43 +48,10 @@ export const CAMERA_SIDE_RAIL_WIDTH = 100;
 // only adds a little extra letterbox to an already-letterboxed screen.
 export const ANDROID_GESTURE_NAV_MIN_INSET = 24;
 
-// The "More" tool menu is a drill-down popover. Portrait: it drops down from
-// the top bar. Landscape: it opens just inside the camera window, clear of the
-// left rail. Exported (not component-local) so the anchor maths stay
-// unit-testable.
-export const CAMERA_TOOL_MENU_PANEL_GAP = 10;
-export const CAMERA_TOOL_MENU_MIN_PANEL_WIDTH = 280;
-export const CAMERA_TOOL_MENU_PANEL_WIDTH = 320;
-
-export interface CameraToolMenuAnchorInput {
-  topInset: number;
-  isLandscape: boolean;
-}
-
-export interface CameraToolMenuAnchor {
-  topOffset: number;
-  // Exactly one of these is set: portrait hugs the right margin, landscape
-  // hugs the left rail.
-  leftOffset?: number;
-  rightOffset?: number;
-}
-
-export interface CameraPlaceBadgeLayoutInput {
-  topInset: number;
-  leftInset: number;
-  rightInset: number;
-  rightRailWidth: number;
-  isLandscape: boolean;
-}
-
-export interface CameraPlaceBadgeLayout {
-  top: number;
-  left: number;
-  right: number;
-}
-
 export interface TransientCameraHudVisibilityInput {
-  toolMenuOpen: boolean;
+  /** Slide-up overlay controls panel is open and covering the lower HUD area. */
+  overlayControlsOpen?: boolean;
+  /** Tap-to-focus has locked AF/AE — the focus exposure bar becomes relevant. */
   afLocked: boolean;
 }
 
@@ -85,8 +64,6 @@ export interface TransientCameraHudVisibility {
 const RESERVED_COMPARE_ROUTES = new Set(['align', 'preview', 'share', 'tips']);
 const EV_MIN = -2;
 const EV_MAX = 2;
-const CAMERA_PLACE_BADGE_MARGIN = 12;
-const CAMERA_PLACE_BADGE_PORTRAIT_GAP = 8;
 
 export function formatCameraHeader(input: CameraHeaderInput): CameraHeaderText {
   const animeTitle = firstParam(input.animeTitle);
@@ -118,51 +95,24 @@ export function cameraOrientationLockIntent(
   return mode === 'landscape' ? 'landscape' : 'unlock';
 }
 
+// Keep CameraView remount policy out of this helper module. The old
+// `shouldRemountCameraForOrientationSettle(previousIsLandscape, isLandscape)`
+// helper treated any physical rotation as a remount signal, which can black out
+// the native preview. The screen must gate remounts with its one-shot
+// programmatic LAND-chip flag instead.
 export function roundExposureValue(value: number): number {
   const clamped = Math.max(EV_MIN, Math.min(EV_MAX, value));
   return Number(clamped.toFixed(1));
 }
 
-export function resolveCameraToolMenuAnchor(
-  input: CameraToolMenuAnchorInput
-): CameraToolMenuAnchor {
-  if (input.isLandscape) {
-    // ⋯ lives in the left rail — the popover opens just inside the camera
-    // window, clear of the rail, with the full window height to grow into.
-    return {
-      topOffset: input.topInset + CAMERA_TOOL_MENU_PANEL_GAP,
-      leftOffset: CAMERA_SIDE_RAIL_WIDTH + CAMERA_TOOL_MENU_PANEL_GAP,
-    };
-  }
-  // Portrait drops the popover straight down from the top bar.
-  return {
-    topOffset: input.topInset + CAMERA_TOP_BAR_CONTENT_HEIGHT + CAMERA_TOOL_MENU_PANEL_GAP,
-    rightOffset: 16,
-  };
-}
-
-export function resolveCameraPlaceBadgeLayout(
-  input: CameraPlaceBadgeLayoutInput
-): CameraPlaceBadgeLayout {
-  if (input.isLandscape) {
-    return {
-      top: input.topInset + CAMERA_PLACE_BADGE_MARGIN,
-      left: input.leftInset + CAMERA_SIDE_RAIL_WIDTH + CAMERA_PLACE_BADGE_MARGIN + 4,
-      right: input.rightInset + input.rightRailWidth + CAMERA_PLACE_BADGE_MARGIN,
-    };
-  }
-
-  return {
-    top: input.topInset + CAMERA_TOP_BAR_CONTENT_HEIGHT + CAMERA_PLACE_BADGE_PORTRAIT_GAP,
-    left: Math.max(16, input.leftInset + CAMERA_PLACE_BADGE_MARGIN),
-    right: Math.max(16, input.rightInset + CAMERA_PLACE_BADGE_MARGIN),
-  };
+export function resolveCameraTopChromeHeight(input: { quickControlsOpen: boolean }): number {
+  return CAMERA_TOP_BAR_CONTENT_HEIGHT + (input.quickControlsOpen ? CAMERA_TOP_BAR_ROW2_HEIGHT : 0);
 }
 
 export function resolveTransientCameraHudVisibility(
   input: TransientCameraHudVisibilityInput
 ): TransientCameraHudVisibility {
-  const showTransientHud = !input.toolMenuOpen;
+  const showTransientHud = !input.overlayControlsOpen;
   return {
     showAutoCaptureBadge: showTransientHud,
     showCaptureHistory: showTransientHud,
@@ -183,10 +133,7 @@ export function resolveCameraActive(input: CameraActiveInput): boolean {
  * navigation bar cover the shutter. A genuine, larger inset (e.g. the
  * three-button nav bar) is always kept.
  */
-export function resolveCameraBottomInset(
-  reportedBottomInset: number,
-  platformOS: string
-): number {
+export function resolveCameraBottomInset(reportedBottomInset: number, platformOS: string): number {
   const safe =
     Number.isFinite(reportedBottomInset) && reportedBottomInset > 0 ? reportedBottomInset : 0;
   if (platformOS === 'android') {

@@ -25,8 +25,8 @@ export function formatEV(v: number): string {
 
 /**
  * Exposure tool controls — a tick track the user drags to set EV. Renders flat
- * in normal flow (no chip, no absolute pop-out); CameraToolMenu's drill-in
- * sub-view mounts it, so the track just measures and fills the panel width.
+ * in normal flow (no chip, no absolute pop-out); the camera screen's exposure
+ * panel mounts it, so the track just measures and fills the panel width.
  */
 export default function ExposureControls({ value, onChange }: ExposureControlsProps) {
   const { theme } = useTheme();

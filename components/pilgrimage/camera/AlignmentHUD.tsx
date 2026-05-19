@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Animated as RNAnimated, Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '../../../context/ThemeContext';
-import { ThemedText, readableTextOn } from '../../themed';
+import { ThemedText } from '../../themed';
+import { CAMERA_TOP_BAR_CONTENT_HEIGHT } from '../../../libs/services/pilgrimage/camera-ui';
+import { CameraChrome, cameraControlShadow } from './cameraChrome';
 import type { AlignmentScoreView } from './types';
 
 interface AlignmentHUDProps {
@@ -10,16 +12,19 @@ interface AlignmentHUDProps {
   themeColor: string;
   topInset: number;
   bottomInset: number;
-  /** Full height of the fixed bottom bar — portrait HUD chips dock above it. */
+  /** Height of the slim bottom bar — the perfect banner docks above it. */
   bottomBarHeight: number;
-  /** Width of the landscape left rail — left-anchored badges shift clear of it. */
-  leftReserve: number;
+  /** Right-edge reserve (landscape shutter cluster) so right-anchored badges clear it. */
+  rightReserve: number;
   isLandscape: boolean;
   transformed: boolean;
   rotationDisplayDeg: number;
   showPerfectBanner: boolean;
   onReset: () => void;
 }
+
+// A match this close reads as "aligned" — the badge turns green with a check.
+const ALIGNED_THRESHOLD = 0.85;
 
 function formatPercent(total: number | null): string {
   if (total === null) return '—';
@@ -38,13 +43,20 @@ function formatHeadingDelta(deg: number | null): string {
   return `${rounded > 0 ? '+' : ''}${rounded}°`;
 }
 
+/**
+ * The alignment readout. A single badge sits below the top bar on the right:
+ * while the framing is off it shows the live %, distance and heading delta so
+ * the user knows what to fix; once aligned it collapses to a green "Aligned"
+ * check. The reposition chips (reset / rotation) sit centered below the bar,
+ * clear of the reference thumbnail on the left and the badge on the right.
+ */
 export default function AlignmentHUD({
   score,
   themeColor,
   topInset,
   bottomInset,
   bottomBarHeight,
-  leftReserve,
+  rightReserve,
   isLandscape,
   transformed,
   rotationDisplayDeg,
@@ -63,97 +75,65 @@ export default function AlignmentHUD({
   }, [showPerfectBanner, perfectOpacity]);
 
   const percentText = formatPercent(score.total);
-  const distanceText = formatDistance(score.distanceMeters);
-  const headingDeltaText = formatHeadingDelta(score.headingDeltaDeg);
-  const isPerfect = score.total !== null && score.total >= 0.9;
+  const aligned = score.total !== null && score.total >= ALIGNED_THRESHOLD;
   const showRotationBadge = Math.abs(rotationDisplayDeg) > 0;
-  const chipBg = isPerfect ? themeColor : theme.background.secondary;
-  const chipFg = isPerfect ? readableTextOn(themeColor) : theme.text.primary;
-  const chipBorder = isPerfect ? themeColor : theme.glassBorder;
+  // Badges and chips anchor just below Row 1 of the top bar.
+  const rowTop = topInset + CAMERA_TOP_BAR_CONTENT_HEIGHT + 8;
 
   return (
     <>
       {score.total !== null ? (
-        <View style={[styles.liveBadgeWrap, { top: topInset + 64, left: leftReserve + 14 }]}>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            {/* White text over translucent dark scrim — allowed exception. */}
-            <ThemedText
-              variant="captionSmall"
-              weight="700"
-              style={{ color: '#fff', letterSpacing: 1 }}>
-              {`LIVE · ${percentText}`}
-            </ThemedText>
-          </View>
-        </View>
-      ) : null}
-
-      {showRotationBadge ? (
         <View
-          style={[
-            styles.rotationBadge,
-            {
-              top: topInset + 64,
-              right: isLandscape ? 90 : 14,
-              borderColor: themeColor,
-            },
-          ]}
-          pointerEvents="none">
-          <Ionicons name="sync" size={12} color={themeColor} />
-          <ThemedText
-            variant="captionSmall"
-            weight="700"
-            style={{ color: theme.text.primary }}>
-            {`${rotationDisplayDeg > 0 ? '+' : ''}${rotationDisplayDeg}°`}
-          </ThemedText>
-        </View>
-      ) : null}
-
-      {transformed ? (
-        <Pressable
-          onPress={onReset}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Reset overlay position"
-          style={({ pressed }) => [
-            styles.resetChip,
-            { top: topInset + 64, left: leftReserve + 76, opacity: pressed ? 0.7 : 1 },
-          ]}>
-          <Ionicons name="refresh" size={14} color="#fff" />
-          <ThemedText
-            variant="captionSmall"
-            weight="700"
-            style={{ color: '#fff' }}>
-            Reset
-          </ThemedText>
-        </Pressable>
-      ) : null}
-
-      {score.total !== null ? (
-        <View
-          style={[
-            isLandscape ? styles.alignmentChipWrapLandscape : styles.alignmentChipWrap,
-            isLandscape
-              ? { bottom: bottomInset + 24, left: leftReserve + 14 }
-              : { bottom: bottomBarHeight + 12 },
-          ]}
-          pointerEvents="none">
+          pointerEvents="none"
+          style={[styles.alignChipWrap, { top: rowTop, right: rightReserve + 14 }]}>
           <View
             style={[
-              styles.alignmentChip,
+              styles.alignChip,
               {
-                borderColor: chipBorder,
-                backgroundColor: chipBg,
+                // White text over either the success green or the dark scrim.
+                backgroundColor: aligned ? theme.status.success : CameraChrome.controlFill,
+                borderColor: aligned ? theme.status.success : CameraChrome.border,
               },
             ]}>
-            <Ionicons name="star" size={12} color={chipFg} />
+            <Ionicons name={aligned ? 'checkmark-circle' : 'navigate'} size={13} color="#fff" />
             <ThemedText
               variant="captionSmall"
               weight="700"
-              style={{ color: chipFg, letterSpacing: 0.5 }}>
-              {`${percentText}  ·  ${distanceText}  ·  ${headingDeltaText}`}
+              style={{ color: '#fff', letterSpacing: 0.3 }}>
+              {aligned
+                ? `Aligned · ${percentText}`
+                : `${percentText} · ${formatDistance(score.distanceMeters)} · ${formatHeadingDelta(
+                    score.headingDeltaDeg
+                  )}`}
             </ThemedText>
           </View>
+        </View>
+      ) : null}
+
+      {transformed || showRotationBadge ? (
+        <View style={[styles.repositionRow, { top: rowTop }]} pointerEvents="box-none">
+          {showRotationBadge ? (
+            <View style={[styles.rotationBadge, { borderColor: themeColor }]} pointerEvents="none">
+              <Ionicons name="sync" size={12} color={themeColor} />
+              <ThemedText variant="captionSmall" weight="700" style={{ color: theme.text.primary }}>
+                {`${rotationDisplayDeg > 0 ? '+' : ''}${rotationDisplayDeg}°`}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {transformed ? (
+            <Pressable
+              onPress={onReset}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Reset overlay position"
+              style={({ pressed }) => [styles.resetChip, pressed && { opacity: 0.7 }]}>
+              <Ionicons name="refresh" size={14} color="#fff" />
+              <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+                Reset
+              </ThemedText>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -162,15 +142,10 @@ export default function AlignmentHUD({
           pointerEvents="none"
           style={[
             styles.perfectBanner,
-            // In landscape the right edge is reserved for the ShutterRow
-            // control column — narrow the banner so it doesn't crash into it.
             isLandscape
-              ? { top: topInset + 64, left: leftReserve + 24, right: '36%' }
-              : { bottom: bottomBarHeight + 64 },
-            {
-              backgroundColor: theme.status.success,
-              opacity: perfectOpacity,
-            },
+              ? { bottom: bottomInset + 28, left: '14%', right: rightReserve + 24 }
+              : { bottom: bottomBarHeight + 20, left: '12%', right: '12%' },
+            { backgroundColor: theme.status.success, opacity: perfectOpacity },
           ]}>
           {/* White text over success accent — readable per status.success contrast. */}
           <Ionicons name="checkmark-circle" size={18} color="#fff" />
@@ -184,76 +159,55 @@ export default function AlignmentHUD({
 }
 
 const styles = StyleSheet.create({
-  liveBadgeWrap: {
+  alignChipWrap: {
     position: 'absolute',
-    left: 14,
-    flexDirection: 'row',
+    zIndex: 65,
   },
-  liveBadge: {
+  alignChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    ...cameraControlShadow,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#FF3B30',
+  repositionRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    zIndex: 65,
   },
   rotationBadge: {
-    position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: CameraChrome.controlFill,
     borderWidth: 1,
+    ...cameraControlShadow,
   },
   resetChip: {
-    position: 'absolute',
-    left: 76,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: CameraChrome.controlFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  alignmentChipWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  alignmentChipWrapLandscape: {
-    position: 'absolute',
-    left: 14,
-    flexDirection: 'row',
-  },
-  alignmentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    borderColor: CameraChrome.border,
+    ...cameraControlShadow,
   },
   perfectBanner: {
     position: 'absolute',
-    left: '15%',
-    right: '15%',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -261,5 +215,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 999,
+    zIndex: 65,
   },
 });

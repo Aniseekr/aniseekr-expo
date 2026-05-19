@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText } from '../../../themed';
-import { useTheme } from '../../../../context/ThemeContext';
 import { hapticsBridge } from '../../../../modules/haptics/hapticsBridge';
+import { CameraChrome, cameraControlShadow } from '../cameraChrome';
 import type { CountdownSeconds } from '../../../../hooks/useCameraSettings';
 
 interface CountdownChipProps {
@@ -20,8 +20,6 @@ const LABEL: Record<CountdownSeconds, string> = {
 };
 
 export default function CountdownChip({ seconds, onChange }: CountdownChipProps) {
-  const { theme } = useTheme();
-
   const handlePress = () => {
     const idx = CYCLE.indexOf(seconds);
     const next = CYCLE[(idx === -1 ? 0 : idx + 1) % CYCLE.length];
@@ -35,12 +33,7 @@ export default function CountdownChip({ seconds, onChange }: CountdownChipProps)
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={`Self-timer ${LABEL[seconds]}`}
-      style={({ pressed }) => [
-        styles.chip,
-        // rgba scrim sits over the live camera preview — no theme surface below.
-        { backgroundColor: 'rgba(0,0,0,0.45)', borderColor: theme.glassBorder },
-        pressed && { opacity: 0.7 },
-      ]}>
+      style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]}>
       <View style={styles.row}>
         <Ionicons name="timer-outline" size={16} color="#fff" />
         <ThemedText variant="caption" style={styles.label}>
@@ -52,22 +45,19 @@ export default function CountdownChip({ seconds, onChange }: CountdownChipProps)
 }
 
 const styles = StyleSheet.create({
+  // rgba scrim sits over the live camera preview — camera-scrim exception.
   chip: {
-    height: 44,
-    minWidth: 76,
+    height: CameraChrome.controlHeight,
+    minWidth: 72,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 22,
+    borderRadius: CameraChrome.pillRadius,
     borderWidth: 1,
+    borderColor: CameraChrome.border,
+    backgroundColor: CameraChrome.controlFill,
     alignItems: 'center',
     justifyContent: 'center',
+    ...cameraControlShadow,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  label: {
-    color: '#fff',
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  label: { color: '#fff' },
 });

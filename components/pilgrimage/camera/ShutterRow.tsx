@@ -1,53 +1,59 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { bottomPad } from '../../../constants/DesignSystem';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
-import { CAMERA_BOTTOM_BAR_CONTENT_HEIGHT } from '../../../libs/services/pilgrimage/camera-ui';
+import { readableTextOn } from '../../themed';
+import { CAMERA_LANDSCAPE_CLUSTER_RESERVE } from '../../../libs/services/pilgrimage/camera-ui';
+import { CameraChrome, cameraControlShadow } from './cameraChrome';
 import BurstIndicator from './BurstIndicator';
+
+/**
+ * Horizontal space the landscape control cluster reserves on the right edge.
+ * The screen uses this to keep HUD layers clear of the floating shutter cluster.
+ */
+export const SHUTTER_ROW_LANDSCAPE_WIDTH = CAMERA_LANDSCAPE_CLUSTER_RESERVE;
 
 interface ShutterRowProps {
   themeColor: string;
-  referenceImageUrl: string;
   capturing: boolean;
   isLandscape: boolean;
-  bottomInset: number;
-  /** Status-bar inset — only consumed in landscape so the column avoids the notch. */
-  topInset?: number;
-  /** Focal-stop pills, rendered along the top of the portrait bottom bar. */
-  focalSlot?: ReactNode;
+  /** Front camera active — flips the flip button into its toggled state. */
+  isFrontFacing: boolean;
   onShutter: () => void;
-  onOpenMap: () => void;
   onPickLibrary: () => void;
-  onPickReference: () => void;
-  /** Optional long-press handler. Triggers burst capture in the parent. */
+  onFlip: () => void;
+  /** Optional long-press handler — triggers burst capture in the parent. */
   onLongPress?: () => void;
   /** When `active`, overlay a progress ring on top of the shutter button. */
   burst?: { active: boolean; captured: number; total: number };
 }
 
-/** Fixed width of the landscape control rail. Parent uses this to know how
- *  much horizontal space to reserve on the right edge of the camera preview. */
-export const SHUTTER_ROW_LANDSCAPE_WIDTH = 100;
+const SHUTTER_SIZE = 72;
+const SHUTTER_SIZE_LANDSCAPE = 60;
+const SHUTTER_GAP = 14;
 
+/**
+ * The capture controls — library, shutter, flip. Renders just the cluster (a
+ * row in portrait, a column in landscape); the screen owns where it sits.
+ *
+ * There is no solid bar — the buttons float translucent over the live preview.
+ * rgba / #fff chrome is allowed here (CLAUDE.md camera-scrim exception).
+ */
 export default function ShutterRow({
   themeColor,
-  referenceImageUrl,
   capturing,
   isLandscape,
-  bottomInset,
-  topInset = 0,
-  focalSlot,
+  isFrontFacing,
   onShutter,
-  onOpenMap,
   onPickLibrary,
-  onPickReference,
+  onFlip,
   onLongPress,
   burst,
 }: ShutterRowProps) {
   const burstActive = burst?.active === true;
   const shutterDisabled = capturing || burstActive;
+  const shutterSize = isLandscape ? SHUTTER_SIZE_LANDSCAPE : SHUTTER_SIZE;
+  const coreSize = shutterSize - SHUTTER_GAP;
 
   const handleShutterPress = () => {
     if (shutterDisabled) return;
@@ -63,22 +69,17 @@ export default function ShutterRow({
       }
     : undefined;
 
-  const handleMapPress = () => {
-    hapticsBridge.tap();
-    onOpenMap();
-  };
-
   const handleLibraryPress = () => {
     hapticsBridge.tap();
     onPickLibrary();
   };
 
-  const handleReferencePress = () => {
-    hapticsBridge.tap();
-    onPickReference();
+  const handleFlipPress = () => {
+    hapticsBridge.selection();
+    onFlip();
   };
 
-  const renderShutter = (landscape: boolean) => (
+  const shutter = (
     <Pressable
       onPress={handleShutterPress}
       onLongPress={handleShutterLongPress}
@@ -87,20 +88,18 @@ export default function ShutterRow({
       accessibilityRole="button"
       accessibilityLabel="Take comparison photo"
       style={({ pressed }) => [
-        styles.shutterOuter,
-        landscape && styles.shutterOuterLandscape,
-        { borderColor: themeColor },
-        pressed && { opacity: 0.85 },
+        styles.shutterRing,
+        { width: shutterSize, height: shutterSize, borderRadius: shutterSize / 2 },
+        pressed && !shutterDisabled && styles.shutterPressed,
         shutterDisabled && { opacity: 0.6 },
       ]}>
       {capturing && !burstActive ? (
-        <ActivityIndicator size="small" color={themeColor} />
+        <ActivityIndicator size="small" color="#fff" />
       ) : (
         <View
           style={[
-            styles.shutterInner,
-            landscape && styles.shutterInnerLandscape,
-            { backgroundColor: themeColor },
+            styles.shutterCore,
+            { width: coreSize, height: coreSize, borderRadius: coreSize / 2 },
           ]}
         />
       )}
@@ -110,189 +109,109 @@ export default function ShutterRow({
     </Pressable>
   );
 
-  if (isLandscape) {
-    return (
-      <View
-        style={[
-          styles.barLandscape,
-          {
-            width: SHUTTER_ROW_LANDSCAPE_WIDTH,
-            paddingTop: topInset + 20,
-            paddingBottom: bottomPad({ bottom: bottomInset }) + 20,
-          },
-        ]}>
-        <View style={styles.columnContent}>
-          <ThumbnailBtn
-            kind="reference"
-            themeColor={themeColor}
-            imageUrl={referenceImageUrl}
-            onPress={handleReferencePress}
-          />
-          <ThumbnailBtn kind="library" themeColor={themeColor} onPress={handleLibraryPress} />
-          {renderShutter(true)}
-          <ThumbnailBtn kind="map" themeColor={themeColor} onPress={handleMapPress} />
-        </View>
-      </View>
-    );
-  }
+  const library = (
+    <SideButton
+      shape="square"
+      accessibilityLabel="Pick photo from library"
+      onPress={handleLibraryPress}>
+      <Ionicons name="images-outline" size={20} color="#fff" />
+    </SideButton>
+  );
+
+  const flip = (
+    <SideButton
+      shape="circle"
+      accessibilityLabel={isFrontFacing ? 'Use back camera' : 'Use front camera'}
+      accessibilityState={{ selected: isFrontFacing }}
+      active={isFrontFacing}
+      themeColor={themeColor}
+      onPress={handleFlipPress}>
+      <Ionicons
+        name="camera-reverse-outline"
+        size={20}
+        color={isFrontFacing ? readableTextOn(themeColor) : '#fff'}
+      />
+    </SideButton>
+  );
 
   return (
-    <View
-      style={[
-        styles.bar,
-        {
-          height: bottomPad({ bottom: bottomInset }) + CAMERA_BOTTOM_BAR_CONTENT_HEIGHT,
-          paddingBottom: bottomPad({ bottom: bottomInset }),
-        },
-      ]}>
-      {focalSlot ? <View style={styles.focalSlot}>{focalSlot}</View> : null}
-      <View style={styles.bottomRow}>
-        <ThumbnailBtn kind="map" themeColor={themeColor} onPress={handleMapPress} />
-        <ThumbnailBtn kind="library" themeColor={themeColor} onPress={handleLibraryPress} />
-        {renderShutter(false)}
-        <ThumbnailBtn
-          kind="reference"
-          themeColor={themeColor}
-          imageUrl={referenceImageUrl}
-          onPress={handleReferencePress}
-        />
-      </View>
+    <View style={isLandscape ? styles.clusterColumn : styles.clusterRow}>
+      {library}
+      {shutter}
+      {flip}
     </View>
   );
 }
 
-function ThumbnailBtn({
-  kind,
-  imageUrl,
-  themeColor,
+function SideButton({
+  children,
   onPress,
+  accessibilityLabel,
+  accessibilityState,
+  shape,
+  active = false,
+  themeColor,
 }: {
-  kind: 'map' | 'library' | 'reference';
-  imageUrl?: string;
-  themeColor: string;
+  children: ReactNode;
   onPress: () => void;
+  accessibilityLabel: string;
+  accessibilityState?: { selected?: boolean };
+  shape: 'square' | 'circle';
+  active?: boolean;
+  themeColor?: string;
 }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={
-        kind === 'map'
-          ? 'Open map'
-          : kind === 'library'
-            ? 'Pick photo from library'
-            : 'Show anime reference'
-      }
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
       style={({ pressed }) => [
-        styles.thumbBtn,
-        {
-          borderColor: kind === 'map' ? themeColor : 'rgba(255,255,255,0.28)',
-          opacity: pressed ? 0.7 : 1,
-        },
+        styles.sideBtn,
+        shape === 'circle' ? styles.sideBtnCircle : styles.sideBtnSquare,
+        active && themeColor ? { backgroundColor: themeColor, borderColor: themeColor } : null,
+        pressed && { opacity: 0.7 },
       ]}>
-      {kind === 'reference' && imageUrl ? (
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.thumbImage}
-          contentFit="cover"
-          transition={120}
-        />
-      ) : (
-        <View style={styles.thumbMap}>
-          <Ionicons
-            name={kind === 'library' ? 'images-outline' : 'map'}
-            size={18}
-            color={themeColor}
-          />
-        </View>
-      )}
+      {children}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  // Solid black letterbox bar — opaque, not a gradient scrim. The literal #000
-  // is allowed: the bar sits over the live camera preview, not a theme surface
-  // (see CLAUDE.md camera-scrim exception).
-  bar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#000',
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    gap: 12,
-  },
-  // Landscape parks the controls in a solid black right-edge rail.
-  barLandscape: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: SHUTTER_ROW_LANDSCAPE_WIDTH,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  focalSlot: {
-    alignItems: 'center',
-  },
-  bottomRow: {
+  // All rgba / #fff below sit over the live camera preview — camera-scrim
+  // exception (CLAUDE.md). There is no solid bar; just the floating controls.
+  clusterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    gap: 12,
-  },
-  // Distributes the compact actions + shutter evenly down the rail.
-  columnContent: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
+    paddingHorizontal: 36,
   },
-  shutterOuter: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderWidth: 4,
+  clusterColumn: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 20,
   },
-  shutterOuterLandscape: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+  // Shutter — a white ring with a white core, the universal capture affordance.
+  shutterRing: {
     borderWidth: 3,
-  },
-  shutterInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  shutterInnerLandscape: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-  },
-  thumbBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    borderWidth: 2,
-    overflow: 'hidden',
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbMap: {
-    width: '100%',
-    height: '100%',
+    borderColor: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    ...cameraControlShadow,
   },
+  shutterPressed: { backgroundColor: 'rgba(0,0,0,0.38)' },
+  shutterCore: { backgroundColor: '#fff' },
+  sideBtn: {
+    width: CameraChrome.circleSize,
+    height: CameraChrome.circleSize,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: CameraChrome.border,
+    backgroundColor: CameraChrome.controlFill,
+    ...cameraControlShadow,
+  },
+  sideBtnCircle: { borderRadius: CameraChrome.circleSize / 2 },
+  sideBtnSquare: { borderRadius: 14 },
 });
