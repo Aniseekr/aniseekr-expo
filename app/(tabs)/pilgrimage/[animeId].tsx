@@ -102,6 +102,16 @@ import {
   type SpotIntentKind,
   type SpotIntentMap,
 } from '../../../libs/services/pilgrimage/spot-intents';
+import {
+  getInitialSpotSheetScene,
+  getPilgrimageDetailViewPreset,
+  getSpotSheetVisitedTarget,
+  resolvePilgrimageDetailViewPreset,
+  resolveSpotSheetSceneStack,
+  type PilgrimageDetailListLayout,
+  type PilgrimageDetailViewMode,
+  type PilgrimageDetailViewPreset,
+} from '../../../libs/services/pilgrimage/pilgrimage-detail-flow';
 import { sameLatLng } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
 import {
   annotatePilgrimageSeriesPoints,
@@ -113,7 +123,8 @@ import {
 } from '../../../libs/services/pilgrimage/pilgrimage-series';
 import type { AnitabiPoint, AnitabiSpot } from '../../../libs/services/pilgrimage/types';
 
-type ViewMode = 'list' | 'map';
+type ViewMode = PilgrimageDetailViewMode;
+type ListLayout = PilgrimageDetailListLayout;
 type MapMarkerMode = 'photo' | 'dot';
 
 const HERO_HEIGHT = 320;
@@ -1034,9 +1045,12 @@ function SceneTile({
 interface SpotSheetProps {
   spot: AnitabiPoint | null;
   animeId: string;
+  scenes: readonly AnitabiPoint[];
+  sceneCount: number;
   themeColor: string;
   themeColorFg: string;
   distanceKm: number | null;
+  visitedTarget: AnitabiPoint | null;
   visited: boolean;
   saved: boolean;
   planned: boolean;
@@ -1047,15 +1061,20 @@ interface SpotSheetProps {
   onToggleSaved: (spot: AnitabiPoint) => void;
   onTogglePlanned: (spot: AnitabiPoint) => void;
   onOpenMaps: (spot: AnitabiPoint) => void;
+  onStartCamera: (spot: AnitabiPoint) => void;
   onFrameShot: (spot: AnitabiPoint) => void;
+  onSelectScene: (spot: AnitabiPoint) => void;
 }
 
 function SpotSheet({
   spot,
   animeId: _animeId,
+  scenes,
+  sceneCount,
   themeColor,
   themeColorFg,
   distanceKm,
+  visitedTarget,
   visited,
   saved,
   planned,
@@ -1066,12 +1085,20 @@ function SpotSheet({
   onToggleSaved,
   onTogglePlanned,
   onOpenMaps,
+  onStartCamera,
   onFrameShot,
+  onSelectScene,
 }: SpotSheetProps) {
   const styles = useMemo(() => makeSheetStyles(theme), [theme]);
   if (!spot) return null;
   const hasGeo = hasValidGeo(spot.geo);
   const titles = getPilgrimageSpotTitles(spot);
+  const sceneStack = scenes.length > 0 ? scenes : [spot];
+  const activeSceneIndex = Math.max(
+    0,
+    sceneStack.findIndex((scene) => scene.id === spot.id)
+  );
+  const visitSpot = visitedTarget ?? spot;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
@@ -1079,103 +1106,128 @@ function SpotSheet({
         <View style={styles.sheet}>
           <SafeAreaView edges={['bottom']}>
             <View style={styles.handle} />
-            <View style={styles.headerRow}>
-              <Image
-                source={{ uri: spot.image }}
-                style={styles.cover}
-                contentFit="cover"
-                transition={150}
+            <View style={styles.hero}>
+              <Image source={{ uri: spot.image }} style={styles.cover} contentFit="cover" />
+              <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.76)']}
+                style={styles.sheetHeroGradient}
               />
-              <View style={styles.headerText}>
-                <View style={[styles.epPill, { backgroundColor: `${themeColor}E6` }]}>
-                  <ThemedText variant="captionSmall" weight="700" style={{ color: themeColorFg }}>
-                    EP {spot.ep}
-                  </ThemedText>
-                </View>
+              <View style={styles.heroText}>
                 <ThemedText
                   variant="titleLarge"
-                  weight="700"
-                  numberOfLines={2}
-                  style={{ marginBottom: 2 }}>
+                  weight="800"
+                  numberOfLines={1}
+                  style={{ color: ON_DARK }}>
                   {titles.primary}
                 </ThemedText>
                 {titles.secondary ? (
                   <ThemedText
                     variant="bodySmall"
-                    tone="secondary"
                     numberOfLines={1}
-                    style={{ marginBottom: 4 }}>
+                    style={{ color: 'rgba(255,255,255,0.72)' }}>
                     {titles.secondary}
-                  </ThemedText>
-                ) : null}
-                {distanceKm != null ? (
-                  <ThemedText variant="captionSmall" tone="tertiary" weight="500">
-                    {formatDistanceKm(distanceKm)} away
                   </ThemedText>
                 ) : null}
               </View>
               <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
-                <Ionicons name="close" size={22} color={theme.text.secondary} />
+                <Ionicons name="close" size={18} color={ON_DARK} />
               </Pressable>
             </View>
 
-            <View style={styles.actions}>
-              <Pressable
-                onPress={() => onToggleVisited(spot)}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  visited
-                    ? { backgroundColor: theme.status.success }
-                    : {
-                        backgroundColor: theme.background.tertiary,
-                        borderColor: theme.glassBorder,
-                        borderWidth: 1,
-                      },
-                  pressed && { opacity: 0.85 },
-                ]}>
-                <Ionicons
-                  name={visited ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                  size={18}
-                  color={visited ? readableTextOn(theme.status.success) : theme.text.primary}
-                />
-                <ThemedText
-                  variant="bodyMedium"
-                  weight="700"
-                  style={{
-                    color: visited ? readableTextOn(theme.status.success) : theme.text.primary,
-                  }}>
-                  {visited ? 'Visited' : 'Mark visited'}
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => onOpenMaps(spot)}
-                disabled={!hasGeo}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  hasGeo
-                    ? { backgroundColor: themeColor }
-                    : {
-                        backgroundColor: theme.background.tertiary,
-                        borderColor: theme.glassBorder,
-                        borderWidth: 1,
-                      },
-                  pressed && hasGeo && { opacity: 0.85 },
-                ]}>
-                <MaterialIcons
-                  name="directions"
-                  size={18}
-                  color={hasGeo ? themeColorFg : theme.text.tertiary}
-                />
-                <ThemedText
-                  variant="bodyMedium"
-                  weight="700"
-                  style={{ color: hasGeo ? themeColorFg : theme.text.tertiary }}>
-                  Directions
-                </ThemedText>
-              </Pressable>
+            {sceneStack.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sceneRail}>
+                {sceneStack.map((scene, index) => {
+                  const active = scene.id === spot.id;
+                  const sourceLabel = getPointSourceLabel(scene);
+                  const epLabel = scene.ep > 0 ? `EP ${scene.ep}` : `#${index + 1}`;
+                  return (
+                    <Pressable
+                      key={scene.id}
+                      onPress={() => onSelectScene(scene)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`Show scene ${index + 1}`}
+                      style={({ pressed }) => [
+                        styles.sceneThumbBtn,
+                        active ? { borderColor: themeColor } : { borderColor: theme.glassBorder },
+                        pressed && { opacity: 0.78 },
+                      ]}>
+                      <Image
+                        source={{ uri: scene.image }}
+                        style={styles.sceneThumb}
+                        contentFit="cover"
+                      />
+                      <View style={styles.sceneThumbScrim} />
+                      <View
+                        style={[
+                          styles.sceneIndexPill,
+                          { backgroundColor: active ? themeColor : 'rgba(0,0,0,0.62)' },
+                        ]}>
+                        <ThemedText
+                          variant="captionSmall"
+                          weight="800"
+                          numberOfLines={1}
+                          style={{ color: active ? themeColorFg : ON_DARK }}>
+                          {sourceLabel ? `${sourceLabel} ${epLabel}` : epLabel}
+                        </ThemedText>
+                      </View>
+                      {visited && visitSpot.id === scene.id ? (
+                        <View style={styles.sceneVisitedDot}>
+                          <Ionicons
+                            name="checkmark"
+                            size={10}
+                            color={readableTextOn(theme.status.success)}
+                          />
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+
+            <View style={styles.distanceRow}>
+              <Ionicons name="location-outline" size={15} color={theme.text.tertiary} />
+              <ThemedText variant="bodySmall" tone="secondary">
+                {distanceKm != null
+                  ? `${formatDistanceKm(distanceKm)} away`
+                  : sceneStack.length > 1
+                    ? `${activeSceneIndex + 1} of ${sceneStack.length} scenes`
+                    : 'Scene location'}
+              </ThemedText>
             </View>
 
             <View style={styles.intentActions}>
+              <Pressable
+                onPress={() => onToggleVisited(visitSpot)}
+                style={({ pressed }) => [
+                  styles.intentBtn,
+                  visited
+                    ? {
+                        backgroundColor: `${theme.status.success}22`,
+                        borderColor: theme.status.success,
+                      }
+                    : {
+                        backgroundColor: theme.background.tertiary,
+                        borderColor: theme.glassBorder,
+                      },
+                  pressed && { opacity: 0.84 },
+                ]}>
+                <Ionicons
+                  name={visited ? 'checkmark-circle' : 'film-outline'}
+                  size={16}
+                  color={visited ? theme.status.success : theme.text.secondary}
+                />
+                <ThemedText
+                  variant="bodySmall"
+                  weight="700"
+                  style={{ color: visited ? theme.status.success : theme.text.secondary }}>
+                  {visited ? 'Visited' : sceneCount > 1 ? `${sceneCount} scenes` : 'Scene'}
+                </ThemedText>
+              </Pressable>
               <Pressable
                 onPress={() => onToggleSaved(spot)}
                 style={({ pressed }) => [
@@ -1230,29 +1282,43 @@ function SpotSheet({
             </View>
 
             <Pressable
+              onPress={() => onStartCamera(spot)}
+              style={({ pressed }) => [
+                styles.startCameraBtn,
+                { backgroundColor: themeColor },
+                pressed && { opacity: 0.86 },
+              ]}>
+              <Ionicons name="camera" size={18} color={themeColorFg} />
+              <ThemedText variant="bodyMedium" weight="800" style={{ color: themeColorFg }}>
+                Start AR Camera
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
               onPress={() => onFrameShot(spot)}
               style={({ pressed }) => [
                 styles.frameShotBtn,
-                {
-                  backgroundColor: hasCapture ? `${themeColor}22` : theme.background.tertiary,
-                  borderColor: hasCapture ? themeColor : theme.glassBorder,
-                },
+                { borderColor: hasCapture ? themeColor : theme.glassBorder },
                 pressed && { opacity: 0.82 },
               ]}>
-              <Ionicons
-                name={hasCapture ? 'camera' : 'camera-outline'}
-                size={18}
-                color={hasCapture ? themeColor : theme.text.primary}
-              />
-              <ThemedText
-                variant="bodyMedium"
-                weight="600"
-                style={{ color: hasCapture ? themeColor : theme.text.primary }}>
-                {hasCapture ? 'Reframe shot' : 'Frame shot'}
+              <Ionicons name="image-outline" size={18} color={theme.text.primary} />
+              <ThemedText variant="bodyMedium" weight="700">
+                Photo Tips & Best Frame
               </ThemedText>
-              {hasCapture ? (
-                <View style={[styles.frameShotDot, { backgroundColor: themeColor }]} />
-              ) : null}
+            </Pressable>
+
+            <Pressable
+              onPress={() => onOpenMaps(spot)}
+              disabled={!hasGeo}
+              style={({ pressed }) => [
+                styles.openMapBtn,
+                !hasGeo && { opacity: 0.45 },
+                pressed && hasGeo && { opacity: 0.72 },
+              ]}>
+              <Ionicons name="location-outline" size={15} color={theme.text.tertiary} />
+              <ThemedText variant="bodySmall" weight="700" tone="secondary">
+                Open in Maps
+              </ThemedText>
             </Pressable>
           </SafeAreaView>
         </View>
@@ -1308,7 +1374,7 @@ export default function PilgrimageDetailScreen() {
   });
   const [seriesSelection, setSeriesSelection] = useState<PilgrimageSeriesSelection>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [listLayout, setListLayout] = useState<'grid' | 'rows'>('grid');
+  const [listLayout, setListLayout] = useState<ListLayout>('grid');
   const [mapMarkerMode, setMapMarkerMode] = useState<MapMarkerMode>('photo');
   const [mapOfflineOnly, setMapOfflineOnly] = useState(false);
   const [spotFilter, setSpotFilter] = useState<SpotFilter>('all');
@@ -1699,15 +1765,18 @@ export default function PilgrimageDetailScreen() {
     });
   }, []);
 
-  // Single-cut location → open it directly. Multi-cut → let the user pick
-  // which scene to frame (reuses the map's cluster picker sheet).
+  // Multi-cut locations open directly on their representative scene; the
+  // popup exposes the rest of the scenes as a thumb strip, so there is no
+  // second picker step before the user can act.
   const handleGroupedSpotPress = useCallback((spot: AnitabiSpot) => {
     Haptics.selectionAsync().catch(() => undefined);
-    if (spot.scenes.length > 1) {
-      setClusterSpots(spot.scenes);
-    } else {
-      setActiveSpot(spot.scenes[0]);
-    }
+    const initialScene = getInitialSpotSheetScene(spot);
+    if (initialScene) setActiveSpot(initialScene);
+  }, []);
+
+  const handleSpotSheetSceneSelect = useCallback((spot: AnitabiPoint) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setActiveSpot(spot);
   }, []);
 
   const handleOpenMaps = useCallback((spot: AnitabiPoint) => {
@@ -1716,9 +1785,13 @@ export default function PilgrimageDetailScreen() {
     Linking.openURL(buildMapsURL(spot.geo[0], spot.geo[1], spot.name)).catch(() => undefined);
   }, []);
 
-  const handleViewToggle = useCallback((mode: ViewMode) => {
+  const activeViewPreset = getPilgrimageDetailViewPreset(viewMode, listLayout);
+
+  const handleViewPresetChange = useCallback((preset: PilgrimageDetailViewPreset) => {
     Haptics.selectionAsync().catch(() => undefined);
-    setViewMode(mode);
+    const next = resolvePilgrimageDetailViewPreset(preset);
+    setViewMode(next.viewMode);
+    setListLayout(next.listLayout);
   }, []);
 
   const handleOpenBrowse = useCallback(() => {
@@ -1813,37 +1886,62 @@ export default function PilgrimageDetailScreen() {
     return PLATFORM_CONFIGS[platform]?.displayName ?? 'Browse';
   }, [browseSource]);
 
-  const activeSpotVisited = activeSpot ? visited[activeSpot.id] === true : false;
+  const activeSpotGroup = activeSpot ? (groupedSpotByPointId.get(activeSpot.id) ?? null) : null;
+  const activeSpotScenes = resolveSpotSheetSceneStack(activeSpot, activeSpotGroup);
+  const activeSpotVisitedTarget = getSpotSheetVisitedTarget(activeSpot, activeSpotScenes);
+  const activeSpotVisited = activeSpotVisitedTarget
+    ? visited[activeSpotVisitedTarget.id] === true
+    : false;
   const activeSpotSaved = activeSpot ? hasIntentForPoint(activeSpot, 'saved') : false;
   const activeSpotPlanned = activeSpot ? hasIntentForPoint(activeSpot, 'planned') : false;
   const activeSpotDistance = activeSpot ? distanceFor(activeSpot) : null;
   const activeSpotHasCapture = activeSpot ? !!captures[activeSpot.id] : false;
+  const activeSpotSceneCount = activeSpotScenes.length;
 
-  const handleFrameShot = useCallback(
+  const buildCompareParams = useCallback(
     (spot: AnitabiPoint) => {
-      Haptics.selectionAsync().catch(() => undefined);
-      setActiveSpot(null);
       const lat = hasValidGeo(spot.geo) ? String(spot.geo[0]) : undefined;
       const lng = hasValidGeo(spot.geo) ? String(spot.geo[1]) : undefined;
       const animeTitle = animeTitles?.primary ?? '';
       const spotTitles = getPilgrimageSpotTitles(spot);
       const sourceBangumiId = getPointSourceBangumiId(spot) ?? bangumiId;
+      return {
+        spotId: spot.id,
+        imageUrl: spot.image,
+        name: spotTitles.primary,
+        ep: String(spot.ep),
+        animeId: sourceBangumiId !== null ? String(sourceBangumiId) : '',
+        animeTitle,
+        themeColor,
+        ...(lat ? { spotLat: lat } : {}),
+        ...(lng ? { spotLng: lng } : {}),
+      };
+    },
+    [bangumiId, animeTitles?.primary, themeColor]
+  );
+
+  const handleFrameShot = useCallback(
+    (spot: AnitabiPoint) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      setActiveSpot(null);
       router.push({
         pathname: '/pilgrimage/compare/tips',
-        params: {
-          spotId: spot.id,
-          imageUrl: spot.image,
-          name: spotTitles.primary,
-          ep: String(spot.ep),
-          animeId: sourceBangumiId !== null ? String(sourceBangumiId) : '',
-          animeTitle,
-          themeColor,
-          ...(lat ? { spotLat: lat } : {}),
-          ...(lng ? { spotLng: lng } : {}),
-        },
+        params: buildCompareParams(spot),
       });
     },
-    [router, bangumiId, animeTitles?.primary, themeColor]
+    [buildCompareParams, router]
+  );
+
+  const handleStartCamera = useCallback(
+    (spot: AnitabiPoint) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      setActiveSpot(null);
+      router.push({
+        pathname: '/pilgrimage/compare/[spotId]',
+        params: buildCompareParams(spot),
+      });
+    },
+    [buildCompareParams, router]
   );
 
   const isEmpty = !loading && !error && (!anime || points.length === 0);
@@ -1986,15 +2084,15 @@ export default function PilgrimageDetailScreen() {
                     style={({ pressed }) => [
                       styles.browseBtn,
                       {
-                        borderColor: `${themeColor}99`,
+                        borderColor: `${themeColor}66`,
                         backgroundColor: `${theme.background.primary}80`,
                       },
                       pressed && { opacity: 0.85 },
                     ]}
                     accessibilityRole="button">
-                    <Ionicons name="open-outline" size={14} color={theme.text.primary} />
+                    <Ionicons name="open-outline" size={13} color={theme.text.primary} />
                     <ThemedText variant="captionSmall" weight="600">
-                      Open in {browseLabel}
+                      {browseLabel}
                     </ThemedText>
                   </Pressable>
                 ) : null}
@@ -2088,98 +2186,37 @@ export default function PilgrimageDetailScreen() {
                     ) : null}
                   </View>
 
-                  <View style={styles.controlModeRow}>
-                    <View style={styles.modeTabsGroup}>
-                      <ViewModeTab
-                        active={viewMode === 'list'}
-                        label="List"
-                        icon="view-list"
-                        themeColor={themeColor}
-                        themeColorFg={themeColorFg}
-                        count={filteredGroupedSpots.length}
-                        theme={theme}
-                        onPress={() => handleViewToggle('list')}
-                      />
-                      <ViewModeTab
-                        active={viewMode === 'map'}
-                        label="Map"
-                        icon="map"
-                        themeColor={themeColor}
-                        themeColorFg={themeColorFg}
-                        count={filteredMappablePointCount}
-                        theme={theme}
-                        onPress={() => handleViewToggle('map')}
-                      />
-                    </View>
-                    <View style={styles.layoutToggleGroup}>
-                      {viewMode === 'list' ? (
-                        <>
-                          <LayoutModeButton
-                            icon="apps"
-                            active={listLayout === 'grid'}
-                            themeColor={themeColor}
-                            themeColorFg={themeColorFg}
-                            theme={theme}
-                            accessibilityLabel="Album grid layout"
-                            onPress={() => {
-                              Haptics.selectionAsync().catch(() => undefined);
-                              setListLayout('grid');
-                            }}
-                          />
-                          <LayoutModeButton
-                            icon="reorder-three"
-                            active={listLayout === 'rows'}
-                            themeColor={themeColor}
-                            themeColorFg={themeColorFg}
-                            theme={theme}
-                            accessibilityLabel="Compare rows layout"
-                            onPress={() => {
-                              Haptics.selectionAsync().catch(() => undefined);
-                              setListLayout('rows');
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <LayoutModeButton
-                            icon="image-outline"
-                            active={mapMarkerMode === 'photo'}
-                            themeColor={themeColor}
-                            themeColorFg={themeColorFg}
-                            theme={theme}
-                            accessibilityLabel="Photo map markers"
-                            onPress={() => {
-                              Haptics.selectionAsync().catch(() => undefined);
-                              setMapMarkerMode('photo');
-                            }}
-                          />
-                          <LayoutModeButton
-                            icon="ellipse"
-                            active={mapMarkerMode === 'dot'}
-                            themeColor={themeColor}
-                            themeColorFg={themeColorFg}
-                            theme={theme}
-                            accessibilityLabel="Dot map markers"
-                            onPress={() => {
-                              Haptics.selectionAsync().catch(() => undefined);
-                              setMapMarkerMode('dot');
-                            }}
-                          />
-                          <LayoutModeButton
-                            icon="cloud-offline-outline"
-                            active={mapOfflineOnly}
-                            themeColor={themeColor}
-                            themeColorFg={themeColorFg}
-                            theme={theme}
-                            accessibilityLabel="Use cached map tiles only"
-                            onPress={() => {
-                              Haptics.selectionAsync().catch(() => undefined);
-                              setMapOfflineOnly((value) => !value);
-                            }}
-                          />
-                        </>
-                      )}
-                    </View>
+                  <View style={styles.viewPresetGroup}>
+                    <DetailViewPresetButton
+                      active={activeViewPreset === 'grid'}
+                      label="Grid"
+                      icon="apps"
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      count={filteredGroupedSpots.length}
+                      theme={theme}
+                      onPress={() => handleViewPresetChange('grid')}
+                    />
+                    <DetailViewPresetButton
+                      active={activeViewPreset === 'rows'}
+                      label="Rows"
+                      icon="reorder-three"
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      count={filteredGroupedSpots.length}
+                      theme={theme}
+                      onPress={() => handleViewPresetChange('rows')}
+                    />
+                    <DetailViewPresetButton
+                      active={activeViewPreset === 'map'}
+                      label="Map"
+                      icon="map"
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      count={filteredMappablePointCount}
+                      theme={theme}
+                      onPress={() => handleViewPresetChange('map')}
+                    />
                   </View>
 
                   <ScrollView
@@ -2419,6 +2456,34 @@ export default function PilgrimageDetailScreen() {
                     }}
                     style={styles.mapInner}
                   />
+                  <View style={styles.mapOptionsDock} pointerEvents="box-none">
+                    <LayoutModeButton
+                      icon={mapMarkerMode === 'photo' ? 'image-outline' : 'ellipse'}
+                      active={mapMarkerMode === 'dot'}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      accessibilityLabel={
+                        mapMarkerMode === 'photo' ? 'Use dot map markers' : 'Use photo map markers'
+                      }
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
+                        setMapMarkerMode((mode) => (mode === 'photo' ? 'dot' : 'photo'));
+                      }}
+                    />
+                    <LayoutModeButton
+                      icon="cloud-offline-outline"
+                      active={mapOfflineOnly}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      accessibilityLabel="Use cached map tiles only"
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => undefined);
+                        setMapOfflineOnly((value) => !value);
+                      }}
+                    />
+                  </View>
                 </View>
               </>
             )}
@@ -2428,9 +2493,12 @@ export default function PilgrimageDetailScreen() {
         <SpotSheet
           spot={activeSpot}
           animeId={animeId ?? ''}
+          scenes={activeSpotScenes}
+          sceneCount={activeSpotSceneCount}
           themeColor={themeColor}
           themeColorFg={themeColorFg}
           distanceKm={activeSpotDistance}
+          visitedTarget={activeSpotVisitedTarget}
           visited={activeSpotVisited}
           saved={activeSpotSaved}
           planned={activeSpotPlanned}
@@ -2441,7 +2509,9 @@ export default function PilgrimageDetailScreen() {
           onToggleSaved={(spot) => handleToggleSpotIntent(spot, 'saved')}
           onTogglePlanned={(spot) => handleToggleSpotIntent(spot, 'planned')}
           onOpenMaps={handleOpenMaps}
+          onStartCamera={handleStartCamera}
           onFrameShot={handleFrameShot}
+          onSelectScene={handleSpotSheetSceneSelect}
         />
 
         <SpotClusterPicker
@@ -2871,10 +2941,10 @@ function StatCell({ icon, value, label, color, theme }: StatCellProps) {
   );
 }
 
-interface ViewModeTabProps {
+interface DetailViewPresetButtonProps {
   active: boolean;
   label: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   themeColor: string;
   themeColorFg: string;
   count?: number;
@@ -2882,7 +2952,7 @@ interface ViewModeTabProps {
   onPress: () => void;
 }
 
-function ViewModeTab({
+function DetailViewPresetButton({
   active,
   label,
   icon,
@@ -2891,7 +2961,7 @@ function ViewModeTab({
   count,
   theme,
   onPress,
-}: ViewModeTabProps) {
+}: DetailViewPresetButtonProps) {
   const styles = useMemo(() => makeTabStyles(theme), [theme]);
   const fg = active ? themeColor : theme.text.secondary;
   return (
@@ -2914,7 +2984,7 @@ function ViewModeTab({
       ]}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}>
-      <MaterialIcons name={icon} size={14} color={fg} />
+      <Ionicons name={icon} size={14} color={fg} />
       <ThemedText variant="bodySmall" weight="600" style={{ color: fg }}>
         {label}
       </ThemedText>
@@ -2998,7 +3068,6 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       paddingVertical: 6,
       borderRadius: Radius.full,
       borderWidth: 1,
-      marginTop: 6,
     },
     // Sticky header lives above the scroll so the hero image scrolls under it.
     headerWrap: {
@@ -3097,20 +3166,10 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    controlModeRow: {
+    viewPresetGroup: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    modeTabsGroup: {
-      flex: 1,
-      flexDirection: 'row',
-      gap: Spacing.xs,
-      minWidth: 0,
-    },
-    layoutToggleGroup: {
-      flexDirection: 'row',
-      gap: 6,
     },
     pillsRow: {
       gap: 8,
@@ -3146,8 +3205,18 @@ function makeStyles(theme: ThemePalette, topInset: number) {
       borderRadius: Radius.cardLg,
       overflow: 'hidden',
       borderWidth: 1,
+      position: 'relative',
     },
     mapInner: { flex: 1 },
+    mapOptionsDock: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 2,
+      elevation: 2,
+      flexDirection: 'row',
+      gap: 8,
+    },
     emptyCard: {
       marginHorizontal: Spacing.screenPadding,
       marginTop: Spacing.lg,
@@ -3499,7 +3568,7 @@ function makeSheetStyles(theme: ThemePalette) {
       borderTopWidth: 1,
       paddingHorizontal: Spacing.screenPadding,
       paddingTop: 8,
-      paddingBottom: Spacing.md,
+      paddingBottom: Spacing.lg,
     },
     handle: {
       alignSelf: 'center',
@@ -3509,54 +3578,86 @@ function makeSheetStyles(theme: ThemePalette) {
       backgroundColor: theme.glassBorder,
       marginBottom: Spacing.sm,
     },
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: Spacing.sm,
+    hero: {
+      height: 140,
+      borderRadius: Radius.lg,
+      overflow: 'hidden',
       marginBottom: Spacing.md,
-    },
-    cover: {
-      width: 88,
-      height: 88,
-      borderRadius: Radius.md,
       backgroundColor: theme.background.tertiary,
     },
-    headerText: {
-      flex: 1,
-      minWidth: 0,
+    cover: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: theme.background.tertiary,
     },
-    epPill: {
-      alignSelf: 'flex-start',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 999,
-      marginBottom: 6,
+    sheetHeroGradient: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    heroText: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      bottom: 14,
+      gap: 2,
     },
     closeBtn: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
       width: 32,
       height: 32,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 16,
+      backgroundColor: 'rgba(0,0,0,0.46)',
+    },
+    sceneRail: {
+      gap: 8,
+      paddingRight: 2,
+      marginTop: -4,
+      marginBottom: Spacing.md,
+    },
+    sceneThumbBtn: {
+      width: 78,
+      height: 56,
+      borderRadius: 14,
+      overflow: 'hidden',
+      borderWidth: 2,
       backgroundColor: theme.background.tertiary,
     },
-    actions: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
+    sceneThumb: {
+      width: '100%',
+      height: '100%',
     },
+    sceneThumbScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.14)',
+    },
+    sceneIndexPill: {
+      position: 'absolute',
+      left: 5,
+      bottom: 5,
+      maxWidth: 64,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: Radius.full,
+    },
+    sceneVisitedDot: {
+      position: 'absolute',
+      top: 5,
+      right: 5,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.status.success,
+    },
+    distanceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md },
     intentActions: {
       flexDirection: 'row',
       gap: Spacing.sm,
-      marginTop: Spacing.sm,
-    },
-    actionBtn: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      height: 44,
-      borderRadius: Radius.md,
+      marginBottom: Spacing.md,
     },
     intentBtn: {
       flex: 1,
@@ -3568,21 +3669,32 @@ function makeSheetStyles(theme: ThemePalette) {
       justifyContent: 'center',
       gap: 6,
     },
+    startCameraBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 56,
+      borderRadius: Radius.md,
+      marginBottom: 10,
+    },
     frameShotBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      height: 44,
+      height: 54,
       borderRadius: Radius.md,
-      marginTop: Spacing.sm,
+      backgroundColor: theme.background.secondary,
       borderWidth: 1,
     },
-    frameShotDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      marginLeft: 4,
+    openMapBtn: {
+      height: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 8,
     },
   });
 }

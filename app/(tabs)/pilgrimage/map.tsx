@@ -1,7 +1,6 @@
-// "See all" pilgrimage screen. Default mode is list — users land on a
-// browsable card list of every pilgrimage anime (collection-first + featured
-// backfill) and tap the Map toggle to switch into the fullscreen map. This
-// matches the requested flow: "see all 應該優先是 list 才讓人點進 map".
+// "See all" pilgrimage screen. Default mode is map-first to match the Pencil
+// v5 direction: the visual map is the main affordance, while List remains one
+// tap away for scanning every anime.
 //
 // Lives outside the Tabs UI (registered with tabBarStyle: display 'none' in
 // app/_layout.tsx) so the bottom dock and the hub's top bar both disappear.
@@ -9,7 +8,7 @@
 // to the previously-selected tab.
 //
 // Route params:
-//   - mode?: 'list' | 'map'  — initial mode (default 'list')
+//   - mode?: 'list' | 'map'  — initial mode (default 'map')
 //   - focus?: number          — bangumi id to centre the map on (map mode only)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -52,7 +51,7 @@ import {
 } from '../../../libs/services/pilgrimage/leaflet-map';
 import { resolveMapMode } from '../../../libs/services/pilgrimage/map-theme-prefs';
 import { useMapThemePref } from '../../../hooks/useMapThemePref';
-import { getNumberParam, getStringParam } from '../../../libs/utils/route-params';
+import { getNumberParam } from '../../../libs/utils/route-params';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 import {
   getAnimeInBounds,
@@ -71,6 +70,10 @@ import {
   buildKnownAnimeIdSet,
   sameLatLng,
 } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
+import {
+  resolvePilgrimageMapInitialMode,
+  shouldLoadPilgrimageMapBounds,
+} from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
 import NearbySpotsSheet from '../../../components/pilgrimage/NearbySpotsSheet';
 
 interface HubMapMarker {
@@ -518,14 +521,13 @@ export default function PilgrimageMapScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const focusBangumiId = getNumberParam(params, 'focus');
-  const initialMode = getStringParam(params, 'mode') === 'map' ? 'map' : 'list';
+  const initialMode = resolvePilgrimageMapInitialMode(params.mode);
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [mode, setMode] = useState<'list' | 'map'>(initialMode);
   const [animes, setAnimes] = useState<AnitabiBangumi[]>([]);
   const [collectionIds, setCollectionIds] = useState<Set<number>>(() => new Set());
-  const animesRef = useRef<AnitabiBangumi[]>([]);
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const userLocationRef = useRef<LatLng | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
@@ -587,10 +589,6 @@ export default function PilgrimageMapScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    animesRef.current = animes;
-  }, [animes]);
-
   // Lazy-loaded entries from the offline index, keyed by bangumi id and
   // additive only (we never remove — the WebView dedups by id so duplicates
   // are cheap, and pan-back-and-forth wants the markers to stay put).
@@ -614,7 +612,7 @@ export default function PilgrimageMapScreen() {
 
   const mergeNearbyIndexed = useCallback(
     (loc: LatLng) => {
-      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
+      const seen = buildKnownAnimeIdSet([], extraIndexedRef.current);
       appendExtraIndexed(getNearbyMapEntries(loc, { exclude: seen }));
     },
     [appendExtraIndexed]
@@ -672,7 +670,8 @@ export default function PilgrimageMapScreen() {
 
   const handleBoundsChange = useCallback(
     (bounds: BoundingBox) => {
-      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
+      if (!shouldLoadPilgrimageMapBounds(bounds)) return;
+      const seen = buildKnownAnimeIdSet([], extraIndexedRef.current);
       appendExtraIndexed(getAnimeInBounds(bounds, { exclude: seen, limit: 40 }));
     },
     [appendExtraIndexed]
@@ -699,7 +698,9 @@ export default function PilgrimageMapScreen() {
   const baseAnitabiMarkers = useMemo<HubMapMarker[]>(() => {
     const out: HubMapMarker[] = [];
     const seen = new Set<number>();
-    for (const anime of animes) {
+    const focusedAnime =
+      focusBangumiId !== null ? animes.find((a) => a.id === focusBangumiId) : null;
+    for (const anime of focusedAnime ? [focusedAnime] : []) {
       if (!isValidGeo(anime.geo)) continue;
       // Anime expanded into individual nearby spots are drawn as scene points
       // instead — skip their centroid so the two don't double up.
@@ -739,7 +740,7 @@ export default function PilgrimageMapScreen() {
       });
     }
     return out;
-  }, [animes, extraIndexed, theme.accent, nearbySpotAnimeIds]);
+  }, [animes, extraIndexed, theme.accent, nearbySpotAnimeIds, focusBangumiId]);
 
   const markers = useMemo<HubMapMarker[]>(() => {
     if (!official88Mode) return baseAnitabiMarkers;
@@ -866,9 +867,6 @@ export default function PilgrimageMapScreen() {
   }, [animes, userLocation, collectionIds]);
 
   const isMap = mode === 'map';
-  // The list mode has no concept of "no markers"; the empty/loading shells
-  // only gate the map. Map mode also keeps the filter chips beneath the header.
-  const mapEmpty = !loading && markers.length === 0;
 
   return (
     <View style={styles.root}>
@@ -879,13 +877,6 @@ export default function PilgrimageMapScreen() {
         loading ? (
           <View style={styles.loadingBox}>
             <Skeleton.MapList mapHeight={400} listCount={4} />
-          </View>
-        ) : mapEmpty ? (
-          <View style={styles.emptyBox}>
-            <Ionicons name="map-outline" size={32} color={theme.text.tertiary} />
-            <ThemedText variant="bodyMedium" tone="secondary" align="center">
-              No anime with mapped pilgrimage locations yet.
-            </ThemedText>
           </View>
         ) : (
           <>
@@ -1085,29 +1076,6 @@ function SeeAllHeader({ theme, insetTop, mode, onBack, onSearch, onSetMode }: Se
 
         <View style={styles.segment}>
           <Pressable
-            onPress={() => onSetMode('list')}
-            accessibilityRole="button"
-            accessibilityLabel="List view"
-            accessibilityState={{ selected: segmentActive('list') }}
-            style={[
-              styles.segmentBtn,
-              segmentActive('list') && { backgroundColor: theme.background.tertiary },
-            ]}>
-            <Ionicons
-              name="list"
-              size={13}
-              color={segmentActive('list') ? theme.text.primary : theme.text.tertiary}
-            />
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{
-                color: segmentActive('list') ? theme.text.primary : theme.text.tertiary,
-              }}>
-              List
-            </ThemedText>
-          </Pressable>
-          <Pressable
             onPress={() => onSetMode('map')}
             accessibilityRole="button"
             accessibilityLabel="Map view"
@@ -1128,6 +1096,29 @@ function SeeAllHeader({ theme, insetTop, mode, onBack, onSearch, onSetMode }: Se
                 color: segmentActive('map') ? theme.text.primary : theme.text.tertiary,
               }}>
               Map
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => onSetMode('list')}
+            accessibilityRole="button"
+            accessibilityLabel="List view"
+            accessibilityState={{ selected: segmentActive('list') }}
+            style={[
+              styles.segmentBtn,
+              segmentActive('list') && { backgroundColor: theme.background.tertiary },
+            ]}>
+            <Ionicons
+              name="list"
+              size={13}
+              color={segmentActive('list') ? theme.text.primary : theme.text.tertiary}
+            />
+            <ThemedText
+              variant="captionSmall"
+              weight="600"
+              style={{
+                color: segmentActive('list') ? theme.text.primary : theme.text.tertiary,
+              }}>
+              List
             </ThemedText>
           </Pressable>
         </View>
@@ -1571,7 +1562,7 @@ function makeChipStyles(theme: ThemePalette) {
       position: 'absolute',
       left: 0,
       right: 0,
-      paddingLeft: 64,
+      paddingLeft: Spacing.screenPadding,
       paddingRight: Spacing.screenPadding,
     },
     scroll: {

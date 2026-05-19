@@ -1,11 +1,8 @@
 // Collapsible "Nearby" panel for the fullscreen pilgrimage map.
 //
-// Sits bottom-left over the map (clear of the bottom-right recenter FAB).
-// Collapsed it is a single pill — "N nearby spots"; tapping expands a
-// distance-sorted, scrollable list of the individual scene locations around
-// the user. Picking a row asks the map to fly to that spot.
-//
-// Rule 8: renders nothing when there is no real data — no placeholder rows.
+// It is intentionally a bottom sheet, not a top filter stack: the map stays
+// visual-first, and the sheet exposes nearby scene locations after location or
+// zoomed map bounds produce real data.
 
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
@@ -46,9 +43,6 @@ export default function NearbySpotsSheet({
   const [expanded, setExpanded] = useState(false);
 
   const count = spots.length;
-  // Nothing to surface yet — render no panel rather than an empty placeholder.
-  if (!loading && count === 0) return null;
-
   const showList = expanded && count > 0;
 
   const toggle = () => {
@@ -64,9 +58,41 @@ export default function NearbySpotsSheet({
   };
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: bottomInset + 16 }]}>
-      {showList ? (
-        <View style={styles.card}>
+    <View pointerEvents="box-none" style={styles.wrap}>
+      <View style={[styles.sheet, { paddingBottom: bottomInset + 12 }]}>
+        <Pressable
+          onPress={toggle}
+          accessibilityRole="button"
+          accessibilityLabel={showList ? 'Hide nearby spots' : 'Show nearby spots'}
+          accessibilityState={{ expanded: showList }}
+          style={({ pressed }) => [styles.header, pressed && { opacity: 0.86 }]}>
+          <View style={styles.handle} />
+          <View style={styles.titleRow}>
+            <View style={styles.titleCol}>
+              <ThemedText variant="titleMedium" weight="800">
+                Spots near you
+              </ThemedText>
+              <ThemedText variant="captionSmall" tone="secondary">
+                {loading && count === 0
+                  ? 'Finding nearby scenes'
+                  : count > 0
+                    ? `${count} ${count === 1 ? 'spot' : 'spots'}`
+                    : 'Zoom map to load spots'}
+              </ThemedText>
+            </View>
+            {loading && count === 0 ? (
+              <ActivityIndicator size="small" color={theme.accent} />
+            ) : (
+              <Ionicons
+                name={showList ? 'chevron-down' : 'chevron-up'}
+                size={18}
+                color={theme.text.tertiary}
+              />
+            )}
+          </View>
+        </Pressable>
+
+        {showList ? (
           <FlatList
             data={spots}
             keyExtractor={(s) => s.markerId}
@@ -77,36 +103,8 @@ export default function NearbySpotsSheet({
             )}
             ItemSeparatorComponent={() => <View style={styles.sep} />}
           />
-        </View>
-      ) : null}
-
-      <Pressable
-        onPress={toggle}
-        accessibilityRole="button"
-        accessibilityLabel={showList ? 'Hide nearby spots' : 'Show nearby spots'}
-        accessibilityState={{ expanded: showList }}
-        style={({ pressed }) => [styles.pill, pressed && { opacity: 0.85 }]}>
-        {loading && count === 0 ? (
-          <>
-            <ActivityIndicator size="small" color={theme.accent} />
-            <ThemedText variant="captionSmall" weight="700">
-              Finding nearby…
-            </ThemedText>
-          </>
-        ) : (
-          <>
-            <Ionicons name="location" size={14} color={theme.accent} />
-            <ThemedText variant="captionSmall" weight="700">
-              {`${count} nearby ${count === 1 ? 'spot' : 'spots'}`}
-            </ThemedText>
-            <Ionicons
-              name={showList ? 'chevron-down' : 'chevron-up'}
-              size={14}
-              color={theme.text.tertiary}
-            />
-          </>
-        )}
-      </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -159,33 +157,40 @@ function makeStyles(theme: ThemePalette) {
       left: 0,
       right: 0,
       bottom: 0,
-      paddingHorizontal: 12,
-      alignItems: 'flex-start',
-      gap: 8,
     },
-    card: {
+    sheet: {
       width: '100%',
-      borderRadius: 16,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      backgroundColor: `${theme.background.primary}F7`,
+      borderTopWidth: 1,
       borderColor: theme.glassBorder,
       overflow: 'hidden',
     },
+    header: {
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 12,
+      gap: 10,
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 42,
+      height: 5,
+      borderRadius: 999,
+      backgroundColor: theme.glassBorder,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    titleCol: { gap: 2 },
     sep: {
       height: 1,
       backgroundColor: theme.glassBorder,
       marginLeft: 12 + THUMB_SIZE + 10,
-    },
-    pill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      minHeight: 44,
-      paddingHorizontal: 14,
-      borderRadius: 22,
-      backgroundColor: `${theme.background.primary}F0`,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
     },
   });
 }

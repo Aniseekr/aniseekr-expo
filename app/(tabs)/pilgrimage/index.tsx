@@ -334,11 +334,11 @@ export default function PilgrimageHubScreen() {
     router.push('/pilgrimage/album');
   }, [router]);
 
-  // "See all" next to the Popular Animes rail — opens the See All screen in
-  // its default list mode. The user can toggle to map view inside that screen.
+  // "See all" next to the Popular Animes rail keeps the user's list-scanning
+  // intent even though the See All route is now map-first by default.
   const handleSeeAllAnimes = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
-    router.push('/pilgrimage/map');
+    router.push({ pathname: '/pilgrimage/map', params: { mode: 'list' } });
   }, [router]);
 
   // True fullscreen has to leave the Tabs container — pushing to a sibling

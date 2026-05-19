@@ -34,10 +34,9 @@ import type { AnitabiPoint } from '../../../../libs/services/pilgrimage/types';
 import {
   cameraOrientationLockIntent,
   CAMERA_BOTTOM_BAR_CONTENT_HEIGHT,
-  CAMERA_SIDE_RAIL_WIDTH,
   resolveCameraBottomInset,
-  resolveCameraToolMenuAnchor,
   resolveCameraActive,
+  resolveCameraTopChromeHeight,
   resolveTransientCameraHudVisibility,
   type CameraOrientationMode,
 } from '../../../../libs/services/pilgrimage/camera-ui';
@@ -67,19 +66,21 @@ import CameraTopBar, {
 } from '../../../../components/pilgrimage/camera/CameraTopBar';
 import AlignmentHUD from '../../../../components/pilgrimage/camera/AlignmentHUD';
 import ZoomDial from '../../../../components/pilgrimage/camera/ZoomDial';
-import CameraToolMenu, {
-  type CameraTool,
-} from '../../../../components/pilgrimage/camera/CameraToolMenu';
 import ShutterRow, {
   SHUTTER_ROW_LANDSCAPE_WIDTH,
 } from '../../../../components/pilgrimage/camera/ShutterRow';
-import OverlayControls from '../../../../components/pilgrimage/camera/chips/OverlayControls';
-import ExposureControls from '../../../../components/pilgrimage/camera/chips/ExposureControls';
+import ReferenceThumbnail from '../../../../components/pilgrimage/camera/ReferenceThumbnail';
+import OverlayDock from '../../../../components/pilgrimage/camera/OverlayDock';
+import OverlayControlsBar from '../../../../components/pilgrimage/camera/OverlayControlsBar';
+import CameraChip from '../../../../components/pilgrimage/camera/chips/CameraChip';
 import AspectChip from '../../../../components/pilgrimage/camera/chips/AspectChip';
 import CountdownChip from '../../../../components/pilgrimage/camera/chips/CountdownChip';
 import OrientationChip from '../../../../components/pilgrimage/camera/chips/OrientationChip';
 import CameraSettingsSheet from '../../../../components/pilgrimage/camera/CameraSettingsSheet';
 import { CountdownOverlay } from '../../../../components/pilgrimage/camera/CountdownOverlay';
+import CamSwitchToast, {
+  type CamSwitchToastValue,
+} from '../../../../components/pilgrimage/camera/CamSwitchToast';
 import type {
   AspectRatio,
   FlashMode,
@@ -118,9 +119,7 @@ import SceneSwitcherSheet from '../../../../components/pilgrimage/camera/SceneSw
 import CaptureModeToast, {
   type CaptureModeToastValue,
 } from '../../../../components/pilgrimage/camera/CaptureModeToast';
-import OverlayOpacityToast, {
-  type OverlayOpacityToastValue,
-} from '../../../../components/pilgrimage/camera/OverlayOpacityToast';
+
 import AutoCaptureToast, {
   type AutoCaptureToastValue,
 } from '../../../../components/pilgrimage/camera/AutoCaptureToast';
@@ -148,6 +147,15 @@ const FLASH_ICON: Record<FlashMode, keyof typeof Ionicons.glyphMap> = {
 const FLASH_REAR_CYCLE: FlashMode[] = ['off', 'auto', 'on', 'torch'];
 const FLASH_FRONT_CYCLE: FlashMode[] = ['off', 'auto', 'on'];
 
+// Overlay mode switch toast copy — shown briefly when the user taps a mode pill.
+const OVERLAY_MODE_TOAST: Record<OverlayMode | 'off', CamSwitchToastValue> = {
+  off: { icon: 'eye-off-outline', label: 'Overlay Off' },
+  anime: { icon: 'image-outline', label: 'Anime', hint: 'Original scene overlay' },
+  edge: { icon: 'analytics-outline', label: 'Edge', hint: 'Edge detection overlay' },
+  sketch: { icon: 'pencil-outline', label: 'Sketch', hint: 'Sketch style overlay' },
+  subject: { icon: 'person-outline', label: 'Subject', hint: 'Subject extract overlay' },
+};
+
 // Capture mode is a top-bar icon button that cycles single → burst → hdr; the
 // icon mirrors the live mode and a toast explains each mode on change.
 const CAPTURE_MODE_ICON: Record<CaptureMode, keyof typeof Ionicons.glyphMap> = {
@@ -157,10 +165,6 @@ const CAPTURE_MODE_ICON: Record<CaptureMode, keyof typeof Ionicons.glyphMap> = {
 };
 const CAPTURE_MODE_CYCLE: CaptureMode[] = ['single', 'burst', 'hdr'];
 
-// Overlay opacity has a quick-cycle top-bar button so the user can adjust the
-// blend without the tool popover covering the preview. Five evenly-spread
-// levels matching the slider's useful range.
-const OVERLAY_OPACITY_CYCLE = [0.2, 0.35, 0.5, 0.7, 0.9];
 const IMPORTED_CAPTURE_DIR = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}pilgrimage-imports/`
   : null;
@@ -217,15 +221,16 @@ export default function CompareCaptureScreen() {
   const [orientationMode, setOrientationMode] = useState<CameraOrientationMode>('auto');
   const [capturing, setCapturing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeTool, setActiveTool] = useState<CameraTool | null>(null);
+  const [quickControlsOpen, setQuickControlsOpen] = useState(true);
+  const [overlayDockOpen, setOverlayDockOpen] = useState(true);
+  // Overlay visibility toggle (Off segment in OverlayControlsBar). Starts on.
+  const [overlayVisible, setOverlayVisible] = useState(true);
   // `null` until the first capture-mode change — a fresh value re-fires the toast.
   const [captureModeToast, setCaptureModeToast] = useState<CaptureModeToastValue | null>(null);
-  // `null` until the first opacity cycle — a fresh value re-fires the toast.
-  const [overlayOpacityToast, setOverlayOpacityToast] = useState<OverlayOpacityToastValue | null>(
-    null
-  );
   // `null` until the first auto-capture — a fresh value re-fires the toast.
   const [autoCaptureToast, setAutoCaptureToast] = useState<AutoCaptureToastValue | null>(null);
+  // Generic switch toast for overlay mode changes.
+  const [switchToast, setSwitchToast] = useState<CamSwitchToastValue | null>(null);
   const [appIsForeground, setAppIsForeground] = useState(() => AppState.currentState === 'active');
   const [availablePictureSizes, setAvailablePictureSizes] = useState<string[]>([]);
   const [sceneSwitcherOpen, setSceneSwitcherOpen] = useState(false);
@@ -442,32 +447,9 @@ export default function CompareCaptureScreen() {
     setCaptureModeToast({ mode: next });
   }, [settings.captureMode, setSettings]);
 
-  // Quick overlay-opacity cycle from the top bar — advances through five blend
-  // levels with wraparound so the user can tune the overlay without the tool
-  // popover covering the preview. A short toast confirms the new level.
-  const cycleOverlayOpacity = useCallback(() => {
-    setOverlayOpacity((cur) => {
-      let nearest = 0;
-      for (let i = 1; i < OVERLAY_OPACITY_CYCLE.length; i += 1) {
-        if (
-          Math.abs(OVERLAY_OPACITY_CYCLE[i] - cur) < Math.abs(OVERLAY_OPACITY_CYCLE[nearest] - cur)
-        ) {
-          nearest = i;
-        }
-      }
-      const next = OVERLAY_OPACITY_CYCLE[(nearest + 1) % OVERLAY_OPACITY_CYCLE.length];
-      hapticsBridge.selection();
-      setOverlayOpacityToast({ opacity: next });
-      return next;
-    });
-  }, []);
-
-  // The overlay reposition toggle lives inside the Overlay popover; toggling it
-  // closes the popover so the drag surface underneath is clear.
   const handleToggleEdit = useCallback(() => {
     hapticsBridge.selection();
     setEditMode((v) => !v);
-    setActiveTool(null);
   }, []);
 
   useEffect(() => {
@@ -487,6 +469,12 @@ export default function CompareCaptureScreen() {
   // here, so a toggle leaves the HUD rotated but the preview stuck sideways.
   // `orientationResyncPending` arms a one-shot CameraView remount that the
   // effect below fires once the rotation has actually settled.
+  //
+  // Regression guard: do not bring back the old `previousIsLandscape` /
+  // `shouldRemountCameraForOrientationSettle` path. A bare `isLandscape`
+  // change includes physical device rotation; remounting the keyed CameraStage
+  // during that native re-layout can race CameraX/CameraView binding and leave
+  // the preview black.
   const [cameraEpoch, setCameraEpoch] = useState(0);
   const orientationResyncPending = useRef(false);
   const orientationInitDone = useRef(false);
@@ -1191,17 +1179,13 @@ export default function CompareCaptureScreen() {
   // row + HUD layers always clear the system bar. iOS insets are used as-is.
   const cameraBottomInset = resolveCameraBottomInset(insets.bottom, Platform.OS);
   const safeAreaBottomPad = bottomPad({ bottom: cameraBottomInset });
-  // Fixed letterbox bars — neither moves, so every floating HUD layer anchors
-  // off this height instead of the old AF-reactive offset that made the dock
-  // physically jump 68px the moment tap-to-focus locked.
+  // The slim bottom bar (portrait) and the floating shutter cluster (landscape)
+  // are fixed, so every floating HUD layer anchors off these.
   const bottomBarHeight = safeAreaBottomPad + CAMERA_BOTTOM_BAR_CONTENT_HEIGHT;
-  const focusEvBarBottom = isLandscape ? safeAreaBottomPad + 72 : bottomBarHeight + 12;
-  const toolMenuAnchor = resolveCameraToolMenuAnchor({
-    topInset: insets.top,
-    isLandscape,
-  });
+  const topBarBottom = insets.top + resolveCameraTopChromeHeight({ quickControlsOpen });
+  const focusEvBarBottom = isLandscape ? safeAreaBottomPad + 72 : bottomBarHeight + 84;
   const cameraHudVisibility = resolveTransientCameraHudVisibility({
-    toolMenuOpen: activeTool !== null,
+    overlayControlsOpen: overlayDockOpen,
     afLocked: tapFocus.afLocked,
   });
   const handleOpenInfo = () => {
@@ -1227,6 +1211,34 @@ export default function CompareCaptureScreen() {
         const pick = pickAutoVirtualLens(availableLenses);
         if (pick) setVirtualLens(pick);
       }}
+    />
+  );
+  const overlayControls = (
+    <OverlayControlsBar
+      visible={overlayVisible}
+      mode={overlayMode}
+      edgeIntensity={edgeIntensity}
+      subjectFocus={subjectFocus}
+      subjectCombine={subjectCombine}
+      opacity={overlayOpacity}
+      flipped={overlayTransform.flipped}
+      editMode={editMode}
+      themeColor={themeColor}
+      onSelectOff={() => {
+        setOverlayVisible(false);
+        setSwitchToast({ ...OVERLAY_MODE_TOAST.off });
+      }}
+      onSelectMode={(m) => {
+        setOverlayMode(m);
+        setOverlayVisible(true);
+        setSwitchToast({ ...OVERLAY_MODE_TOAST[m] });
+      }}
+      onSelectEdgeIntensity={setEdgeIntensity}
+      onSelectSubjectFocus={setSubjectFocus}
+      onToggleSubjectCombine={() => setSubjectCombine((v) => !v)}
+      onChangeOpacity={setOverlayOpacity}
+      onToggleFlip={overlayTransform.toggleFlip}
+      onToggleEdit={handleToggleEdit}
     />
   );
 
@@ -1275,7 +1287,7 @@ export default function CompareCaptureScreen() {
           hiResImageUrl={hiResImageUrl}
           winW={winW}
           winH={winH}
-          opacity={overlayOpacity}
+          opacity={overlayVisible ? overlayOpacity : 0}
           editMode={editMode}
           themeColor={themeColor}
           composedGesture={overlayTransform.composedGesture}
@@ -1303,55 +1315,15 @@ export default function CompareCaptureScreen() {
           topInset={insets.top}
           leftInset={insets.left}
           rightInset={insets.right}
-          bottomInset={cameraBottomInset}
-          rightRailWidth={isLandscape ? SHUTTER_ROW_LANDSCAPE_WIDTH : 0}
-          isLandscape={isLandscape}
           onClose={() => router.back()}
-          trailingActions={
+          actions={
             <>
-              <CameraHeaderButton
-                icon="camera-reverse-outline"
-                accessibilityLabel={facing === 'front' ? 'Use back camera' : 'Use front camera'}
-                accessibilityState={{ selected: facing === 'front' }}
-                themeColor={themeColor}
-                active={facing === 'front'}
-                onPress={toggleFacing}
-              />
               <CameraHeaderButton
                 icon={FLASH_ICON[flashMode]}
                 accessibilityLabel={`Flash ${flashMode}`}
                 themeColor={themeColor}
                 active={flashMode !== 'off'}
                 onPress={cycleFlash}
-              />
-              <CameraHeaderButton
-                icon="image-outline"
-                accessibilityLabel="Overlay tools"
-                accessibilityState={{ expanded: activeTool === 'overlay' }}
-                themeColor={themeColor}
-                active={activeTool === 'overlay' || editMode}
-                onPress={() => {
-                  hapticsBridge.selection();
-                  setActiveTool((t) => (t === 'overlay' ? null : 'overlay'));
-                }}
-              />
-              <CameraHeaderButton
-                icon="layers-outline"
-                accessibilityLabel={`Overlay opacity ${Math.round(overlayOpacity * 100)}%`}
-                themeColor={themeColor}
-                active={false}
-                onPress={cycleOverlayOpacity}
-              />
-              <CameraHeaderButton
-                icon="sunny-outline"
-                accessibilityLabel="Exposure"
-                accessibilityState={{ expanded: activeTool === 'exposure' }}
-                themeColor={themeColor}
-                active={activeTool === 'exposure'}
-                onPress={() => {
-                  hapticsBridge.selection();
-                  setActiveTool((t) => (t === 'exposure' ? null : 'exposure'));
-                }}
               />
               <CameraHeaderButton
                 icon={CAPTURE_MODE_ICON[settings.captureMode]}
@@ -1371,22 +1343,42 @@ export default function CompareCaptureScreen() {
                   setSettingsOpen(true);
                 }}
               />
-              <CameraHeaderButton
-                icon={activeTool === 'more' ? 'close' : 'ellipsis-horizontal'}
-                accessibilityLabel={
-                  activeTool === 'more' ? 'Close camera tools' : 'More camera tools'
-                }
-                accessibilityState={{ expanded: activeTool === 'more' }}
+            </>
+          }
+          quickControlsExpanded={quickControlsOpen}
+          onToggleQuickControls={() => setQuickControlsOpen((v) => !v)}
+          quickControls={
+            <>
+              <CountdownChip
+                seconds={settings.countdownSeconds}
+                onChange={(s) => setSettings({ countdownSeconds: s })}
+              />
+              <AspectChip aspect={aspect} onChange={setAspect} />
+              <OrientationChip mode={orientationMode} onChange={setOrientationMode} />
+              <CameraChip
+                icon="information-circle-outline"
+                label="Guide"
                 themeColor={themeColor}
-                active={activeTool === 'more'}
-                onPress={() => {
-                  hapticsBridge.selection();
-                  setActiveTool((t) => (t === 'more' ? null : 'more'));
-                }}
+                accessibilityLabel="Open framing guide"
+                onPress={handleOpenInfo}
               />
             </>
           }
         />
+
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.refThumbWrap,
+            { top: topBarBottom + 8, left: Math.max(14, insets.left + 12) },
+          ]}>
+          <ReferenceThumbnail
+            imageUrl={imageUrl}
+            themeColor={themeColor}
+            isLandscape={isLandscape}
+            onPress={() => setSceneSwitcherOpen(true)}
+          />
+        </View>
 
         <AlignmentHUD
           score={sensors.score}
@@ -1394,7 +1386,7 @@ export default function CompareCaptureScreen() {
           topInset={insets.top}
           bottomInset={cameraBottomInset}
           bottomBarHeight={bottomBarHeight}
-          leftReserve={isLandscape ? CAMERA_SIDE_RAIL_WIDTH + insets.left : 0}
+          rightReserve={isLandscape ? SHUTTER_ROW_LANDSCAPE_WIDTH : 0}
           isLandscape={isLandscape}
           transformed={overlayTransform.transformed}
           rotationDisplayDeg={overlayTransform.rotationDisplayDeg}
@@ -1402,21 +1394,18 @@ export default function CompareCaptureScreen() {
           onReset={overlayTransform.resetTransforms}
         />
 
-        {/* Landscape floats the zoom dial just inside the left rail; in
-            portrait it lives inside the fixed bottom bar (ShutterRow). */}
-        {isLandscape ? (
-          <View
-            pointerEvents="box-none"
-            style={[
-              styles.landscapeFocalDock,
-              {
-                left: CAMERA_SIDE_RAIL_WIDTH + insets.left + 16,
-                bottom: safeAreaBottomPad + 16,
-              },
-            ]}>
-            {focalDial}
-          </View>
-        ) : null}
+        {/* The zoom dial floats just above the slim bottom bar (portrait) or
+            bottom-left of the full-bleed preview (landscape). */}
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.focalDock,
+            isLandscape
+              ? { left: insets.left + 16, bottom: safeAreaBottomPad + 16 }
+              : { left: 0, right: 0, bottom: bottomBarHeight + 12, alignItems: 'center' },
+          ]}>
+          {focalDial}
+        </View>
 
         {cameraHudVisibility.showFocusExposureBar ? (
           <FocusExposureBar
@@ -1434,9 +1423,9 @@ export default function CompareCaptureScreen() {
             styles.autoBadgeWrap,
             isLandscape
               ? { right: SHUTTER_ROW_LANDSCAPE_WIDTH + 12, bottom: safeAreaBottomPad + 80 }
-              : { left: 0, right: 0, bottom: bottomBarHeight + 84 },
-            // The tool menu popover covers this region — drop it out entirely
-            // while the menu is open so nothing peeks past the panel edges.
+              : { left: 0, right: 0, bottom: bottomBarHeight + 156 },
+            // The overlay panel covers this region — drop it out entirely while
+            // the panel is open so nothing peeks past the panel edges.
             !cameraHudVisibility.showAutoCaptureBadge && styles.hidden,
           ]}>
           <AutoCaptureStatusBadge
@@ -1452,16 +1441,16 @@ export default function CompareCaptureScreen() {
             styles.captureHistoryWrap,
             isLandscape
               ? {
-                  // Clears the compact landscape top bar (≈ insets.top + 48).
+                  // Clears the top strip and the alignment badge below it.
                   right: SHUTTER_ROW_LANDSCAPE_WIDTH + 8,
-                  top: insets.top + 56,
+                  top: topBarBottom + 48,
                   bottom: safeAreaBottomPad + 96,
                   width: 56,
                 }
               : {
                   left: 0,
                   right: 0,
-                  bottom: bottomBarHeight + 12,
+                  bottom: bottomBarHeight + 84,
                   height: 60,
                 },
             !cameraHudVisibility.showCaptureHistory && styles.hidden,
@@ -1479,100 +1468,94 @@ export default function CompareCaptureScreen() {
           />
         </View>
 
-        <ShutterRow
-          themeColor={themeColor}
-          referenceImageUrl={imageUrl}
-          capturing={anyCapturing}
-          isLandscape={isLandscape}
-          topInset={insets.top}
-          bottomInset={cameraBottomInset}
-          focalSlot={isLandscape ? undefined : focalDial}
-          onShutter={onShutter}
-          onLongPress={onShutterLongPress}
-          burst={
-            burst.capturing
-              ? { active: true, captured: burst.captured, total: burst.total }
-              : undefined
-          }
-          onOpenMap={() =>
-            router.push({
-              pathname: '/(tabs)/pilgrimage/map',
-              params: { spotId, animeId: animeId ?? '' },
-            })
-          }
-          onPickLibrary={handlePickLibraryImage}
-          onPickReference={() => {
-            hapticsBridge.tap();
-            setSceneSwitcherOpen(true);
-          }}
-        />
+        {/* Portrait: overlay controls bar + shutter row in a fixed bottom panel */}
+        {!isLandscape && (
+          <View
+            style={[
+              styles.portraitBottomPanel,
+              {
+                bottom: safeAreaBottomPad,
+                height: CAMERA_BOTTOM_BAR_CONTENT_HEIGHT,
+                paddingHorizontal: Math.max(16, insets.left),
+              },
+            ]}>
+            <ShutterRow
+              themeColor={themeColor}
+              capturing={anyCapturing}
+              isLandscape={false}
+              isFrontFacing={facing === 'front'}
+              onShutter={onShutter}
+              onLongPress={onShutterLongPress}
+              onPickLibrary={handlePickLibraryImage}
+              onFlip={toggleFacing}
+              burst={
+                burst.capturing
+                  ? { active: true, captured: burst.captured, total: burst.total }
+                  : undefined
+              }
+            />
+          </View>
+        )}
 
-        {/* Capture-mode change feedback — a brief toast naming the new mode.
-            Rendered before the tool popover so the popover layers above it. */}
+        <OverlayDock
+          open={overlayDockOpen}
+          onToggle={() => setOverlayDockOpen((v) => !v)}
+          themeColor={themeColor}
+          isLandscape={isLandscape}
+          bottomBarHeight={bottomBarHeight}
+          bottomPad={safeAreaBottomPad}
+          clusterReserve={SHUTTER_ROW_LANDSCAPE_WIDTH}
+          leftInset={insets.left}
+          rightInset={insets.right}>
+          {overlayControls}
+        </OverlayDock>
+
+        {/* Landscape: shutter cluster on right; overlay controls live in OverlayDock. */}
+        {isLandscape && (
+          <View
+            style={[
+              styles.landscapeCluster,
+              { right: insets.right, top: topBarBottom, bottom: safeAreaBottomPad },
+            ]}>
+            <ShutterRow
+              themeColor={themeColor}
+              capturing={anyCapturing}
+              isLandscape={true}
+              isFrontFacing={facing === 'front'}
+              onShutter={onShutter}
+              onLongPress={onShutterLongPress}
+              onPickLibrary={handlePickLibraryImage}
+              onFlip={toggleFacing}
+              burst={
+                burst.capturing
+                  ? { active: true, captured: burst.captured, total: burst.total }
+                  : undefined
+              }
+            />
+          </View>
+        )}
+
+        {/* Capture feedback toasts — brief and transient. */}
         <View
           pointerEvents="none"
           style={[
             styles.modeToastWrap,
             isLandscape
               ? {
-                  left: CAMERA_SIDE_RAIL_WIDTH + insets.left,
+                  left: insets.left + 16,
                   right: SHUTTER_ROW_LANDSCAPE_WIDTH,
                   bottom: safeAreaBottomPad + 24,
                 }
-              : { left: 0, right: 0, bottom: bottomBarHeight + 84 },
+              : { left: 0, right: 0, bottom: bottomBarHeight + 156 },
           ]}>
           <CaptureModeToast
             toast={captureModeToast}
             themeColor={themeColor}
             nativeHdrActive={androidNativeHdrTargeted}
           />
-          <OverlayOpacityToast toast={overlayOpacityToast} themeColor={themeColor} />
           <AutoCaptureToast toast={autoCaptureToast} themeColor={themeColor} />
+          <CamSwitchToast toast={switchToast} themeColor={themeColor} />
         </View>
-
-        {/* Secondary-tool popover. Each top-bar tool icon opens this panel with
-            just that tool's controls. Rendered at screen root (after ShutterRow)
-            so it floats above every HUD layer and is reliably touchable. */}
-        <CameraToolMenu
-          tool={activeTool}
-          onRequestClose={() => setActiveTool(null)}
-          themeColor={themeColor}
-          topOffset={toolMenuAnchor.topOffset}
-          leftOffset={toolMenuAnchor.leftOffset}
-          rightOffset={toolMenuAnchor.rightOffset}
-          bottomReserve={isLandscape ? safeAreaBottomPad + 24 : bottomBarHeight}
-          cycleChips={
-            <>
-              <CountdownChip
-                seconds={settings.countdownSeconds}
-                onChange={(s) => setSettings({ countdownSeconds: s })}
-              />
-              <AspectChip aspect={aspect} onChange={setAspect} />
-              <OrientationChip mode={orientationMode} onChange={setOrientationMode} />
-            </>
-          }
-          overlayControls={
-            <OverlayControls
-              mode={overlayMode}
-              edgeIntensity={edgeIntensity}
-              subjectFocus={subjectFocus}
-              subjectCombine={subjectCombine}
-              opacity={overlayOpacity}
-              flipped={overlayTransform.flipped}
-              editMode={editMode}
-              themeColor={themeColor}
-              onSelectMode={setOverlayMode}
-              onSelectEdgeIntensity={setEdgeIntensity}
-              onSelectSubjectFocus={setSubjectFocus}
-              onToggleSubjectCombine={() => setSubjectCombine((v) => !v)}
-              onChangeOpacity={setOverlayOpacity}
-              onToggleFlip={overlayTransform.toggleFlip}
-              onToggleEdit={handleToggleEdit}
-            />
-          }
-          exposureControls={<ExposureControls value={evValue} onChange={setEvValue} />}
-          onOpenTips={handleOpenInfo}
-        />
 
         <CountdownOverlay
           remaining={countdown.remaining}
@@ -1585,6 +1568,10 @@ export default function CompareCaptureScreen() {
           onClose={() => setSettingsOpen(false)}
           settings={settings}
           onSettingsChange={setSettings}
+          aspect={aspect}
+          onAspectChange={setAspect}
+          captureMode={settings.captureMode}
+          onCaptureModeChange={(m) => setSettings({ captureMode: m })}
         />
 
         <SceneSwitcherSheet
@@ -1612,14 +1599,28 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   permBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, marginTop: 12 },
-  landscapeFocalDock: {
-    position: 'absolute',
-    zIndex: 60,
-  },
-  autoBadgeWrap: { position: 'absolute', alignItems: 'center' },
-  // Sits above the place badge (z 70) but below the tool popover (z 100).
+  refThumbWrap: { position: 'absolute', zIndex: 66 },
+  focalDock: { position: 'absolute', zIndex: 58 },
+  autoBadgeWrap: { position: 'absolute', alignItems: 'center', zIndex: 60 },
   modeToastWrap: { position: 'absolute', alignItems: 'center', zIndex: 80 },
-  captureHistoryWrap: { position: 'absolute', alignItems: 'center' },
+  captureHistoryWrap: { position: 'absolute', alignItems: 'center', zIndex: 58 },
+  // Portrait: overlay controls bar + shutter row stacked, fixed to screen bottom.
+  portraitBottomPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 70,
+    paddingBottom: 6,
+    justifyContent: 'center',
+  },
+  // Landscape: shutter column centered vertically on the right edge.
+  landscapeCluster: {
+    position: 'absolute',
+    zIndex: 70,
+    width: SHUTTER_ROW_LANDSCAPE_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   hidden: { display: 'none' },
   levelHorizonWrap: {
     ...StyleSheet.absoluteFillObject,
