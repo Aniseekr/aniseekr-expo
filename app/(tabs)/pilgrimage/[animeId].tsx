@@ -94,7 +94,6 @@ import {
   filterPilgrimageSpots,
   normalizePilgrimageSearchQuery,
   sortPilgrimageSpotsByIntent,
-  type PilgrimageSpotFilter as SpotFilter,
 } from '../../../libs/services/pilgrimage/pilgrimage-detail-filter';
 import {
   loadSpotIntents,
@@ -108,8 +107,6 @@ import {
   getSpotSheetVisitedTarget,
   resolvePilgrimageDetailViewPreset,
   resolveSpotSheetSceneStack,
-  type PilgrimageDetailListLayout,
-  type PilgrimageDetailViewMode,
   type PilgrimageDetailViewPreset,
 } from '../../../libs/services/pilgrimage/pilgrimage-detail-flow';
 import { sameLatLng } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
@@ -122,10 +119,10 @@ import {
   type PilgrimageSeriesSelection,
 } from '../../../libs/services/pilgrimage/pilgrimage-series';
 import type { AnitabiPoint, AnitabiSpot } from '../../../libs/services/pilgrimage/types';
-
-type ViewMode = PilgrimageDetailViewMode;
-type ListLayout = PilgrimageDetailListLayout;
-type MapMarkerMode = 'photo' | 'dot';
+import {
+  usePilgrimageDetailView,
+  type MapMarkerMode,
+} from '../../../hooks/usePilgrimageDetailView';
 
 const HERO_HEIGHT = 320;
 const HEADER_HEIGHT = 56;
@@ -1372,13 +1369,20 @@ export default function PilgrimageDetailScreen() {
     loading: true,
     error: null,
   });
-  const [seriesSelection, setSeriesSelection] = useState<PilgrimageSeriesSelection>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [listLayout, setListLayout] = useState<ListLayout>('grid');
-  const [mapMarkerMode, setMapMarkerMode] = useState<MapMarkerMode>('photo');
-  const [mapOfflineOnly, setMapOfflineOnly] = useState(false);
-  const [spotFilter, setSpotFilter] = useState<SpotFilter>('all');
-  const [spotSearchQuery, setSpotSearchQuery] = useState('');
+  // CLAUDE.md Rule 9: the view/filter controls (series, list/map mode, layout,
+  // marker style, offline filter, spot filter, search) live in one reducer
+  // hook, not seven loose top-level useStates. Destructured so existing reads
+  // stay as bare identifiers; writes go through `setView(patch)`.
+  const { view, setView } = usePilgrimageDetailView();
+  const {
+    seriesSelection,
+    viewMode,
+    listLayout,
+    mapMarkerMode,
+    mapOfflineOnly,
+    spotFilter,
+    spotSearchQuery,
+  } = view;
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const userLocationRef = useRef<LatLng | null>(null);
   const [visited, setVisited] = useState<VisitedMap>({});
@@ -1441,7 +1445,7 @@ export default function PilgrimageDetailScreen() {
     }
     const validBangumiId = bangumiId;
 
-    setSeriesSelection('all');
+    setView({ seriesSelection: 'all' });
     dispatchLoad({ type: 'loading' });
 
     resolvePilgrimageSeries(validBangumiId)
@@ -1489,7 +1493,7 @@ export default function PilgrimageDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bangumiId]);
+  }, [bangumiId, setView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1787,12 +1791,14 @@ export default function PilgrimageDetailScreen() {
 
   const activeViewPreset = getPilgrimageDetailViewPreset(viewMode, listLayout);
 
-  const handleViewPresetChange = useCallback((preset: PilgrimageDetailViewPreset) => {
-    Haptics.selectionAsync().catch(() => undefined);
-    const next = resolvePilgrimageDetailViewPreset(preset);
-    setViewMode(next.viewMode);
-    setListLayout(next.listLayout);
-  }, []);
+  const handleViewPresetChange = useCallback(
+    (preset: PilgrimageDetailViewPreset) => {
+      Haptics.selectionAsync().catch(() => undefined);
+      const next = resolvePilgrimageDetailViewPreset(preset);
+      setView({ viewMode: next.viewMode, listLayout: next.listLayout });
+    },
+    [setView]
+  );
 
   const handleOpenBrowse = useCallback(() => {
     if (!anime) return;
@@ -2148,7 +2154,7 @@ export default function PilgrimageDetailScreen() {
                       theme={theme}
                       onSelect={(next) => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setSeriesSelection(next);
+                        setView({ seriesSelection: next });
                       }}
                     />
                   ) : null}
@@ -2157,7 +2163,7 @@ export default function PilgrimageDetailScreen() {
                     <Ionicons name="search" size={16} color={theme.text.tertiary} />
                     <TextInput
                       value={spotSearchQuery}
-                      onChangeText={setSpotSearchQuery}
+                      onChangeText={(text) => setView({ spotSearchQuery: text })}
                       placeholder="Search spot or EP"
                       placeholderTextColor={theme.text.tertiary}
                       returnKeyType="search"
@@ -2172,7 +2178,7 @@ export default function PilgrimageDetailScreen() {
                       <Pressable
                         onPress={() => {
                           Haptics.selectionAsync().catch(() => undefined);
-                          setSpotSearchQuery('');
+                          setView({ spotSearchQuery: '' });
                         }}
                         hitSlop={8}
                         accessibilityRole="button"
@@ -2232,7 +2238,7 @@ export default function PilgrimageDetailScreen() {
                       theme={theme}
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setSpotFilter('all');
+                        setView({ spotFilter: 'all' });
                       }}
                     />
                     <FilterPill
@@ -2244,7 +2250,7 @@ export default function PilgrimageDetailScreen() {
                       theme={theme}
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setSpotFilter('unvisited');
+                        setView({ spotFilter: 'unvisited' });
                       }}
                     />
                     <FilterPill
@@ -2256,7 +2262,7 @@ export default function PilgrimageDetailScreen() {
                       theme={theme}
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setSpotFilter('visited');
+                        setView({ spotFilter: 'visited' });
                       }}
                     />
                     {groupedCounts.planned > 0 || spotFilter === 'planned' ? (
@@ -2270,7 +2276,7 @@ export default function PilgrimageDetailScreen() {
                         icon="flag"
                         onPress={() => {
                           Haptics.selectionAsync().catch(() => undefined);
-                          setSpotFilter('planned');
+                          setView({ spotFilter: 'planned' });
                         }}
                       />
                     ) : null}
@@ -2285,7 +2291,7 @@ export default function PilgrimageDetailScreen() {
                         icon="bookmark"
                         onPress={() => {
                           Haptics.selectionAsync().catch(() => undefined);
-                          setSpotFilter('saved');
+                          setView({ spotFilter: 'saved' });
                         }}
                       />
                     ) : null}
@@ -2300,7 +2306,7 @@ export default function PilgrimageDetailScreen() {
                         icon="camera"
                         onPress={() => {
                           Haptics.selectionAsync().catch(() => undefined);
-                          setSpotFilter('photos');
+                          setView({ spotFilter: 'photos' });
                         }}
                       />
                     ) : null}
@@ -2468,7 +2474,9 @@ export default function PilgrimageDetailScreen() {
                       }
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setMapMarkerMode((mode) => (mode === 'photo' ? 'dot' : 'photo'));
+                        setView((v) => ({
+                          mapMarkerMode: v.mapMarkerMode === 'photo' ? 'dot' : 'photo',
+                        }));
                       }}
                     />
                     <LayoutModeButton
@@ -2480,7 +2488,7 @@ export default function PilgrimageDetailScreen() {
                       accessibilityLabel="Use cached map tiles only"
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => undefined);
-                        setMapOfflineOnly((value) => !value);
+                        setView((v) => ({ mapOfflineOnly: !v.mapOfflineOnly }));
                       }}
                     />
                   </View>
