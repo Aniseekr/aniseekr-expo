@@ -3,13 +3,7 @@
 // who prefer not to swipe (also serves as a discoverability cue on first run).
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -84,7 +78,7 @@ export function BangumiCardDeck({
         <View style={styles.emptyIconWrap}>
           <Ionicons name="checkmark-done" size={36} color={theme.accent} />
         </View>
-        <Text style={styles.emptyTitle}>You're all caught up</Text>
+        <Text style={styles.emptyTitle}>{"You're all caught up"}</Text>
         <Text style={styles.emptySubtitle}>
           No more anime to triage in this view. Switch seasons or filters to find more.
         </Text>
@@ -271,9 +265,7 @@ function TopCard({ anime, theme, onSwipe, onOpenDetail }: TopCardProps) {
               {anime.format || anime.type ? (
                 <Text style={styles.metaText}>{anime.format ?? anime.type}</Text>
               ) : null}
-              {anime.episodes ? (
-                <Text style={styles.metaText}>{anime.episodes} eps</Text>
-              ) : null}
+              {anime.episodes ? <Text style={styles.metaText}>{anime.episodes} eps</Text> : null}
             </View>
           </View>
         </Pressable>
@@ -312,10 +304,7 @@ function BackCard({ anime, theme }: { anime: Anime; theme: ThemePalette }) {
         recyclingKey={`back-${anime.id}`}
         transition={120}
       />
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.7)']}
-        style={styles.cardGradient}
-      />
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.7)']} style={styles.cardGradient} />
     </View>
   );
 }

@@ -4,13 +4,7 @@
 // EP / score adjustments stay one tap away.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -97,9 +91,9 @@ export function FolderSwipeDeck({
         <View style={styles.emptyIconWrap}>
           <Ionicons name="checkmark-done" size={36} color={theme.accent} />
         </View>
-        <Text style={styles.emptyTitle}>You've triaged everything</Text>
+        <Text style={styles.emptyTitle}>{"You've triaged everything"}</Text>
         <Text style={styles.emptySubtitle}>
-          Swipe ← for "haven't watched", swipe → to like. Tap a card to edit EP or score.
+          {'Swipe ← for "haven\'t watched", swipe → to like. Tap a card to edit EP or score.'}
         </Text>
       </View>
     );
@@ -139,7 +133,9 @@ export function FolderSwipeDeck({
             pressed && { opacity: 0.85 },
           ]}>
           <MaterialIcons name="bookmark-border" size={18} color={theme.text.primary} />
-          <Text style={[styles.actionLabel, { color: theme.text.primary }]}>Haven't watched</Text>
+          <Text style={[styles.actionLabel, { color: theme.text.primary }]}>
+            {"Haven't watched"}
+          </Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -251,9 +247,7 @@ function TopCard({ item, theme, onSwipe, onOpenDetail }: TopCardProps) {
   }));
 
   const progressPct =
-    item.total_episodes > 0
-      ? Math.min(1, item.progress / item.total_episodes)
-      : 0;
+    item.total_episodes > 0 ? Math.min(1, item.progress / item.total_episodes) : 0;
 
   return (
     <GestureDetector gesture={pan}>
@@ -309,12 +303,7 @@ function TopCard({ item, theme, onSwipe, onOpenDetail }: TopCardProps) {
               ) : null}
             </View>
             <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.round(progressPct * 100)}%` },
-                ]}
-              />
+              <View style={[styles.progressFill, { width: `${Math.round(progressPct * 100)}%` }]} />
             </View>
             <Text style={styles.tapHint}>Tap to edit EP or score</Text>
           </View>
@@ -327,7 +316,7 @@ function TopCard({ item, theme, onSwipe, onOpenDetail }: TopCardProps) {
             <MaterialIcons name="bookmark-border" size={28} color={theme.text.primary} />
           </View>
           <Text style={[styles.indicatorLabel, { color: theme.text.primary }]}>
-            Haven't watched
+            {"Haven't watched"}
           </Text>
         </Animated.View>
 
