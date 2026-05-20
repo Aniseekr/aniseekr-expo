@@ -63,6 +63,28 @@ function evaluate(node: ReactNode): RenderedNode | RenderedNode[] | string | nul
     const result = (type as (p: typeof props) => ReactNode)(props);
     return evaluate(result);
   }
+  // React.memo: shape is { $$typeof, type: InnerComponent, compare }. Render
+  // the wrapped inner component (functional or forwardRef) with the same props.
+  if (type && typeof type === 'object') {
+    const memoLike = type as { type?: unknown; compare?: unknown };
+    if (typeof memoLike.type === 'function' && 'compare' in memoLike) {
+      const result = (memoLike.type as (p: typeof props) => ReactNode)(props);
+      return evaluate(result);
+    }
+    // Memo around forwardRef: inner is itself a forwardRef object.
+    if (
+      memoLike.type &&
+      typeof memoLike.type === 'object' &&
+      'compare' in memoLike &&
+      typeof (memoLike.type as { render?: unknown }).render === 'function'
+    ) {
+      const fr = memoLike.type as {
+        render: (props: Record<string, unknown>, ref: unknown) => ReactNode;
+      };
+      const result = fr.render(props, null);
+      return evaluate(result);
+    }
+  }
   // forwardRef: render its `.render` with props
   if (type && typeof type === 'object') {
     const fr = type as { render?: (props: Record<string, unknown>, ref: unknown) => ReactNode };
@@ -100,17 +122,44 @@ function evaluate(node: ReactNode): RenderedNode | RenderedNode[] | string | nul
 /**
  * Render a function component into an inspectable tree.
  * Pressable/View/Text and friends are kept as host strings (e.g. "View").
+ * Also accepts a React.memo-wrapped component — it unwraps and renders the
+ * inner function, so tests can target the memo'd export directly.
  */
 export function render<TProps>(
-  Component: (props: TProps) => ReactElement | null,
+  Component:
+    | ((props: TProps) => ReactElement | null)
+    | { type: (props: TProps) => ReactElement | null; compare?: unknown },
   props: TProps
 ): RenderedNode {
-  const element = Component(props);
+  const inner =
+    typeof Component === 'function'
+      ? Component
+      : (Component as { type: (props: TProps) => ReactElement | null }).type;
+  const element = inner(props);
   const result = evaluate(element);
   if (result === null) return { type: '#null', props: {}, children: [] };
   if (typeof result === 'string') return { type: '#text', props: { value: result }, children: [] };
   if (Array.isArray(result)) return { type: '#fragment', props: {}, children: result };
   return result;
+}
+
+/**
+ * Returns the memo `compare` function for a React.memo-wrapped component.
+ * Throws if the component is not memo-wrapped — tests use that to assert the
+ * leaf components were memo'd (and didn't drift back to bare functions).
+ */
+export function getMemoCompare<TProps>(
+  Component: unknown
+): (prev: TProps, next: TProps) => boolean {
+  if (
+    !Component ||
+    typeof Component !== 'object' ||
+    !('compare' in (Component as Record<string, unknown>)) ||
+    typeof (Component as { compare?: unknown }).compare !== 'function'
+  ) {
+    throw new Error('expected React.memo-wrapped component with custom compare fn');
+  }
+  return (Component as { compare: (prev: TProps, next: TProps) => boolean }).compare;
 }
 
 /** Walk the tree and collect every node where predicate returns true. */
