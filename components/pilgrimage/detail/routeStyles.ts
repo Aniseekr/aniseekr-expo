@@ -1,0 +1,233 @@
+// Styles for the pilgrimage detail route shell + its in-route children
+// (ListHeaderContent, EmptyAnimeCard). Lifted out of `[animeId].tsx` so the
+// route shell can stay near the < 500-line target for route files.
+
+import { StyleSheet } from 'react-native';
+import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
+import type { ThemePalette } from '../../../context/ThemeContext';
+
+export const HERO_HEIGHT = 320;
+export const HEADER_HEIGHT = 56;
+
+export function makePilgrimageDetailStyles(theme: ThemePalette, topInset: number) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.background.primary },
+    loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    errorContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: Spacing.xl,
+      gap: Spacing.sm,
+    },
+    backBtn: {
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs + 2,
+      borderRadius: Radius.md,
+    },
+    scroll: { paddingBottom: 48 },
+    flashContent: { paddingBottom: 48 },
+    heroWrap: {
+      height: HERO_HEIGHT,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    heroImageWrap: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    heroImage: {
+      width: '100%',
+      height: '100%',
+      backgroundColor: theme.background.secondary,
+    },
+    heroGradient: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: HERO_HEIGHT * 0.85,
+    },
+    heroOverlay: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: Spacing.screenPadding,
+      paddingBottom: Spacing.lg,
+      gap: 6,
+    },
+    heroSpotBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
+      borderWidth: 1,
+    },
+    browseBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: Radius.full,
+      borderWidth: 1,
+    },
+    headerWrap: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      height: topInset + HEADER_HEIGHT,
+    },
+    headerBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    headerBackdropBorder: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: StyleSheet.hairlineWidth,
+    },
+    headerStickyTitle: {
+      position: 'absolute',
+      left: 60,
+      right: 120,
+      top: topInset,
+      height: HEADER_HEIGHT,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerActions: {
+      position: 'absolute',
+      top: topInset,
+      left: 0,
+      right: 0,
+      height: HEADER_HEIGHT,
+      paddingHorizontal: Spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    headerRightGroup: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    statsCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: Spacing.screenPadding,
+      marginTop: Spacing.md,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.sm,
+      borderRadius: Radius.lg,
+      backgroundColor: theme.background.secondary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    statDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: theme.glassBorder,
+    },
+    controlsPanel: {
+      marginHorizontal: Spacing.screenPadding,
+      marginTop: Spacing.md,
+      padding: Spacing.sm,
+      gap: Spacing.sm,
+      borderRadius: Radius.lg,
+      backgroundColor: theme.background.secondary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    searchBox: {
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingLeft: 12,
+      paddingRight: 8,
+      borderRadius: Radius.md,
+      backgroundColor: theme.background.tertiary,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 42,
+      paddingVertical: 0,
+      ...Typography.bodyMedium,
+      letterSpacing: 0,
+    },
+    searchClearBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    viewPresetGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    pillsRow: {
+      gap: 8,
+      paddingRight: 2,
+    },
+    spotChipRow: {
+      gap: 8,
+      paddingHorizontal: Spacing.screenPadding,
+      paddingTop: Spacing.xs,
+      paddingBottom: Spacing.xs,
+    },
+    mapWrap: {
+      height: 480,
+      marginHorizontal: Spacing.screenPadding,
+      marginTop: Spacing.xs,
+      borderRadius: Radius.cardLg,
+      overflow: 'hidden',
+      borderWidth: 1,
+      position: 'relative',
+    },
+    mapInner: { flex: 1 },
+    mapOptionsDock: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 2,
+      elevation: 2,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    emptyCard: {
+      marginHorizontal: Spacing.screenPadding,
+      marginTop: Spacing.lg,
+      paddingVertical: Spacing.xl,
+      paddingHorizontal: Spacing.lg,
+      backgroundColor: theme.background.secondary,
+      borderColor: theme.glassBorder,
+      borderWidth: 1,
+      borderRadius: Radius.cardLg,
+      alignItems: 'center',
+      gap: Spacing.xs,
+    },
+    emptyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: Radius.full,
+      marginTop: Spacing.xs,
+    },
+  });
+}
+
+export type PilgrimageDetailStyles = ReturnType<typeof makePilgrimageDetailStyles>;
