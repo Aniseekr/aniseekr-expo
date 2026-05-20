@@ -1,13 +1,26 @@
-// Styles for the pilgrimage detail route shell + its in-route children
-// (ListHeaderContent, EmptyAnimeCard). Lifted out of `[animeId].tsx` so the
-// route shell can stay near the < 500-line target for route files.
+// Styles for the pilgrimage detail route shell + its in-route children.
+// The route uses a map-first layout: a full-bleed map with a stack of
+// floating chrome on top (header buttons / search / chips / view mode
+// toggle), and a persistent pull-up bottom sheet for the anime card +
+// scene grid.
+//
+// Lifted out of `[animeId].tsx` so the route shell can stay near the
+// < 500-line target for route files.
 
 import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
 import type { ThemePalette } from '../../../context/ThemeContext';
 
+// Kept for backwards-compat / tests that depend on these tokens. The new
+// layout no longer uses HERO_HEIGHT (the parallax hero was removed when the
+// route flipped to a map-first design with a pull-up sheet).
 export const HERO_HEIGHT = 320;
 export const HEADER_HEIGHT = 56;
+
+// Approximate height of the floating segmented view-mode toggle that sits
+// just above the bottom sheet handle. Used to pad the sheet peek so the
+// toggle doesn't clip behind it.
+export const VIEW_MODE_TOGGLE_HEIGHT = 52;
 
 export function makePilgrimageDetailStyles(theme: ThemePalette, topInset: number) {
   return StyleSheet.create({
@@ -25,187 +38,139 @@ export function makePilgrimageDetailStyles(theme: ThemePalette, topInset: number
       paddingVertical: Spacing.xs + 2,
       borderRadius: Radius.md,
     },
-    scroll: { paddingBottom: 48 },
-    flashContent: { paddingBottom: 48 },
-    heroWrap: {
-      height: HERO_HEIGHT,
-      overflow: 'hidden',
-      position: 'relative',
-    },
-    heroImageWrap: {
+
+    // Map background — fills the screen behind every floating layer.
+    mapBackground: {
       ...StyleSheet.absoluteFillObject,
     },
-    heroImage: {
-      width: '100%',
-      height: '100%',
-      backgroundColor: theme.background.secondary,
+    mapBackgroundInner: {
+      flex: 1,
     },
-    heroGradient: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: HERO_HEIGHT * 0.85,
+    mapScrim: {
+      // Gentle scrim so the floating chrome reads against bright tiles
+      // (e.g. light-mode street maps).
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.18)',
     },
-    heroOverlay: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      paddingHorizontal: Spacing.screenPadding,
-      paddingBottom: Spacing.lg,
-      gap: 6,
-    },
-    heroSpotBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: Radius.full,
-      borderWidth: 1,
-    },
-    browseBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: Radius.full,
-      borderWidth: 1,
-    },
-    headerWrap: {
+
+    // Floating top-overlay stack (back/album/share + search + chip rows).
+    topOverlay: {
       position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
-      zIndex: 10,
-      height: topInset + HEADER_HEIGHT,
-    },
-    headerBackdrop: {
-      ...StyleSheet.absoluteFillObject,
-    },
-    headerBackdropBorder: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: StyleSheet.hairlineWidth,
-    },
-    headerStickyTitle: {
-      position: 'absolute',
-      left: 60,
-      right: 120,
-      top: topInset,
-      height: HEADER_HEIGHT,
-      alignItems: 'center',
-      justifyContent: 'center',
+      paddingTop: topInset + Spacing.xs,
+      paddingHorizontal: Spacing.screenPadding,
+      gap: Spacing.sm,
     },
     headerActions: {
-      position: 'absolute',
-      top: topInset,
-      left: 0,
-      right: 0,
-      height: HEADER_HEIGHT,
-      paddingHorizontal: Spacing.md,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
     },
     headerRightGroup: {
       flexDirection: 'row',
-      gap: 10,
-    },
-    statsCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginHorizontal: Spacing.screenPadding,
-      marginTop: Spacing.md,
-      paddingVertical: Spacing.sm,
-      paddingHorizontal: Spacing.sm,
-      borderRadius: Radius.lg,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-    },
-    statDivider: {
-      width: 1,
-      height: 28,
-      backgroundColor: theme.glassBorder,
-    },
-    controlsPanel: {
-      marginHorizontal: Spacing.screenPadding,
-      marginTop: Spacing.md,
-      padding: Spacing.sm,
       gap: Spacing.sm,
-      borderRadius: Radius.lg,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
     },
-    searchBox: {
+
+    // Floating search field.
+    searchPill: {
       minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      paddingLeft: 12,
-      paddingRight: 8,
-      borderRadius: Radius.md,
-      backgroundColor: theme.background.tertiary,
-      borderWidth: 1,
+      paddingLeft: 14,
+      paddingRight: 6,
+      borderRadius: Radius.full,
+      backgroundColor: `${theme.background.secondary}E6`,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.glassBorder,
     },
     searchInput: {
       flex: 1,
-      minWidth: 0,
       minHeight: 42,
       paddingVertical: 0,
       ...Typography.bodyMedium,
       letterSpacing: 0,
     },
     searchClearBtn: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    viewPresetGroup: {
+
+    // Series + filter chip rows. Horizontal scrollable; first chip aligned
+    // to the screen padding so it reads as an extension of the overlay.
+    chipRow: {
+      gap: Spacing.xs,
+      paddingRight: Spacing.xs,
+    },
+
+    // Bottom chrome — wraps the filter strip + view-mode toggle in one
+    // Animated.View that anchors to the bottom sheet's top edge so it
+    // slides with the sheet rather than sitting at a fixed point.
+    bottomChromeWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      paddingHorizontal: Spacing.screenPadding,
+      gap: Spacing.xs,
+    },
+    viewModeWrapInner: {
+      alignItems: 'center',
+    },
+    viewModeBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 4,
+      paddingHorizontal: 4,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
+      backgroundColor: `${theme.background.primary}E0`,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.glassBorder,
     },
-    pillsRow: {
-      gap: 8,
-      paddingRight: 2,
+    viewModeSegment: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: Radius.full,
     },
-    spotChipRow: {
-      gap: 8,
-      paddingHorizontal: Spacing.screenPadding,
-      paddingTop: Spacing.xs,
-      paddingBottom: Spacing.xs,
+    viewModeSegmentBadge: {
+      minWidth: 24,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    mapWrap: {
-      height: 480,
-      marginHorizontal: Spacing.screenPadding,
-      marginTop: Spacing.xs,
-      borderRadius: Radius.cardLg,
-      overflow: 'hidden',
-      borderWidth: 1,
-      position: 'relative',
-    },
-    mapInner: { flex: 1 },
+
+    // Map-side floating dock for marker mode + offline toggle.
     mapOptionsDock: {
       position: 'absolute',
-      top: 12,
-      right: 12,
-      zIndex: 2,
-      elevation: 2,
-      flexDirection: 'row',
-      gap: 8,
+      right: Spacing.screenPadding,
+      flexDirection: 'column',
+      gap: Spacing.xs,
     },
+
+    // Error / fallback "no map data" hero — used in place of the map when
+    // the anime has no geo (we still show the floating overlay + sheet,
+    // but the map area becomes a gradient with a hint).
+    fallbackMapHint: {
+      position: 'absolute',
+      top: '38%',
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: Spacing.screenPadding,
+    },
+
+    // Generic empty card retained for the loading/empty error state.
     emptyCard: {
       marginHorizontal: Spacing.screenPadding,
       marginTop: Spacing.lg,

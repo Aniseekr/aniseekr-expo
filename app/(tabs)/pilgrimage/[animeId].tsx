@@ -3,47 +3,37 @@
 //
 // Spec: spec/pilgrimage_spec.md §8 (Routes).
 //
-// Visual language follows japanwalker.pen: a parallax hero, then a glassy
-// floating header (back / camera / share) whose backdrop and sticky title
-// fade in once the hero scrolls past. All surfaces flow from useTheme() so a
-// theme/accent switch repaints the whole screen.
+// Visual language: map-first. The Leaflet WebView fills the screen as the
+// primary surface; back/album/share buttons, the search field, the series
+// switcher and the filter chips float on top of the map. A persistent
+// pull-up `BottomSheet` hosts the anime info card, stats and scene grid.
+// Dragging it up focuses on scenes; dragging it down (or tapping Map)
+// focuses on the map. The view-mode toggle (Grid / Rows / Map) controls
+// both the sheet content layout and its default snap point.
 //
 // CLAUDE.md Rule 9: this file is the route shell. State + side effects live
 // in feature hooks (usePilgrimageDetailData / Interactions / DerivedSpots /
-// SpotSheet) and every list item is its own memo'd component under
+// SpotSheet) and every leaf is its own memo'd component under
 // `components/pilgrimage/detail/`. We do not add new top-level `useState`s
 // here without first asking whether the value belongs in a hook or a child.
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Dimensions,
   InteractionManager,
   Linking,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
+  TextInput,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedProps,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-
-// Driving `intensity` through reanimated props lets the blur kernel sit at 0
-// while the hero is on screen — otherwise iOS keeps compositing a 50-intensity
-// blur every frame even though the wrapper Animated.View is at opacity 0.
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../../context/ThemeContext';
 import { Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
@@ -65,33 +55,34 @@ import {
   resolvePilgrimageDetailViewPreset,
   type PilgrimageDetailViewPreset,
 } from '../../../libs/services/pilgrimage/pilgrimage-detail-flow';
-import type { AnitabiPoint, AnitabiSpot } from '../../../libs/services/pilgrimage/types';
-import {
-  usePilgrimageDetailView,
-} from '../../../hooks/usePilgrimageDetailView';
+import type { AnitabiPoint } from '../../../libs/services/pilgrimage/types';
+import { usePilgrimageDetailView } from '../../../hooks/usePilgrimageDetailView';
 import { usePilgrimageDetailData } from '../../../hooks/usePilgrimageDetailData';
 import { usePilgrimageUserLocation } from '../../../hooks/usePilgrimageUserLocation';
 import { usePilgrimageInteractions } from '../../../hooks/usePilgrimageInteractions';
 import { usePilgrimageDerivedSpots } from '../../../hooks/usePilgrimageDerivedSpots';
 import { usePilgrimageSpotSheet } from '../../../hooks/usePilgrimageSpotSheet';
 import {
-  HEADER_HEIGHT,
-  HERO_HEIGHT,
+  FilterPill,
   LayoutModeButton,
-  PilgrimageDetailHeader,
-  PilgrimageEmptyCard,
-  PilgrimageList,
+  PilgrimageDetailSheet,
   RoundHeaderButton,
-  SpotChip,
+  SeriesSwitchRow,
   SpotClusterPicker,
   SpotMapView,
   SpotSheet,
+  VIEW_MODE_TOGGLE_HEIGHT,
   buildBrowseUrl,
   buildMapsURL,
   getPointSourceBangumiId,
   hasValidGeo,
   makePilgrimageDetailStyles,
 } from '../../../components/pilgrimage/detail';
+
+// Sheet snap heights as fractions of the screen — kept in lockstep with the
+// snap-points array in PilgrimageDetailSheet. We use them to position the
+// floating filter strip and view-mode toggle just above the sheet's peek.
+const SHEET_PEEK_FRACTION = 0.16;
 
 export default function PilgrimageDetailScreen() {
   const params = useLocalSearchParams();
@@ -143,7 +134,10 @@ export default function PilgrimageDetailScreen() {
     () => makePilgrimageDetailStyles(theme, insets.top),
     [theme, insets.top]
   );
-  const animeTitles = useMemo(() => (anime ? getPilgrimageAnimeTitles(anime) : null), [anime]);
+  const animeTitles = useMemo(
+    () => (anime ? getPilgrimageAnimeTitles(anime) : null),
+    [anime]
+  );
   const animeSubtitle = animeTitles ? formatPilgrimageSubtitle(animeTitles) : undefined;
 
   const userLocation = usePilgrimageUserLocation();
@@ -170,6 +164,7 @@ export default function PilgrimageDetailScreen() {
     viewMode,
   });
   const {
+    groupedSpots,
     groupedSpotByPointId,
     filteredGroupedSpots,
     filteredPoints,
@@ -213,24 +208,17 @@ export default function PilgrimageDetailScreen() {
     activeSpotSceneCount,
   } = sheet;
 
-  // scrollY drives the hero parallax + sticky-header worklets. The
-  // Animated.ScrollView (map mode) feeds it via useAnimatedScrollHandler (UI
-  // thread); FlashList (list/grid) feeds it via a plain JS onScroll. That
-  // gives FlashList native virtualization without fighting createAnimated
-  // wrapping; SharedValue updates from JS still propagate to the UI-thread
-  // worklets within one frame which keeps the parallax smooth.
-  const scrollY = useSharedValue(0);
-  const animatedScrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
-    },
-  });
-  const handleListScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      scrollY.value = event.nativeEvent.contentOffset.y;
-    },
-    [scrollY]
-  );
+  // Track the bottom sheet's current snap index so the floating filter strip
+  // and view-mode toggle can hide as the sheet covers them. The sheet
+  // controls itself; we only react to its onChange to fade the chrome.
+  const [sheetIndex, setSheetIndex] = useState<number>(viewMode === 'map' ? 0 : 1);
+
+  useEffect(() => {
+    // Keep the floating chrome's "ghost" snap in sync when the user flips
+    // the view mode toggle (the sheet itself also snaps via an effect inside
+    // PilgrimageDetailSheet).
+    setSheetIndex(viewMode === 'map' ? 0 : 1);
+  }, [viewMode]);
 
   // Keep the map's chip-strip selection in sync with the current filtered
   // pointset. If the previous pick was filtered out, fall back to the first
@@ -251,14 +239,6 @@ export default function PilgrimageDetailScreen() {
     }
     return anime?.cover ?? '';
   }, [bangumiId, anime?.id, anime?.cover]);
-
-  const handleSpotChipPress = useCallback(
-    (spot: AnitabiPoint) => {
-      Haptics.selectionAsync().catch(() => undefined);
-      setSelectedSpotId(spot.id);
-    },
-    [setSelectedSpotId]
-  );
 
   const handleOpenMaps = useCallback((spot: AnitabiPoint) => {
     if (!hasValidGeo(spot.geo)) return;
@@ -322,64 +302,9 @@ export default function PilgrimageDetailScreen() {
     }).catch(() => undefined);
   }, [anime, animeTitles?.primary, browseSource, spotStats.spotCount]);
 
-  const heroAnimatedStyle = useAnimatedStyle(() => {
-    const translateY = interpolate(
-      scrollY.value,
-      [-HERO_HEIGHT, 0, HERO_HEIGHT],
-      [-HERO_HEIGHT / 2, 0, HERO_HEIGHT * 0.45],
-      Extrapolation.CLAMP
-    );
-    const scale = interpolate(scrollY.value, [-HERO_HEIGHT, 0], [1.6, 1], Extrapolation.CLAMP);
-    return { transform: [{ translateY }, { scale }] };
-  });
-  const heroContentStyle = useAnimatedStyle(() => {
-    const op = interpolate(
-      scrollY.value,
-      [HERO_HEIGHT * 0.4, HERO_HEIGHT * 0.7],
-      [1, 0],
-      Extrapolation.CLAMP
-    );
-    return { opacity: op };
-  });
-  const stickyBackdropStyle = useAnimatedStyle(() => {
-    const op = interpolate(
-      scrollY.value,
-      [HERO_HEIGHT - HEADER_HEIGHT - 100, HERO_HEIGHT - HEADER_HEIGHT],
-      [0, 1],
-      Extrapolation.CLAMP
-    );
-    return { opacity: op };
-  });
-  // Pair the wrapper's opacity fade with an actual intensity ramp so iOS does
-  // not keep blurring at full strength when the header backdrop is invisible.
-  const headerBlurProps = useAnimatedProps(() => {
-    const intensity = interpolate(
-      scrollY.value,
-      [HERO_HEIGHT - HEADER_HEIGHT - 100, HERO_HEIGHT - HEADER_HEIGHT],
-      [0, 50],
-      Extrapolation.CLAMP
-    );
-    return { intensity };
-  });
-  const stickyTitleStyle = useAnimatedStyle(() => {
-    const op = interpolate(
-      scrollY.value,
-      [HERO_HEIGHT - HEADER_HEIGHT - 60, HERO_HEIGHT - HEADER_HEIGHT],
-      [0, 1],
-      Extrapolation.CLAMP
-    );
-    const ty = interpolate(
-      scrollY.value,
-      [HERO_HEIGHT - HEADER_HEIGHT - 60, HERO_HEIGHT - HEADER_HEIGHT],
-      [10, 0],
-      Extrapolation.CLAMP
-    );
-    return { opacity: op, transform: [{ translateY: ty }] };
-  });
-
   const browseLabel = useMemo(() => {
     const platform = isSupportedBrowseSource(browseSource) ? browseSource : 'bangumi';
-    return PLATFORM_CONFIGS[platform]?.displayName ?? 'Browse';
+    return PLATFORM_CONFIGS[platform as PlatformType]?.displayName ?? 'Browse';
   }, [browseSource]);
 
   const buildCompareParams = useCallback(
@@ -465,100 +390,52 @@ export default function PilgrimageDetailScreen() {
     setView((v) => ({ mapOfflineOnly: !v.mapOfflineOnly }));
   }, [setView]);
 
-  const isEmpty = !loading && !error && (!anime || points.length === 0);
+  const emptyMessage = normalizedSpotSearchQuery
+    ? 'No spots match this search.'
+    : 'No scenes match this filter.';
 
-  const heroAndControls = (
-    <PilgrimageDetailHeader
-      anime={anime}
-      animeTitles={animeTitles}
-      animeSubtitle={animeSubtitle}
-      browseLabel={browseLabel}
-      filteredGroupedSpotsLength={filteredGroupedSpots.length}
-      filteredMappablePointCount={filteredMappablePointCount}
-      groupedCounts={groupedCounts}
-      hasSeriesSwitcher={hasSeriesSwitcher}
-      heroAnimatedStyle={heroAnimatedStyle}
-      heroContentStyle={heroContentStyle}
-      isEmpty={isEmpty}
-      normalizedSpotSearchQuery={normalizedSpotSearchQuery}
-      onOpenBrowse={handleOpenBrowse}
-      onSearchChange={handleSearchChange}
-      onSearchClear={handleSearchClear}
-      onSeriesSelect={handleSeriesSelect}
-      onSpotFilterChange={handleSpotFilterChange}
-      onViewPresetChange={handleViewPresetChange}
-      posterUri={posterUri}
-      seriesEntries={seriesEntries}
-      effectiveSeriesSelection={effectiveSeriesSelection}
-      availableSeriesEntriesCount={availableSeriesEntries.length}
-      spotFilter={spotFilter}
-      spotSearchQuery={spotSearchQuery}
-      spotStats={spotStats}
-      userStats={userStats}
-      activeViewPreset={activeViewPreset}
-      styles={styles}
-      theme={theme}
-      themeColor={themeColor}
-      themeColorFg={themeColorFg}
-    />
-  );
+  // The bottom sheet writes its top-edge Y (from the top of the screen) into
+  // this shared value every frame. The floating filter strip + view-mode
+  // toggle anchor to it via `useAnimatedStyle` so they hug the sheet's edge
+  // instead of sitting at a fixed point that disappears behind the sheet at
+  // mid snap. Starts at the screen height = sheet closed; gorhom overwrites
+  // it on first layout.
+  const screenHeight = Dimensions.get('window').height;
+  const sheetPosition = useSharedValue(screenHeight);
+
+  // Fallback static offset (used as bottom inset for the chrome when the
+  // sheet hasn't laid out yet, or when reduced-motion is on). Keeps the
+  // chrome visible above the sheet's peek edge on first paint.
+  const sheetPeekOffset = useMemo(() => {
+    return Math.max(
+      VIEW_MODE_TOGGLE_HEIGHT + insets.bottom + 12,
+      Math.round(SHEET_PEEK_FRACTION * screenHeight) + 12
+    );
+  }, [insets.bottom, screenHeight]);
+
+  const handleSheetIndexChange = useCallback((idx: number) => {
+    setSheetIndex(idx);
+  }, []);
+
+  // Anchor the chrome to the sheet's top edge with a 10px gap. Hide it once
+  // the sheet covers the top half of the screen (full snap) so it doesn't
+  // float over the scene grid.
+  const chromeAnimatedStyle = useAnimatedStyle(() => {
+    const bottom = Math.max(screenHeight - sheetPosition.value + 6, sheetPeekOffset);
+    const hidden = sheetPosition.value < screenHeight * 0.18;
+    return {
+      bottom,
+      opacity: hidden ? 0 : 1,
+    };
+  });
+
+  const isEmpty = !loading && !error && (!anime || points.length === 0);
+  const hasMap = !!anime && hasValidGeo(anime.geo) && points.length > 0;
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <LinearGradient colors={theme.gradient} style={StyleSheet.absoluteFill} />
-
-        {/* Sticky animated header (always rendered, backdrop fades in). */}
-        <View style={styles.headerWrap} pointerEvents="box-none">
-          <Animated.View style={[styles.headerBackdrop, stickyBackdropStyle]} pointerEvents="none">
-            <AnimatedBlurView
-              animatedProps={headerBlurProps}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: `${theme.background.primary}D9` },
-              ]}
-            />
-            <View style={[styles.headerBackdropBorder, { backgroundColor: theme.glassBorder }]} />
-          </Animated.View>
-
-          <Animated.View style={[styles.headerStickyTitle, stickyTitleStyle]} pointerEvents="none">
-            <ThemedText variant="titleMedium" weight="700" numberOfLines={1}>
-              {animeTitles?.primary ?? 'Pilgrimage'}
-            </ThemedText>
-          </Animated.View>
-
-          <View style={styles.headerActions}>
-            <RoundHeaderButton
-              icon="chevron-back"
-              onPress={handleBack}
-              accessibilityLabel="Back"
-              tint={theme.text.primary}
-              theme={theme}
-            />
-            <View style={styles.headerRightGroup}>
-              <RoundHeaderButton
-                icon="camera-outline"
-                onPress={handleOpenAlbum}
-                accessibilityLabel="Open pilgrimage album"
-                tint={themeColor}
-                theme={theme}
-              />
-              <RoundHeaderButton
-                icon="share-outline"
-                onPress={handleShare}
-                accessibilityLabel="Share"
-                tint={theme.text.primary}
-                theme={theme}
-              />
-            </View>
-          </View>
-        </View>
-
         {loading ? (
           <View>
             <Skeleton.HeroDetail showEpisodes={false} />
@@ -585,126 +462,290 @@ export default function PilgrimageDetailScreen() {
               </ThemedText>
             </Pressable>
           </SafeAreaView>
-        ) : viewMode === 'map' ? (
-          <Animated.ScrollView
-            onScroll={animatedScrollHandler}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}>
-            {heroAndControls}
-            {isEmpty ? (
-              <PilgrimageEmptyCard styles={styles} theme={theme} />
-            ) : (
-              <>
-                {filteredGroupedSpots.length > 0 ? (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.spotChipRow}>
-                    {filteredGroupedSpots.map((gs) => {
-                      const rep = representativeForGroup(gs);
-                      return (
-                        <SpotChip
-                          key={gs.id}
-                          spot={rep}
-                          active={gs.scenes.some((p) => p.id === selectedSpotId)}
-                          themeColor={themeColor}
-                          themeColorFg={themeColorFg}
-                          distanceKm={distanceForGroup(gs)}
-                          visited={gs.scenes.some((p) => visited[p.id] === true)}
-                          saved={hasIntentForGroup(gs, 'saved')}
-                          planned={hasIntentForGroup(gs, 'planned')}
-                          hasCapture={gs.scenes.some((p) => !!captures[p.id])}
-                          theme={theme}
-                          onPress={handleSpotChipPress}
-                        />
-                      );
-                    })}
-                  </ScrollView>
-                ) : null}
-                <View
-                  style={[
-                    styles.mapWrap,
-                    { borderColor: theme.glassBorder, backgroundColor: theme.background.secondary },
-                  ]}>
-                  <SpotMapView
-                    spots={filteredPoints}
-                    visited={visited}
-                    ringColor={themeColor}
-                    userLocation={userLocation}
-                    centerGeo={anime?.geo ?? null}
-                    centerZoom={anime?.zoom ?? 12}
-                    markerMode={mapMarkerMode}
-                    offlineOnly={mapOfflineOnly}
-                    focusSpotId={selectedSpotId}
+        ) : (
+          <>
+            {/* Layer 1 — map (or themed gradient fallback) fills the screen. */}
+            <View style={styles.mapBackground}>
+              {hasMap ? (
+                <SpotMapView
+                  spots={filteredPoints}
+                  visited={visited}
+                  ringColor={themeColor}
+                  userLocation={userLocation}
+                  centerGeo={anime?.geo ?? null}
+                  centerZoom={anime?.zoom ?? 12}
+                  markerMode={mapMarkerMode}
+                  offlineOnly={mapOfflineOnly}
+                  focusSpotId={selectedSpotId}
+                  theme={theme}
+                  onSpotPress={openSpot}
+                  onClusterPick={openCluster}
+                  style={styles.mapBackgroundInner}
+                />
+              ) : (
+                <LinearGradient
+                  colors={theme.gradient}
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+              <View style={styles.mapScrim} pointerEvents="none" />
+            </View>
+
+            {/* Layer 2 — top-floating chrome (header / search / series). */}
+            <View style={styles.topOverlay} pointerEvents="box-none">
+              <View style={styles.headerActions}>
+                <RoundHeaderButton
+                  icon="chevron-back"
+                  onPress={handleBack}
+                  accessibilityLabel="Back"
+                  tint={theme.text.primary}
+                  theme={theme}
+                />
+                <View style={styles.headerRightGroup}>
+                  <RoundHeaderButton
+                    icon="images-outline"
+                    onPress={handleOpenAlbum}
+                    accessibilityLabel="Open pilgrimage album"
+                    tint={themeColor}
                     theme={theme}
-                    onSpotPress={openSpot}
-                    onClusterPick={openCluster}
-                    style={styles.mapInner}
                   />
-                  <View style={styles.mapOptionsDock} pointerEvents="box-none">
-                    <LayoutModeButton
-                      icon={mapMarkerMode === 'photo' ? 'image-outline' : 'ellipse'}
-                      active={mapMarkerMode === 'dot'}
+                  <RoundHeaderButton
+                    icon="share-outline"
+                    onPress={handleShare}
+                    accessibilityLabel="Share"
+                    tint={theme.text.primary}
+                    theme={theme}
+                  />
+                </View>
+              </View>
+
+              {anime ? (
+                <View style={styles.searchPill}>
+                  <Ionicons name="search" size={16} color={theme.text.tertiary} />
+                  <TextInput
+                    value={spotSearchQuery}
+                    onChangeText={handleSearchChange}
+                    placeholder="Search spot or EP"
+                    placeholderTextColor={theme.text.tertiary}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    selectionColor={themeColor}
+                    clearButtonMode="never"
+                    accessibilityLabel="Search pilgrimage spots or episodes"
+                    style={[styles.searchInput, { color: theme.text.primary }]}
+                  />
+                  {normalizedSpotSearchQuery ? (
+                    <Pressable
+                      onPress={handleSearchClear}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear search"
+                      style={({ pressed }) => [
+                        styles.searchClearBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}>
+                      <Ionicons name="close-circle" size={18} color={theme.text.tertiary} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {anime && hasSeriesSwitcher ? (
+                <SeriesSwitchRow
+                  entries={seriesEntries}
+                  availableCount={availableSeriesEntries.length}
+                  selection={effectiveSeriesSelection}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  onSelect={handleSeriesSelect}
+                />
+              ) : null}
+            </View>
+
+            {/* Layer 3 — map-side dock for marker / offline toggles. Only in
+                map view, and only when we have a real map underneath. */}
+            {hasMap && viewMode === 'map' && sheetIndex <= 1 ? (
+              <View
+                style={[styles.mapOptionsDock, { top: insets.top + 132 }]}
+                pointerEvents="box-none">
+                <LayoutModeButton
+                  icon={mapMarkerMode === 'photo' ? 'image-outline' : 'ellipse'}
+                  active={mapMarkerMode === 'dot'}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  accessibilityLabel={
+                    mapMarkerMode === 'photo' ? 'Use dot map markers' : 'Use photo map markers'
+                  }
+                  onPress={handleMarkerModeToggle}
+                />
+                <LayoutModeButton
+                  icon="cloud-offline-outline"
+                  active={mapOfflineOnly}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  accessibilityLabel="Use cached map tiles only"
+                  onPress={handleOfflineToggle}
+                />
+              </View>
+            ) : null}
+
+            {/* Layer 4+5 — floating chrome (filter chips + view-mode toggle),
+                anchored to the bottom sheet's top edge so it slides with the
+                sheet rather than getting buried at mid snap. Hidden at full
+                snap so it doesn't float over the scene grid. */}
+            {anime ? (
+              <Animated.View
+                style={[styles.bottomChromeWrap, chromeAnimatedStyle]}
+                pointerEvents="box-none">
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipRow}>
+                  <FilterPill
+                    label="All"
+                    active={spotFilter === 'all'}
+                    badge={groupedCounts.all}
+                    themeColor={themeColor}
+                    themeColorFg={themeColorFg}
+                    theme={theme}
+                    onPress={() => handleSpotFilterChange('all')}
+                  />
+                  <FilterPill
+                    label="Unvisited"
+                    active={spotFilter === 'unvisited'}
+                    badge={groupedCounts.unvisited}
+                    themeColor={themeColor}
+                    themeColorFg={themeColorFg}
+                    theme={theme}
+                    onPress={() => handleSpotFilterChange('unvisited')}
+                  />
+                  <FilterPill
+                    label="Visited"
+                    active={spotFilter === 'visited'}
+                    badge={groupedCounts.visited}
+                    themeColor={themeColor}
+                    themeColorFg={themeColorFg}
+                    theme={theme}
+                    onPress={() => handleSpotFilterChange('visited')}
+                  />
+                  {groupedCounts.planned > 0 || spotFilter === 'planned' ? (
+                    <FilterPill
+                      label="Planned"
+                      active={spotFilter === 'planned'}
+                      badge={groupedCounts.planned}
                       themeColor={themeColor}
                       themeColorFg={themeColorFg}
                       theme={theme}
-                      accessibilityLabel={
-                        mapMarkerMode === 'photo' ? 'Use dot map markers' : 'Use photo map markers'
-                      }
-                      onPress={handleMarkerModeToggle}
+                      icon="flag"
+                      onPress={() => handleSpotFilterChange('planned')}
                     />
-                    <LayoutModeButton
-                      icon="cloud-offline-outline"
-                      active={mapOfflineOnly}
+                  ) : null}
+                  {groupedCounts.saved > 0 || spotFilter === 'saved' ? (
+                    <FilterPill
+                      label="Saved"
+                      active={spotFilter === 'saved'}
+                      badge={groupedCounts.saved}
                       themeColor={themeColor}
                       themeColorFg={themeColorFg}
                       theme={theme}
-                      accessibilityLabel="Use cached map tiles only"
-                      onPress={handleOfflineToggle}
+                      icon="bookmark"
+                      onPress={() => handleSpotFilterChange('saved')}
+                    />
+                  ) : null}
+                  {groupedCounts.photos > 0 || spotFilter === 'photos' ? (
+                    <FilterPill
+                      label="Photos"
+                      active={spotFilter === 'photos'}
+                      badge={groupedCounts.photos}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      icon="camera"
+                      onPress={() => handleSpotFilterChange('photos')}
+                    />
+                  ) : null}
+                </ScrollView>
+                <View style={styles.viewModeWrapInner}>
+                  <View style={styles.viewModeBar}>
+                    <ViewModeSegment
+                      icon="apps"
+                      label="Grid"
+                      count={filteredGroupedSpots.length}
+                      active={activeViewPreset === 'grid'}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      styles={styles}
+                      onPress={() => handleViewPresetChange('grid')}
+                    />
+                    <ViewModeSegment
+                      icon="reorder-three"
+                      label="Rows"
+                      count={filteredGroupedSpots.length}
+                      active={activeViewPreset === 'rows'}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      styles={styles}
+                      onPress={() => handleViewPresetChange('rows')}
+                    />
+                    <ViewModeSegment
+                      icon="map"
+                      label="Map"
+                      count={filteredMappablePointCount}
+                      active={activeViewPreset === 'map'}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      styles={styles}
+                      onPress={() => handleViewPresetChange('map')}
                     />
                   </View>
                 </View>
-              </>
-            )}
-          </Animated.ScrollView>
-        ) : isEmpty ? (
-          <Animated.ScrollView
-            onScroll={animatedScrollHandler}
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}>
-            {heroAndControls}
-            <PilgrimageEmptyCard styles={styles} theme={theme} />
-          </Animated.ScrollView>
-        ) : (
-          <PilgrimageList
-            layout={listLayout}
-            data={filteredGroupedSpots}
-            visited={visited}
-            captures={captures}
-            spotIntents={spotIntents}
-            themeColor={themeColor}
-            themeColorFg={themeColorFg}
-            theme={theme}
-            representativeForGroup={representativeForGroup}
-            distanceForGroup={distanceForGroup}
-            hasIntentForGroup={hasIntentForGroup}
-            onSpotPress={openGroup}
-            onToggleVisited={toggleGroupedVisited}
-            onOpenMaps={handleOpenMaps}
-            onTakeComparison={handleFrameShot}
-            ListHeaderComponent={heroAndControls}
-            onScroll={handleListScroll}
-            contentContainerStyle={styles.flashContent}
-            emptyMessage={
-              normalizedSpotSearchQuery
-                ? 'No spots match this search.'
-                : 'No scenes match this filter.'
-            }
-          />
+              </Animated.View>
+            ) : null}
+
+            {/* Layer 6 — persistent pull-up bottom sheet with anime info
+                + scene grid. Snaps follow viewMode (peek for map, mid for
+                grid/rows). */}
+            <PilgrimageDetailSheet
+              anime={anime}
+              animeTitles={animeTitles}
+              animeSubtitle={animeSubtitle}
+              browseLabel={browseLabel}
+              posterUri={posterUri}
+              spotStats={spotStats}
+              userStats={userStats}
+              filteredGroupedSpots={filteredGroupedSpots}
+              totalSpotCount={groupedSpots.length}
+              listLayout={listLayout}
+              viewMode={viewMode}
+              themeColor={themeColor}
+              themeColorFg={themeColorFg}
+              theme={theme}
+              visited={visited}
+              captures={captures}
+              spotIntents={spotIntents}
+              emptyMessage={isEmpty ? 'No pilgrimage data yet for this anime.' : emptyMessage}
+              animatedPosition={sheetPosition}
+              onSheetIndexChange={handleSheetIndexChange}
+              onOpenBrowse={handleOpenBrowse}
+              onSpotPress={openGroup}
+              onToggleVisited={toggleGroupedVisited}
+              onOpenMaps={handleOpenMaps}
+              onTakeComparison={handleFrameShot}
+              representativeForGroup={representativeForGroup}
+              distanceForGroup={distanceForGroup}
+              hasIntentForGroup={hasIntentForGroup}
+            />
+          </>
         )}
 
+        {/* Spot sheet + cluster picker stack on top of everything when open. */}
         <SpotSheet
           spot={activeSpot}
           scenes={activeSpotScenes}
@@ -743,3 +784,60 @@ export default function PilgrimageDetailScreen() {
   );
 }
 
+// Segmented view-mode tab. Inlined here because it's a tiny presentational
+// helper specific to this route's floating toggle — a separate file would
+// add more import noise than the local component is worth.
+interface ViewModeSegmentProps {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  count: number;
+  active: boolean;
+  themeColor: string;
+  themeColorFg: string;
+  theme: ReturnType<typeof useTheme>['theme'];
+  styles: ReturnType<typeof makePilgrimageDetailStyles>;
+  onPress: () => void;
+}
+
+function ViewModeSegment({
+  icon,
+  label,
+  count,
+  active,
+  themeColor,
+  themeColorFg,
+  theme,
+  styles,
+  onPress,
+}: ViewModeSegmentProps) {
+  const fg = active ? themeColorFg : theme.text.primary;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        styles.viewModeSegment,
+        active
+          ? { backgroundColor: themeColor }
+          : { backgroundColor: 'transparent' },
+        pressed && { opacity: 0.86 },
+      ]}>
+      <Ionicons name={icon} size={14} color={fg} />
+      <ThemedText variant="bodySmall" weight="700" style={{ color: fg }}>
+        {label}
+      </ThemedText>
+      <View
+        style={[
+          styles.viewModeSegmentBadge,
+          active
+            ? { backgroundColor: `${themeColorFg}22` }
+            : { backgroundColor: theme.background.tertiary },
+        ]}>
+        <ThemedText variant="captionSmall" weight="700" style={{ color: fg }}>
+          {count}
+        </ThemedText>
+      </View>
+    </Pressable>
+  );
+}

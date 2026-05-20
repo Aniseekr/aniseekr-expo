@@ -27,17 +27,12 @@ export { SpotSheet } from './SpotSheet';
 export type { SpotSheetProps } from './SpotSheet';
 export { PilgrimageList } from './PilgrimageList';
 export type { PilgrimageListProps } from './PilgrimageList';
-export {
-  PilgrimageDetailHeader,
-  PilgrimageEmptyCard,
-} from './PilgrimageDetailHeader';
-export type {
-  PilgrimageDetailHeaderProps,
-  PilgrimageEmptyCardProps,
-} from './PilgrimageDetailHeader';
+export { PilgrimageDetailSheet } from './PilgrimageDetailSheet';
+export type { PilgrimageDetailSheetProps } from './PilgrimageDetailSheet';
 export {
   HEADER_HEIGHT,
   HERO_HEIGHT,
+  VIEW_MODE_TOGGLE_HEIGHT,
   makePilgrimageDetailStyles,
   type PilgrimageDetailStyles,
 } from './routeStyles';
