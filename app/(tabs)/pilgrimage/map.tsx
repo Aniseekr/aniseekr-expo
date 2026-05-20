@@ -1,27 +1,45 @@
-// "See all" pilgrimage screen. Default mode is map-first to match the Pencil
-// v5 direction: the visual map is the main affordance, while List remains one
-// tap away for scanning every anime.
+// Pilgrimage hub map. Map-first design mirroring the per-anime detail screen
+// (app/(tabs)/pilgrimage/[animeId].tsx) so the user perceives the hub → detail
+// transition as a continuous focus shift instead of a hard page change:
 //
-// Lives outside the Tabs UI (registered with tabBarStyle: display 'none' in
-// app/_layout.tsx) so the bottom dock and the hub's top bar both disappear.
-// Pushed from the hub, so back goes back to the hub instead of falling out
-// to the previously-selected tab.
+//   • Full-bleed Leaflet WebView is the primary surface.
+//   • A floating top overlay carries back + album + an in-page search field,
+//     plus a region chip strip for the Anime Tourism 88 selection.
+//   • A persistent pull-up bottom sheet (PilgrimageHubSheet) hosts the
+//     focused-anime card, hub stats, and the nearby anime list.
+//   • A floating bottom chrome (filter chips + Grid/Rows toggle) is anchored
+//     to the sheet's top edge via a shared value so it hugs the handle as the
+//     user drags.
+//
+// Tapping an anime — on the map, on the focused card, or on a list row —
+// pushes to `/pilgrimage/[animeId]`, which is the same map+sheet shell zoomed
+// to one anime. The swap arrow on the focused card cycles the nearest list
+// without leaving this screen.
+//
+// Lives outside the Tabs UI so the bottom dock + hub top-bar both disappear.
 //
 // Route params:
-//   - mode?: 'list' | 'map'  — initial mode (default 'map')
-//   - focus?: number          — bangumi id to centre the map on (map mode only)
+//   - focus?: number — bangumi id to focus the map on (initial centre)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Dimensions,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
-import { Spacing, Typography } from '../../../constants/DesignSystem';
-import { ThemedText, Skeleton } from '../../../components/themed';
+import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
+import { ThemedText, Skeleton, readableTextOn } from '../../../components/themed';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
 import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
@@ -59,22 +77,26 @@ import {
   type BoundingBox,
 } from '../../../libs/services/pilgrimage/anitabi-index';
 import { getNearbyMapEntries, MAP_LOCATE_ZOOM } from '../../../libs/services/pilgrimage/map-nearby';
-import {
-  formatPilgrimageSubtitle,
-  getPilgrimageAnimeTitles,
-} from '../../../libs/services/pilgrimage/pilgrimage-localization';
+import { getPilgrimageAnimeTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
-import { loadNearbySpots, type NearbySpot } from '../../../libs/services/pilgrimage/nearby-spots';
+import {
+  loadVisitedSpots,
+  type VisitedMap,
+} from '../../../libs/services/pilgrimage/visited-prefs';
+import { listCaptures } from '../../../libs/services/pilgrimage/captures';
 import {
   appendIndexedEntries,
   buildKnownAnimeIdSet,
   sameLatLng,
 } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
+import { shouldLoadPilgrimageMapBounds } from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
 import {
-  resolvePilgrimageMapInitialMode,
-  shouldLoadPilgrimageMapBounds,
-} from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
-import NearbySpotsSheet from '../../../components/pilgrimage/NearbySpotsSheet';
+  PilgrimageHubSheet,
+  type HubAnimeEntry,
+  type HubStats,
+} from '../../../components/pilgrimage/PilgrimageHubSheet';
+import { RoundHeaderButton } from '../../../components/pilgrimage/detail/RoundHeaderButton';
+import { FilterPill } from '../../../components/pilgrimage/detail/FilterPill';
 
 interface HubMapMarker {
   /** Unique within a marker set: "bgm:<id>" for Anitabi-centroid markers, "88:<entryId>" for Tourism 88 city pins. */
@@ -516,34 +538,55 @@ ${MAP_BASE_BODY}
 
 const COLLECTION_BACKFILL_TARGET = 16;
 
+// Sheet snap peek fraction — kept in lockstep with PilgrimageHubSheet's snap
+// array. Used as a fallback chrome offset if the sheet's animatedPosition
+// hasn't been written yet.
+const SHEET_PEEK_FRACTION = 0.16;
+const VIEW_MODE_TOGGLE_HEIGHT = 52;
+
+type HubFilter = 'all' | 'collection' | 'official88';
+
 export default function PilgrimageMapScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const focusBangumiId = getNumberParam(params, 'focus');
-  const initialMode = resolvePilgrimageMapInitialMode(params.mode);
+  const focusBangumiIdParam = getNumberParam(params, 'focus');
   const { theme } = useTheme();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const styles = useMemo(() => makeStyles(theme, insets.top), [theme, insets.top]);
+  const themeColor = theme.accent;
+  const themeColorFg = readableTextOn(themeColor);
 
-  const [mode, setMode] = useState<'list' | 'map'>(initialMode);
+  // ─── Data state ─────────────────────────────────────────────────────────
+  // Collection + featured-backfilled animes are the canonical "known" set.
+  // Bounds-driven lazy loading appends entries from the offline anitabi index
+  // as the user pans, so the on-map markers + sheet list grow with the view.
   const [animes, setAnimes] = useState<AnitabiBangumi[]>([]);
   const [collectionIds, setCollectionIds] = useState<Set<number>>(() => new Set());
   const [userLocation, setUserLocation] = useState<LatLng | null>(null);
   const userLocationRef = useRef<LatLng | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
-  const [nearbySpots, setNearbySpots] = useState<NearbySpot[]>([]);
-  const [nearbyLoading, setNearbyLoading] = useState(false);
-  const [focusSpotRequest, setFocusSpotRequest] = useState<{
-    key: string;
-    lat: number;
-    lng: number;
-  } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [visited, setVisited] = useState<VisitedMap>({});
+  const [captureCount, setCaptureCount] = useState(0);
 
-  // Same priority as the hub: collection first, featured backfills.
-  // anitabiService memoises every fetch, so re-loading here costs ~nothing
-  // when the user just came from the hub. We also record which ids came from
-  // the user's collection so the list view can flag those rows.
+  // Lazy-loaded entries from the offline index, keyed by bangumi id and
+  // additive only (we never remove — the WebView dedups by id so duplicates
+  // are cheap, and pan-back-and-forth wants the markers to stay put).
+  const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(() => new Map());
+  const extraIndexedRef = useRef(extraIndexed);
+
+  // ─── View state (parent-owned) ──────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hubFilter, setHubFilter] = useState<HubFilter>('all');
+  const [listLayout, setListLayout] = useState<'grid' | 'rows'>('rows');
+  const [focusedRegion, setFocusedRegion] = useState<AnimeTourism88Region | null>(null);
+  const [flyTick, setFlyTick] = useState(0);
+
+  // Track which anime should be in the swap-able focused card. We persist the
+  // bangumi id (not the index) so the swap behaviour survives list re-sorts.
+  const [focusedAnimeId, setFocusedAnimeId] = useState<number | null>(focusBangumiIdParam);
+
+  // ─── Data loading ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -589,11 +632,29 @@ export default function PilgrimageMapScreen() {
     };
   }, []);
 
-  // Lazy-loaded entries from the offline index, keyed by bangumi id and
-  // additive only (we never remove — the WebView dedups by id so duplicates
-  // are cheap, and pan-back-and-forth wants the markers to stay put).
-  const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(() => new Map());
-  const extraIndexedRef = useRef(extraIndexed);
+  useEffect(() => {
+    let cancelled = false;
+    loadVisitedSpots()
+      .then((m) => {
+        if (!cancelled) setVisited(m);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCaptures()
+      .then((map) => {
+        if (!cancelled) setCaptureCount(Object.keys(map).length);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateUserLocation = useCallback((loc: LatLng) => {
     if (sameLatLng(userLocationRef.current, loc)) return false;
@@ -634,11 +695,10 @@ export default function PilgrimageMapScreen() {
     };
   }, [mergeNearbyIndexed, updateUserLocation]);
 
-  // Compass heading for the user-location cone — subscribed only while the map
-  // is visible. Rounded + thresholded so small wrist movements don't spam the
-  // WebView bridge with sub-degree jitter.
+  // Compass heading for the user-location cone. Always-on while this screen
+  // is mounted; rounded + thresholded so small wrist movements don't spam
+  // the WebView bridge with sub-degree jitter.
   useEffect(() => {
-    if (mode !== 'map') return;
     let last = Number.NaN;
     const unsubscribe = locationService.subscribeToHeading((deg) => {
       const rounded = Math.round(deg);
@@ -647,26 +707,7 @@ export default function PilgrimageMapScreen() {
       setUserHeading((prev) => (prev === rounded ? prev : rounded));
     });
     return unsubscribe;
-  }, [mode]);
-
-  // Expand the closest anime into individual scene spots — powers both the
-  // on-map scene points and the Nearby panel. Re-runs when the location moves.
-  useEffect(() => {
-    if (!userLocation) return;
-    let cancelled = false;
-    setNearbyLoading(true);
-    loadNearbySpots(userLocation)
-      .then((spots) => {
-        if (!cancelled) setNearbySpots(spots);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setNearbyLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userLocation]);
+  }, []);
 
   const handleBoundsChange = useCallback(
     (bounds: BoundingBox) => {
@@ -677,36 +718,176 @@ export default function PilgrimageMapScreen() {
     [appendExtraIndexed]
   );
 
-  // Filter state for the chip row above the map. `null` region == all 7 groups.
-  // - `official88Mode`: filter markers to the Anime Tourism 88 selection.
-  // - `focusedRegion`: which region's camera framing is active. Tapping a region
-  //   ALWAYS flies the camera; if 88 mode is on, it also narrows the filter.
-  // - `flyTick`: increments on every region tap so the camera re-flies even
-  //   when the user re-taps the chip they're already focused on.
-  const [official88Mode, setOfficial88Mode] = useState(false);
-  const [focusedRegion, setFocusedRegion] = useState<AnimeTourism88Region | null>(null);
-  const [flyTick, setFlyTick] = useState(0);
-
+  // ─── Derived: full list of known anime (collection + featured + lazy) ──
   const all88WithCoords = useMemo(() => get88EntriesWithCoords(), []);
 
-  // Anime ids the Nearby feature has expanded into individual scene points.
-  const nearbySpotAnimeIds = useMemo(
-    () => new Set(nearbySpots.map((s) => s.animeId)),
-    [nearbySpots]
-  );
+  // Map from 88-entry bangumi id → eightyEightId so we can flag 88-selected
+  // anime in the hub list and on the focused card.
+  const eightyEightIdByBangumiId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const e of all88WithCoords) {
+      const bid = e.externalIds.bangumi;
+      if (typeof bid === 'number') map.set(bid, e.id);
+    }
+    return map;
+  }, [all88WithCoords]);
+
+  const knownAnimes = useMemo<AnitabiBangumi[]>(() => {
+    const merged = new Map<number, AnitabiBangumi>();
+    for (const a of animes) merged.set(a.id, a);
+    // Index-derived entries lack litePoints, but carry enough to render on
+    // the map + a placeholder row. We synthesise a minimal AnitabiBangumi.
+    for (const entry of extraIndexed.values()) {
+      if (merged.has(entry.id)) continue;
+      const titles = getPilgrimageAnimeTitles({
+        id: entry.id,
+        title: entry.title,
+        cn: entry.cn,
+      });
+      merged.set(entry.id, {
+        id: entry.id,
+        cn: entry.cn,
+        title: titles.original ?? entry.title ?? titles.primary,
+        city: entry.city,
+        cover: entry.cover,
+        color: entry.color || theme.accent,
+        geo: [entry.lat, entry.lng],
+        zoom: 12,
+        modified: 0,
+        litePoints: [],
+        pointsLength: entry.pointsLength,
+        imagesLength: 0,
+      });
+    }
+    return [...merged.values()];
+  }, [animes, extraIndexed, theme.accent]);
+
+  // Build hub entries: collection / 88 / distance / visited counts.
+  // The list is sorted by:
+  //   1. distance from user (when location is known)
+  //   2. otherwise by pointsLength desc — matches the old "popular" ordering.
+  const hubEntries = useMemo<HubAnimeEntry[]>(() => {
+    const out: HubAnimeEntry[] = [];
+    for (const anime of knownAnimes) {
+      if (!isValidGeo(anime.geo)) continue;
+      let distanceKm: number | undefined;
+      if (userLocation) {
+        const d = locationService.getDistanceKm(userLocation, {
+          latitude: anime.geo[0],
+          longitude: anime.geo[1],
+        });
+        if (Number.isFinite(d)) distanceKm = d;
+      }
+      // Use the visited map intersected with litePoints to give a per-anime
+      // visited count. This is approximate (litePoints is a sample) — it's
+      // visible enough to motivate the user but cheap to compute.
+      let visitedCount = 0;
+      for (const p of anime.litePoints ?? []) {
+        if (visited[p.id]) visitedCount += 1;
+      }
+      out.push({
+        anime,
+        distanceKm,
+        fromCollection: collectionIds.has(anime.id),
+        visitedCount,
+        photoCount: 0,
+        is88: eightyEightIdByBangumiId.has(anime.id),
+      });
+    }
+    out.sort((a, b) => {
+      if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
+        return a.distanceKm - b.distanceKm;
+      }
+      if (a.distanceKm !== undefined) return -1;
+      if (b.distanceKm !== undefined) return 1;
+      return (b.anime.pointsLength ?? 0) - (a.anime.pointsLength ?? 0);
+    });
+    return out;
+  }, [knownAnimes, userLocation, collectionIds, visited, eightyEightIdByBangumiId]);
+
+  // Apply hub filter + search query.
+  const filteredEntries = useMemo<HubAnimeEntry[]>(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return hubEntries.filter((entry) => {
+      if (hubFilter === 'collection' && !entry.fromCollection) return false;
+      if (hubFilter === 'official88' && !entry.is88) return false;
+      if (query) {
+        const titles = getPilgrimageAnimeTitles(entry.anime);
+        const haystack = [
+          titles.primary,
+          titles.original,
+          titles.chinese,
+          titles.english,
+          titles.romaji,
+          entry.anime.city,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [hubEntries, hubFilter, searchQuery]);
+
+  const filterCounts = useMemo(() => {
+    let all = 0;
+    let collection = 0;
+    let official88 = 0;
+    for (const e of hubEntries) {
+      all += 1;
+      if (e.fromCollection) collection += 1;
+      if (e.is88) official88 += 1;
+    }
+    return { all, collection, official88 };
+  }, [hubEntries]);
+
+  // Focused anime (the swap-able card on the sheet). Falls back to the first
+  // entry in the filtered list when the previous focus has been filtered out.
+  const focusedAnime = useMemo<HubAnimeEntry | null>(() => {
+    if (filteredEntries.length === 0) return null;
+    if (focusedAnimeId !== null) {
+      const found = filteredEntries.find((e) => e.anime.id === focusedAnimeId);
+      if (found) return found;
+    }
+    return filteredEntries[0];
+  }, [filteredEntries, focusedAnimeId]);
+
+  // Reset focused id if it falls out of the filtered set (so the next swap
+  // starts cycling from the new top of list).
+  useEffect(() => {
+    if (filteredEntries.length === 0) return;
+    if (focusedAnimeId === null) return;
+    const inList = filteredEntries.some((e) => e.anime.id === focusedAnimeId);
+    if (!inList) setFocusedAnimeId(null);
+  }, [filteredEntries, focusedAnimeId]);
+
+  const handleSwapFocused = useCallback(() => {
+    if (filteredEntries.length < 2) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    setFocusedAnimeId((current) => {
+      const ids = filteredEntries.map((e) => e.anime.id);
+      const idx = current === null ? 0 : ids.indexOf(current);
+      const next = idx < 0 ? 1 : (idx + 1) % ids.length;
+      return ids[next] ?? null;
+    });
+  }, [filteredEntries]);
+
+  // ─── Marker building ───────────────────────────────────────────────────
+  // Hub map shows centroids for filteredEntries (so the user's filter and
+  // search apply to what's visible on the map too). The Official 88 chip on
+  // the *top* region row swaps the underlying marker set to the gold 88 city
+  // pins — that filter is on top of the hub filter (it's about which entries
+  // we visualise on the map, while the hub filter is about which animes are
+  // in the sheet list).
+  const official88Mode = hubFilter === 'official88';
 
   const baseAnitabiMarkers = useMemo<HubMapMarker[]>(() => {
     const out: HubMapMarker[] = [];
-    const seen = new Set<number>();
-    const focusedAnime =
-      focusBangumiId !== null ? animes.find((a) => a.id === focusBangumiId) : null;
-    for (const anime of focusedAnime ? [focusedAnime] : []) {
+    for (const entry of filteredEntries) {
+      const anime = entry.anime;
       if (!isValidGeo(anime.geo)) continue;
-      // Anime expanded into individual nearby spots are drawn as scene points
-      // instead — skip their centroid so the two don't double up.
-      if (nearbySpotAnimeIds.has(anime.id)) continue;
       const titles = getPilgrimageAnimeTitles(anime);
-      seen.add(anime.id);
       out.push({
         markerId: `bgm:${anime.id}`,
         bangumiId: anime.id,
@@ -719,28 +900,8 @@ export default function PilgrimageMapScreen() {
         ringColor: anime.color || theme.accent,
       });
     }
-    for (const entry of extraIndexed.values()) {
-      if (seen.has(entry.id)) continue;
-      if (nearbySpotAnimeIds.has(entry.id)) continue;
-      const titles = getPilgrimageAnimeTitles({
-        id: entry.id,
-        title: entry.title,
-        cn: entry.cn,
-      });
-      out.push({
-        markerId: `bgm:${entry.id}`,
-        bangumiId: entry.id,
-        lat: entry.lat,
-        lng: entry.lng,
-        cover: entry.cover,
-        title: titles.primary,
-        city: entry.city,
-        pointsLength: entry.pointsLength,
-        ringColor: entry.color || theme.accent,
-      });
-    }
     return out;
-  }, [animes, extraIndexed, theme.accent, nearbySpotAnimeIds, focusBangumiId]);
+  }, [filteredEntries, theme.accent]);
 
   const markers = useMemo<HubMapMarker[]>(() => {
     if (!official88Mode) return baseAnitabiMarkers;
@@ -750,33 +911,44 @@ export default function PilgrimageMapScreen() {
     return build88Markers(filtered);
   }, [official88Mode, focusedRegion, all88WithCoords, baseAnitabiMarkers]);
 
-  // The Nearby scene points are hidden while the Official 88 filter is on —
-  // that view is its own thing (gold city pins, no per-scene detail).
-  const visibleNearbySpots = useMemo<NearbySpot[]>(
-    () => (official88Mode ? [] : nearbySpots),
-    [official88Mode, nearbySpots]
-  );
-
-  // Bumped whenever the marker set fundamentally changes so the WebView clears
-  // stale markers instead of additively merging: gold 88 city pins ↔ anitabi
-  // centroids, and centroids dropping out as anime expand into nearby spots.
+  // Bumped whenever the marker set fundamentally changes so the WebView
+  // clears stale markers instead of additively merging: gold 88 city pins ↔
+  // anitabi centroids, and search-filtered subsets.
   const refitNonce = useMemo(
-    () =>
-      `${official88Mode ? '88' : 'all'}:${focusedRegion ?? 'any'}:${[...nearbySpotAnimeIds]
-        .sort((a, b) => a - b)
-        .join(',')}`,
-    [official88Mode, focusedRegion, nearbySpotAnimeIds]
+    () => `${hubFilter}:${focusedRegion ?? 'any'}:${searchQuery.trim().toLowerCase()}`,
+    [hubFilter, focusedRegion, searchQuery]
   );
 
-  // Camera-fly request derived from focusedRegion + flyTick. Whole-Japan when
-  // no region is focused; the region's bounds otherwise. flyTick guarantees a
-  // new identity per tap so the FullscreenMapView effect re-runs.
+  // Camera-fly request derived from focusedRegion + flyTick. Whole-Japan
+  // when no region is focused; the region's bounds otherwise. flyTick
+  // guarantees a new identity per tap so the map effect re-runs on re-taps.
   const flyBoundsRequest = useMemo(() => {
-    if (flyTick === 0) return null; // skip initial render — the map already opens at Japan overview
+    if (flyTick === 0) return null; // initial render: map opens at Japan overview
     const bounds = focusedRegion ? REGION_BOUNDS[focusedRegion] : JAPAN_BOUNDS;
     return { key: `${focusedRegion ?? 'jp'}#${flyTick}`, bounds };
   }, [focusedRegion, flyTick]);
 
+  // When the focused anime changes (via swap or sheet row preview), fly the
+  // map to it so the sheet + map track together — that's the "silky" feel.
+  const focusBangumiId = focusedAnime?.anime.id ?? null;
+
+  // ─── Hub stats (top of sheet) ──────────────────────────────────────────
+  const stats = useMemo<HubStats>(() => {
+    let totalScenes = 0;
+    let visitedCount = 0;
+    for (const e of filteredEntries) {
+      totalScenes += e.anime.pointsLength ?? 0;
+      visitedCount += e.visitedCount;
+    }
+    return {
+      nearbyCount: filteredEntries.length,
+      totalScenes,
+      visitedCount,
+      photoCount: captureCount,
+    };
+  }, [filteredEntries, captureCount]);
+
+  // ─── Handlers ──────────────────────────────────────────────────────────
   const handlePickRegion = useCallback((region: AnimeTourism88Region) => {
     Haptics.selectionAsync().catch(() => undefined);
     setFocusedRegion((cur) => (cur === region ? null : region));
@@ -787,11 +959,6 @@ export default function PilgrimageMapScreen() {
     Haptics.selectionAsync().catch(() => undefined);
     setFocusedRegion(null);
     setFlyTick((t) => t + 1);
-  }, []);
-
-  const handleToggleOfficial88 = useCallback(() => {
-    Haptics.selectionAsync().catch(() => undefined);
-    setOfficial88Mode((v) => !v);
   }, []);
 
   const handleLocatePress = useCallback(() => {
@@ -806,7 +973,10 @@ export default function PilgrimageMapScreen() {
       .catch(() => undefined);
   }, [mergeNearbyIndexed, updateUserLocation]);
 
-  const handleAnimePress = useCallback(
+  // The actual drill-down. Same handler whether the user tapped a marker, the
+  // focused card, or a list row. returnTo=map so the detail screen's back
+  // button returns to *this* hub map view rather than the tab root.
+  const navigateToDetail = useCallback(
     (bangumiId: number) => {
       Haptics.selectionAsync().catch(() => undefined);
       router.push(buildPilgrimageDetailRoute(bangumiId, { returnTo: 'map' }));
@@ -814,439 +984,311 @@ export default function PilgrimageMapScreen() {
     [router]
   );
 
-  const handlePickNearbySpot = useCallback((spot: NearbySpot) => {
-    Haptics.selectionAsync().catch(() => undefined);
-    setFocusSpotRequest({
-      key: `${spot.markerId}#${Date.now()}`,
-      lat: spot.lat,
-      lng: spot.lng,
-    });
-  }, []);
+  const handleMarkerPress = useCallback(
+    (bangumiId: number) => {
+      // Tapping a marker focuses the card AND drills in. This is the fastest
+      // path to detail for users who already know which marker they want.
+      setFocusedAnimeId(bangumiId);
+      navigateToDetail(bangumiId);
+    },
+    [navigateToDetail]
+  );
+
+  const handleSheetAnimePress = useCallback(
+    (anime: AnitabiBangumi) => navigateToDetail(anime.id),
+    [navigateToDetail]
+  );
 
   const handleBack = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
     router.back();
   }, [router]);
 
-  const handleSearch = useCallback(() => {
+  const handleOpenAlbum = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
-    router.push({ pathname: '/search', params: { context: 'pilgrimage' } });
+    router.push('/pilgrimage/album');
   }, [router]);
 
-  const handleSetMode = useCallback((next: 'list' | 'map') => {
+  const handleSearchChange = useCallback((text: string) => setSearchQuery(text), []);
+  const handleSearchClear = useCallback(() => {
     Haptics.selectionAsync().catch(() => undefined);
-    setMode(next);
+    setSearchQuery('');
   }, []);
 
-  const listRows = useMemo<PilgrimageListRow[]>(() => {
-    const rows: PilgrimageListRow[] = animes.map((anime) => {
-      const titles = getPilgrimageAnimeTitles(anime);
-      let distanceKm: number | undefined;
-      if (userLocation && Array.isArray(anime.geo) && anime.geo.length >= 2) {
-        const [lat, lng] = anime.geo;
-        if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
-          const d = locationService.getDistanceKm(userLocation, {
-            latitude: lat,
-            longitude: lng,
-          });
-          if (Number.isFinite(d)) distanceKm = d;
-        }
-      }
-      return {
-        id: anime.id,
-        cover: anime.cover ?? '',
-        primaryTitle: titles.primary,
-        secondaryTitle: formatPilgrimageSubtitle(titles),
-        city: anime.city ?? '',
-        pointsLength: anime.pointsLength ?? 0,
-        distanceKm,
-        fromCollection: collectionIds.has(anime.id),
-      };
-    });
-    return rows;
-  }, [animes, userLocation, collectionIds]);
+  const handlePickFilter = useCallback((next: HubFilter) => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setHubFilter(next);
+  }, []);
 
-  const isMap = mode === 'map';
+  const handlePickLayout = useCallback((next: 'grid' | 'rows') => {
+    Haptics.selectionAsync().catch(() => undefined);
+    setListLayout(next);
+  }, []);
+
+  // ─── Bottom-sheet anchor plumbing ──────────────────────────────────────
+  const screenHeight = Dimensions.get('window').height;
+  const sheetPosition = useSharedValue(screenHeight);
+  const [sheetIndex, setSheetIndex] = useState<number>(1);
+
+  const sheetPeekOffset = useMemo(() => {
+    return Math.max(
+      VIEW_MODE_TOGGLE_HEIGHT + insets.bottom + 12,
+      Math.round(SHEET_PEEK_FRACTION * screenHeight) + 12
+    );
+  }, [insets.bottom, screenHeight]);
+
+  const handleSheetIndexChange = useCallback((idx: number) => setSheetIndex(idx), []);
+
+  // Anchor floating bottom chrome to the sheet's top edge so it slides with
+  // the sheet rather than getting buried at mid snap. Hidden once the sheet
+  // covers the top half of the screen (full snap) so it doesn't float over
+  // the anime list scroll area.
+  const chromeAnimatedStyle = useAnimatedStyle(() => {
+    const bottom = Math.max(screenHeight - sheetPosition.value + 6, sheetPeekOffset);
+    const hidden = sheetPosition.value < screenHeight * 0.18;
+    return {
+      bottom,
+      opacity: hidden ? 0 : 1,
+    };
+  });
+
+  // Cycle the focused id when a row tap should preview-without-drilling.
+  // (Currently unused — kept for an eventual "long-press = preview" path.)
+  void sheetIndex;
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Body */}
-      {isMap ? (
-        loading ? (
-          <View style={styles.loadingBox}>
-            <Skeleton.MapList mapHeight={400} listCount={4} />
-          </View>
-        ) : (
-          <>
-            <FullscreenMapView
-              markers={markers}
-              replaceKey={refitNonce}
-              userLocation={userLocation}
-              userHeading={userHeading}
-              spots={visibleNearbySpots}
-              focusSpotRequest={focusSpotRequest}
-              ringColor={theme.accent}
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <Skeleton.MapList mapHeight={400} listCount={4} />
+        </View>
+      ) : (
+        <>
+          {/* Layer 1 — full-bleed Leaflet map. */}
+          <HubMapBackground
+            markers={markers}
+            replaceKey={refitNonce}
+            userLocation={userLocation}
+            userHeading={userHeading}
+            ringColor={themeColor}
+            theme={theme}
+            focusBangumiId={focusBangumiId}
+            flyBoundsRequest={flyBoundsRequest}
+            onAnimePress={handleMarkerPress}
+            onBoundsChange={handleBoundsChange}
+            onLocatePress={handleLocatePress}
+          />
+
+          {/* Layer 2 — floating top overlay (back / album + search + region chips). */}
+          <View style={styles.topOverlay} pointerEvents="box-none">
+            <View style={styles.headerActions}>
+              <RoundHeaderButton
+                icon="chevron-back"
+                onPress={handleBack}
+                accessibilityLabel="Back"
+                tint={theme.text.primary}
+                theme={theme}
+              />
+              <View style={styles.headerRightGroup}>
+                <RoundHeaderButton
+                  icon="albums-outline"
+                  onPress={handleOpenAlbum}
+                  accessibilityLabel="Open pilgrimage album"
+                  tint={themeColor}
+                  theme={theme}
+                />
+              </View>
+            </View>
+
+            <View style={styles.searchPill}>
+              <Ionicons name="search" size={16} color={theme.text.tertiary} />
+              <TextInput
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                placeholder="Search anime or city"
+                placeholderTextColor={theme.text.tertiary}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+                selectionColor={themeColor}
+                clearButtonMode="never"
+                accessibilityLabel="Search anime"
+                style={[styles.searchInput, { color: theme.text.primary }]}
+              />
+              {searchQuery.length > 0 ? (
+                <Pressable
+                  onPress={handleSearchClear}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                  style={({ pressed }) => [styles.searchClearBtn, pressed && { opacity: 0.7 }]}>
+                  <Ionicons name="close-circle" size={18} color={theme.text.tertiary} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <RegionChipStrip
               theme={theme}
-              focusBangumiId={focusBangumiId}
-              flyBoundsRequest={flyBoundsRequest}
-              onAnimePress={handleAnimePress}
-              onBoundsChange={handleBoundsChange}
-              onLocatePress={handleLocatePress}
-            />
-            <FilterChipRow
-              theme={theme}
-              insetTop={insets.top + HEADER_BAR_HEIGHT + 4}
-              official88Mode={official88Mode}
               focusedRegion={focusedRegion}
-              onToggleOfficial88={handleToggleOfficial88}
               onPickRegion={handlePickRegion}
               onResetToJapan={handleResetToJapan}
             />
-            <NearbySpotsSheet
-              spots={visibleNearbySpots}
-              loading={!official88Mode && nearbyLoading}
-              bottomInset={insets.bottom}
-              onPickSpot={handlePickNearbySpot}
-            />
-          </>
-        )
-      ) : loading ? (
-        <View style={[styles.listLoading, { paddingTop: insets.top + HEADER_BAR_HEIGHT + 8 }]}>
-          <Skeleton.AnimeCardList count={6} paddingHorizontal={Spacing.md} />
-        </View>
-      ) : listRows.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="albums-outline" size={32} color={theme.text.tertiary} />
-          <ThemedText variant="bodyMedium" tone="secondary" align="center">
-            Nothing here yet. Add anime to your collection or browse featured pilgrimages.
-          </ThemedText>
-        </View>
-      ) : (
-        <FlatList
-          data={listRows}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <PilgrimageListCard
-              row={item}
-              theme={theme}
-              onPress={() => handleAnimePress(item.id)}
-            />
-          )}
-          contentContainerStyle={{
-            paddingTop: insets.top + HEADER_BAR_HEIGHT + Spacing.md,
-            paddingHorizontal: Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl,
-            gap: 10,
-          }}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+          </View>
 
-      {/* Header — sits above body for both modes */}
-      <SeeAllHeader
-        theme={theme}
-        insetTop={insets.top}
-        mode={mode}
-        onBack={handleBack}
-        onSearch={handleSearch}
-        onSetMode={handleSetMode}
-      />
+          {/* Layer 3+4 — floating bottom chrome anchored to the sheet's top
+              edge. Filter chips + layout toggle in a single Animated.View. */}
+          <Animated.View
+            style={[styles.bottomChromeWrap, chromeAnimatedStyle]}
+            pointerEvents="box-none">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}>
+              <FilterPill
+                label="All"
+                active={hubFilter === 'all'}
+                badge={filterCounts.all}
+                themeColor={themeColor}
+                themeColorFg={themeColorFg}
+                theme={theme}
+                onPress={() => handlePickFilter('all')}
+              />
+              <FilterPill
+                label="In collection"
+                active={hubFilter === 'collection'}
+                badge={filterCounts.collection}
+                themeColor={themeColor}
+                themeColorFg={themeColorFg}
+                theme={theme}
+                icon="bookmark"
+                onPress={() => handlePickFilter('collection')}
+              />
+              <FilterPill
+                label="★ 88"
+                active={hubFilter === 'official88'}
+                badge={filterCounts.official88}
+                themeColor={themeColor}
+                themeColorFg={themeColorFg}
+                theme={theme}
+                onPress={() => handlePickFilter('official88')}
+              />
+            </ScrollView>
+            <View style={styles.viewModeWrapInner}>
+              <View style={styles.viewModeBar}>
+                <LayoutToggleSegment
+                  icon="reorder-three"
+                  label="Rows"
+                  count={filteredEntries.length}
+                  active={listLayout === 'rows'}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  styles={styles}
+                  onPress={() => handlePickLayout('rows')}
+                />
+                <LayoutToggleSegment
+                  icon="apps"
+                  label="Grid"
+                  count={filteredEntries.length}
+                  active={listLayout === 'grid'}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  styles={styles}
+                  onPress={() => handlePickLayout('grid')}
+                />
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* Layer 5 — persistent pull-up sheet with focused-anime card,
+              hub stats and the nearby anime list. */}
+          <PilgrimageHubSheet
+            nearbyAnimes={filteredEntries}
+            focusedAnime={focusedAnime}
+            canSwap={filteredEntries.length > 1}
+            stats={stats}
+            listLayout={listLayout}
+            themeColor={themeColor}
+            themeColorFg={themeColorFg}
+            theme={theme}
+            searchQuery={searchQuery}
+            animatedPosition={sheetPosition}
+            onSheetIndexChange={handleSheetIndexChange}
+            onAnimePress={handleSheetAnimePress}
+            onSwapFocused={handleSwapFocused}
+          />
+        </>
+      )}
     </View>
   );
 }
 
-const HEADER_BAR_HEIGHT = 52;
-
-interface PilgrimageListRow {
-  id: number;
-  cover: string;
-  primaryTitle: string;
-  secondaryTitle?: string;
-  city: string;
-  pointsLength: number;
-  distanceKm?: number;
-  fromCollection: boolean;
-}
-
-function formatKm(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  if (km < 10) return `${km.toFixed(1)} km`;
-  return `${Math.round(km)} km`;
-}
-
-interface PilgrimageListCardProps {
-  row: PilgrimageListRow;
+// Small segmented button used in the floating Grid/Rows toggle. Inlined
+// because it's specific to this route's chrome — a separate file would be
+// more import noise than the local component is worth.
+interface LayoutToggleSegmentProps {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  count: number;
+  active: boolean;
+  themeColor: string;
+  themeColorFg: string;
   theme: ThemePalette;
+  styles: ReturnType<typeof makeStyles>;
   onPress: () => void;
 }
 
-function PilgrimageListCard({ row, theme, onPress }: PilgrimageListCardProps) {
-  const styles = useMemo(() => makeRowStyles(theme), [theme]);
+function LayoutToggleSegment({
+  icon,
+  label,
+  count,
+  active,
+  themeColor,
+  themeColorFg,
+  theme,
+  styles,
+  onPress,
+}: LayoutToggleSegmentProps) {
+  const fg = active ? themeColorFg : theme.text.primary;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={row.primaryTitle}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}>
-      <Image source={{ uri: row.cover }} style={styles.cover} contentFit="cover" transition={150} />
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <ThemedText variant="bodyMedium" weight="700" numberOfLines={1} style={{ flex: 1 }}>
-            {row.primaryTitle}
-          </ThemedText>
-          {row.fromCollection ? (
-            <View
-              style={[
-                styles.collectionPill,
-                {
-                  backgroundColor: `${theme.status.info}1A`,
-                  borderColor: `${theme.status.info}66`,
-                },
-              ]}>
-              <Ionicons name="bookmark" size={10} color={theme.status.info} />
-            </View>
-          ) : null}
-        </View>
-        {row.secondaryTitle ? (
-          <ThemedText
-            variant="captionSmall"
-            tone="tertiary"
-            numberOfLines={1}
-            style={{ fontSize: 11 }}>
-            {row.secondaryTitle}
-          </ThemedText>
-        ) : null}
-        <View style={styles.metaRow}>
-          {row.city ? (
-            <View style={styles.metaItem}>
-              <Ionicons name="location-outline" size={11} color={theme.text.tertiary} />
-              <ThemedText variant="captionSmall" tone="tertiary">
-                {row.city}
-              </ThemedText>
-            </View>
-          ) : null}
-          {row.pointsLength > 0 ? (
-            <View style={styles.metaItem}>
-              <Ionicons name="pin" size={11} color={theme.text.tertiary} />
-              <ThemedText variant="captionSmall" tone="tertiary">
-                {row.pointsLength} {row.pointsLength === 1 ? 'spot' : 'spots'}
-              </ThemedText>
-            </View>
-          ) : null}
-          {row.distanceKm !== undefined ? (
-            <View style={styles.metaItem}>
-              <Ionicons name="navigate" size={11} color={theme.accent} />
-              <ThemedText variant="captionSmall" weight="600" style={{ color: theme.accent }}>
-                {formatKm(row.distanceKm)}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        styles.viewModeSegment,
+        active ? { backgroundColor: themeColor } : { backgroundColor: 'transparent' },
+        pressed && { opacity: 0.86 },
+      ]}>
+      <Ionicons name={icon} size={14} color={fg} />
+      <ThemedText variant="bodySmall" weight="700" style={{ color: fg }}>
+        {label}
+      </ThemedText>
+      <View
+        style={[
+          styles.viewModeSegmentBadge,
+          active
+            ? { backgroundColor: `${themeColorFg}22` }
+            : { backgroundColor: theme.background.tertiary },
+        ]}>
+        <ThemedText variant="captionSmall" weight="700" style={{ color: fg }}>
+          {count}
+        </ThemedText>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={theme.text.tertiary} />
     </Pressable>
   );
 }
 
-interface SeeAllHeaderProps {
-  theme: ThemePalette;
-  insetTop: number;
-  mode: 'list' | 'map';
-  onBack: () => void;
-  onSearch: () => void;
-  onSetMode: (next: 'list' | 'map') => void;
-}
-
-function SeeAllHeader({ theme, insetTop, mode, onBack, onSearch, onSetMode }: SeeAllHeaderProps) {
-  const styles = useMemo(() => makeHeaderStyles(theme), [theme]);
-  const segmentActive = (key: 'list' | 'map') => mode === key;
-  return (
-    <View pointerEvents="box-none" style={[styles.wrap, { top: insetTop + 6 }]}>
-      <View style={styles.bar}>
-        <Pressable
-          onPress={onBack}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="chevron-back" size={20} color={theme.text.primary} />
-        </Pressable>
-
-        <View style={styles.segment}>
-          <Pressable
-            onPress={() => onSetMode('map')}
-            accessibilityRole="button"
-            accessibilityLabel="Map view"
-            accessibilityState={{ selected: segmentActive('map') }}
-            style={[
-              styles.segmentBtn,
-              segmentActive('map') && { backgroundColor: theme.background.tertiary },
-            ]}>
-            <Ionicons
-              name="map"
-              size={13}
-              color={segmentActive('map') ? theme.text.primary : theme.text.tertiary}
-            />
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{
-                color: segmentActive('map') ? theme.text.primary : theme.text.tertiary,
-              }}>
-              Map
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => onSetMode('list')}
-            accessibilityRole="button"
-            accessibilityLabel="List view"
-            accessibilityState={{ selected: segmentActive('list') }}
-            style={[
-              styles.segmentBtn,
-              segmentActive('list') && { backgroundColor: theme.background.tertiary },
-            ]}>
-            <Ionicons
-              name="list"
-              size={13}
-              color={segmentActive('list') ? theme.text.primary : theme.text.tertiary}
-            />
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{
-                color: segmentActive('list') ? theme.text.primary : theme.text.tertiary,
-              }}>
-              List
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={onSearch}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Search pilgrimage"
-          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="search" size={18} color={theme.text.primary} />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function makeHeaderStyles(theme: ThemePalette) {
-  return StyleSheet.create({
-    wrap: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      paddingHorizontal: Spacing.md,
-      zIndex: 10,
-    },
-    bar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: HEADER_BAR_HEIGHT - 8,
-      paddingHorizontal: 8,
-      borderRadius: 22,
-      backgroundColor: `${theme.background.primary}E6`,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-      gap: 8,
-    },
-    iconBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    segment: {
-      flexDirection: 'row',
-      borderRadius: 14,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-      padding: 3,
-      gap: 2,
-    },
-    segmentBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 11,
-      minHeight: 28,
-    },
-  });
-}
-
-function makeRowStyles(theme: ThemePalette) {
-  return StyleSheet.create({
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 10,
-      borderRadius: 14,
-      backgroundColor: theme.background.secondary,
-      borderWidth: 1,
-      borderColor: theme.glassBorder,
-    },
-    cover: {
-      width: 64,
-      height: 88,
-      borderRadius: 10,
-      backgroundColor: theme.background.tertiary,
-    },
-    body: {
-      flex: 1,
-      gap: 4,
-      minWidth: 0,
-    },
-    titleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    collectionPill: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      borderWidth: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    metaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      flexWrap: 'wrap',
-      marginTop: 2,
-    },
-    metaItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-    },
-  });
-}
-
-interface FullscreenMapViewProps {
+interface HubMapBackgroundProps {
   markers: readonly HubMapMarker[];
   /** Bump when the marker set transitions to a different filter view; triggers a clear+rebuild. */
   replaceKey: string;
   userLocation: LatLng | null;
   /** Device compass heading in degrees (0 = north, clockwise), or null when unknown. */
   userHeading: number | null;
-  /** Individual nearby scene points, plotted in their own marker layer. */
-  spots: readonly NearbySpot[];
-  /** When set, fly the map to this spot. Key changes per tap so re-taps re-fly. */
-  focusSpotRequest: { key: string; lat: number; lng: number } | null;
   ringColor: string;
   theme: ThemePalette;
   focusBangumiId: number | null;
@@ -1257,13 +1299,11 @@ interface FullscreenMapViewProps {
   onLocatePress: () => void;
 }
 
-function FullscreenMapView({
+function HubMapBackground({
   markers,
   replaceKey,
   userLocation,
   userHeading,
-  spots,
-  focusSpotRequest,
   ringColor,
   theme,
   focusBangumiId,
@@ -1271,7 +1311,7 @@ function FullscreenMapView({
   onAnimePress,
   onBoundsChange,
   onLocatePress,
-}: FullscreenMapViewProps) {
+}: HubMapBackgroundProps) {
   const { effectiveMode } = useTheme();
   const { pref: mapThemePref } = useMapThemePref();
   const mapMode = resolveMapMode(mapThemePref, effectiveMode);
@@ -1354,29 +1394,6 @@ function FullscreenMapView({
       true;
     `);
   }, [userHeading, ready]);
-
-  // Push the individual nearby scene points into their own marker layer.
-  useEffect(() => {
-    if (!ready || !webviewRef.current) return;
-    const json = JSON.stringify(spots).replace(/</g, '\\u003c');
-    webviewRef.current.injectJavaScript(`
-      try { window.__updateSpots && window.__updateSpots(${json}); } catch(e) {}
-      true;
-    `);
-  }, [spots, ready]);
-
-  // Fly the map to a spot picked in the Nearby panel.
-  useEffect(() => {
-    if (!ready || !webviewRef.current || !focusSpotRequest) return;
-    const payload = JSON.stringify({
-      lat: focusSpotRequest.lat,
-      lng: focusSpotRequest.lng,
-    });
-    webviewRef.current.injectJavaScript(`
-      try { window.__focusSpot && window.__focusSpot(${payload}); } catch(e) {}
-      true;
-    `);
-  }, [focusSpotRequest, ready]);
 
   useEffect(() => {
     if (!ready || !webviewRef.current || focusBangumiId === null) return;
@@ -1462,112 +1479,81 @@ function FullscreenMapView({
   );
 }
 
-interface FilterChipRowProps {
+// Region chip strip — embedded inside the floating top overlay (so it sits
+// just under the search pill). Camera-only: tapping a region flies the map.
+// The "what to show" filter (collection / 88) is owned by the bottom chrome.
+interface RegionChipStripProps {
   theme: ThemePalette;
-  insetTop: number;
-  /** Whether the Anime Tourism 88 marker filter is enabled. */
-  official88Mode: boolean;
-  /** Region the camera is focused on (null = whole Japan). */
   focusedRegion: AnimeTourism88Region | null;
-  onToggleOfficial88: () => void;
   onPickRegion: (region: AnimeTourism88Region) => void;
   onResetToJapan: () => void;
 }
 
-function FilterChipRow({
+function RegionChipStrip({
   theme,
-  insetTop,
-  official88Mode,
   focusedRegion,
-  onToggleOfficial88,
   onPickRegion,
   onResetToJapan,
-}: FilterChipRowProps) {
+}: RegionChipStripProps) {
   const chipStyles = useMemo(() => makeChipStyles(theme), [theme]);
   const wholeJapanActive = focusedRegion === null;
   return (
-    <View pointerEvents="box-none" style={[chipStyles.bar, { top: insetTop + 12 }]}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={chipStyles.scroll}>
-        <Pressable
-          onPress={onResetToJapan}
-          accessibilityRole="button"
-          accessibilityLabel="View whole Japan"
-          accessibilityState={{ selected: wholeJapanActive }}
-          style={({ pressed }) => [
-            chipStyles.chip,
-            wholeJapanActive ? { backgroundColor: theme.accent, borderColor: theme.accent } : null,
-            pressed && { opacity: 0.85 },
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={chipStyles.scroll}>
+      <Pressable
+        onPress={onResetToJapan}
+        accessibilityRole="button"
+        accessibilityLabel="View whole Japan"
+        accessibilityState={{ selected: wholeJapanActive }}
+        style={({ pressed }) => [
+          chipStyles.chip,
+          wholeJapanActive ? { backgroundColor: theme.accent, borderColor: theme.accent } : null,
+          pressed && { opacity: 0.85 },
+        ]}>
+        <ThemedText
+          variant="captionSmall"
+          weight="700"
+          style={[
+            chipStyles.chipLabel,
+            wholeJapanActive ? { color: theme.background.primary } : null,
           ]}>
-          <ThemedText
-            variant="captionSmall"
-            weight="700"
-            style={[
-              chipStyles.chipLabel,
-              wholeJapanActive ? { color: theme.background.primary } : null,
+          All Japan
+        </ThemedText>
+      </Pressable>
+      {ANIME_TOURISM_88_REGIONS.map((r) => {
+        const active = focusedRegion === r;
+        return (
+          <Pressable
+            key={r}
+            onPress={() => onPickRegion(r)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              chipStyles.chip,
+              active ? { backgroundColor: theme.accent, borderColor: theme.accent } : null,
+              pressed && { opacity: 0.85 },
             ]}>
-            All Japan
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={onToggleOfficial88}
-          accessibilityRole="button"
-          accessibilityState={{ selected: official88Mode }}
-          style={({ pressed }) => [
-            chipStyles.chip,
-            official88Mode
-              ? { backgroundColor: OFFICIAL_88_GOLD, borderColor: OFFICIAL_88_GOLD }
-              : null,
-            pressed && { opacity: 0.85 },
-          ]}>
-          <ThemedText
-            variant="captionSmall"
-            weight="700"
-            style={[chipStyles.chipLabel, official88Mode ? { color: '#1c1c1e' } : null]}>
-            ★ Official 88
-          </ThemedText>
-        </Pressable>
-        {ANIME_TOURISM_88_REGIONS.map((r) => {
-          const active = focusedRegion === r;
-          return (
-            <Pressable
-              key={r}
-              onPress={() => onPickRegion(r)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              style={({ pressed }) => [
-                chipStyles.chip,
-                active ? { backgroundColor: theme.accent, borderColor: theme.accent } : null,
-                pressed && { opacity: 0.85 },
-              ]}>
-              <ThemedText
-                variant="captionSmall"
-                weight="600"
-                style={[chipStyles.chipLabel, active ? { color: theme.background.primary } : null]}>
-                {REGION_88_LABELS[r]}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
+            <ThemedText
+              variant="captionSmall"
+              weight="600"
+              style={[chipStyles.chipLabel, active ? { color: theme.background.primary } : null]}>
+              {REGION_88_LABELS[r]}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 }
 
 function makeChipStyles(theme: ThemePalette) {
   return StyleSheet.create({
-    bar: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      paddingLeft: Spacing.screenPadding,
-      paddingRight: Spacing.screenPadding,
-    },
     scroll: {
       gap: 8,
-      paddingVertical: 4,
+      paddingVertical: 2,
+      paddingRight: Spacing.xs,
     },
     chip: {
       paddingHorizontal: 12,
@@ -1596,7 +1582,7 @@ const styles = StyleSheet.create({
   },
 });
 
-function makeStyles(theme: ThemePalette) {
+function makeStyles(theme: ThemePalette, topInset: number) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: theme.background.primary },
     loadingBox: {
@@ -1606,15 +1592,97 @@ function makeStyles(theme: ThemePalette) {
       gap: 8,
       padding: 20,
     },
-    emptyBox: {
+
+    // Floating top overlay (back/album row + search + region chips).
+    // Mirrors the detail screen's topOverlay style for shell continuity.
+    topOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingTop: topInset + Spacing.xs,
+      paddingHorizontal: Spacing.screenPadding,
+      gap: Spacing.sm,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    headerRightGroup: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+    },
+
+    // In-page search field — sized so the clear-X has comfortable hit area.
+    searchPill: {
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingLeft: 14,
+      paddingRight: 6,
+      borderRadius: Radius.full,
+      backgroundColor: `${theme.background.secondary}E6`,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.glassBorder,
+    },
+    searchInput: {
       flex: 1,
+      minHeight: 42,
+      paddingVertical: 0,
+      ...Typography.bodyMedium,
+      letterSpacing: 0,
+    },
+    searchClearBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 12,
-      padding: 32,
     },
-    listLoading: {
-      flex: 1,
+
+    // Floating bottom chrome — anchored to the sheet's top edge.
+    bottomChromeWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      paddingHorizontal: Spacing.screenPadding,
+      gap: Spacing.xs,
+    },
+    chipRow: {
+      gap: Spacing.xs,
+      paddingRight: Spacing.xs,
+    },
+    viewModeWrapInner: {
+      alignItems: 'center',
+    },
+    viewModeBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 4,
+      paddingVertical: 4,
+      borderRadius: Radius.full,
+      backgroundColor: `${theme.background.primary}E0`,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.glassBorder,
+    },
+    viewModeSegment: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: Radius.full,
+    },
+    viewModeSegmentBadge: {
+      minWidth: 24,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 }
