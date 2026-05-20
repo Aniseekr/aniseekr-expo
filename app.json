@@ -11,7 +11,6 @@
       "tsconfigPaths": true
     },
     "plugins": [
-      "./plugins/with-android-camera-native-layer.js",
       "./plugins/with-vibration-bridge.js",
       [
         "expo-notifications",
@@ -36,14 +35,6 @@
         {
           "photosPermission": "AniSeekr needs access to your photos so you can pick a profile picture.",
           "microphonePermission": false
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "AniSeekr uses the camera so you can frame and capture a pilgrimage scene next to its anime reference.",
-          "microphonePermission": false,
-          "recordAudioAndroid": false
         }
       ],
       [
