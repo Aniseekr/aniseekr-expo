@@ -9,6 +9,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { ThemeProvider } from '../context/ThemeContext';
 import { SubscriptionProvider } from '../context/SubscriptionContext';
 import { notificationService } from '../libs/services/notifications/notification-service';
+import { initClarity } from '../libs/services/analytics/clarity';
 import { authService } from '../libs/services/auth/auth-service';
 import { isOnboardingComplete } from '../libs/services/onboarding-service';
 import { dataSourceConfig } from '../libs/services/data-source-config';
@@ -24,6 +25,7 @@ export default function RootLayout() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   useEffect(() => {
+    initClarity();
     void authService.initialize();
     void notificationService.initialize();
     // Hydrate the data-source config (browseSource + allowR18Content) before
