@@ -33,14 +33,11 @@ import {
   type MirrorMode,
   type QualityPrioritization,
   type TorchMode,
-  useCameraDevice,
   usePhotoOutput,
 } from 'react-native-vision-camera';
 import { useTheme } from '../../../context/ThemeContext';
-import {
-  preferredPhysicalDevicesForFacing,
-  resolveCapturedPhotoDimensions,
-} from '../../../libs/services/pilgrimage/camera-engine-parity';
+import { resolveCapturedPhotoDimensions } from '../../../libs/services/pilgrimage/camera-engine-parity';
+import { useResolvedCameraDevice } from '../../../hooks/useResolvedCameraDevice';
 import { ThemedText } from '../../themed';
 import type {
   CameraDeviceInfo,
@@ -148,8 +145,14 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
   const enableShutterSoundRef = useRef(enableShutterSound);
   enableShutterSoundRef.current = enableShutterSound;
 
-  const physicalDevices = useMemo(() => [...preferredPhysicalDevicesForFacing(facing)], [facing]);
-  const device = useCameraDevice(facing, { physicalDevices });
+  // Device resolution lives in `useResolvedCameraDevice` because Android's
+  // VisionCamera picker scores by a broken `type` field and would drop the
+  // ultra-wide multi-cam in favour of a single-lens wide. The resolver
+  // routes Android back-camera selection through `selectAndroidBackDevice`,
+  // which scores by the CameraX values that actually work (minZoom,
+  // isVirtualDevice, physical-child focalLength), and lets iOS / front
+  // selection fall straight through to the stock VisionCamera filter.
+  const device = useResolvedCameraDevice(facing);
   const targetResolution = useMemo(
     () => resolveTargetResolution(resolutionTier, aspect),
     [resolutionTier, aspect]
