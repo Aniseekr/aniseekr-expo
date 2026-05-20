@@ -1,22 +1,20 @@
 // EXIF preservation strategy for Skia-re-encoded JPEGs.
 //
-// expo-camera's native side embeds EXIF (GPS, anime title, scene name, etc.)
-// directly into the JPEG file when `takePictureAsync({ exif: true })` runs.
-// Once we run that JPEG through Skia's ColorMatrix pipeline to bake the
-// brightness adjustment, the surface snapshot is re-encoded as a NEW JPEG —
-// no EXIF chunk is carried across. Without this helper, every EV != 0 capture
-// loses GPS, anime metadata, and Aniseekr's UserComment payload.
+// The old expo-camera path embedded EXIF (GPS, anime title, scene name, etc.)
+// directly in the native capture call. The VisionCamera path captures the file
+// first, then explicitly embeds the metadata we build in JS. When Skia
+// re-encodes a JPEG for HDR/composite work, no EXIF chunk is carried across, so
+// this helper splices the metadata back into the resulting file.
 //
 // Strategy:
-//   1. Read the brightness-baked JPEG bytes from disk.
+//   1. Read the target JPEG bytes from disk.
 //   2. Convert to a binary string (`String.fromCharCode` per byte). This is
 //      what `piexif-ts` operates on. We deliberately AVOID base64/`atob`/
 //      `btoa` because those paths in piexif-ts touch `window.btoa`/`Buffer`,
 //      neither of which is reliable in React Native's Hermes runtime.
-//   3. Translate the flat string-keyed EXIF object returned by
-//      `takePictureAsync` / `PictureRef.savePictureAsync` into piexif-ts's
-//      structured `IExif` shape (0th / Exif / GPS IFDs keyed by numeric
-//      TagValues), with rational coercion for GPS coords.
+//   3. Translate the flat string-keyed EXIF object into piexif-ts's structured
+//      `IExif` shape (0th / Exif / GPS IFDs keyed by numeric TagValues), with
+//      rational coercion for GPS coords.
 //   4. `piexif.dump()` produces an EXIF binary blob and `piexif.insert()`
 //      splices an APP1 segment into the JPEG binary, replacing any pre-existing
 //      EXIF segment.
@@ -24,7 +22,7 @@
 //      the file in place.
 //
 // Failure handling (Rule 8): if any step throws we re-throw to the caller,
-// which logs a warning and returns the brightness-baked URI WITHOUT EXIF —
+// which logs a warning and returns the real JPEG URI WITHOUT EXIF —
 // we never fabricate EXIF values or pretend the embed succeeded.
 
 import { File } from 'expo-file-system';
@@ -33,7 +31,7 @@ import type { IExif, IExifElement } from 'piexif-ts';
 
 const { TagValues } = piexif;
 
-/** Flat (string-keyed) EXIF as returned by expo-camera. */
+/** Flat (string-keyed) EXIF built by the pilgrimage camera metadata service. */
 export type ExifInput = Record<string, unknown>;
 
 /**

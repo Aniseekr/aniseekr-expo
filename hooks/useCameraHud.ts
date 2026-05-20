@@ -1,9 +1,13 @@
 import { useReducer } from 'react';
-import type { CameraType } from 'expo-camera';
 import type { CameraOrientationMode } from '../libs/services/pilgrimage/camera-ui';
 import type { EdgeIntensity } from '../libs/services/pilgrimage/edge-overlay';
 import type { SubjectFocus } from '../libs/services/pilgrimage/subject-overlay';
-import type { AspectRatio, FlashMode, OverlayMode } from '../components/pilgrimage/camera/types';
+import type {
+  AspectRatio,
+  CameraFacing,
+  FlashMode,
+  OverlayMode,
+} from '../components/pilgrimage/camera/types';
 import type { CaptureModeToastValue } from '../components/pilgrimage/camera/CaptureModeToast';
 import type { AutoCaptureToastValue } from '../components/pilgrimage/camera/AutoCaptureToast';
 import type { CamSwitchToastValue } from '../components/pilgrimage/camera/CamSwitchToast';
@@ -23,7 +27,7 @@ import type { CamSwitchToastValue } from '../components/pilgrimage/camera/CamSwi
  */
 export interface CameraHudState {
   // --- Camera capture controls ---
-  facing: CameraType;
+  facing: CameraFacing;
   flashMode: FlashMode;
   aspect: AspectRatio;
   /** Exposure-compensation value the focus/EV bar drives. */

@@ -2,9 +2,10 @@
 //
 // Long-press the shutter to fire N rapid captures. Each frame is:
 //   1. tagged with the live alignment score at the moment of capture
-//   2. EXIF-stamped with spot/anime + live GPS/heading/tilt via buildAdditionalExif
-//   3. baked through applyBrightnessToImage so the EV slider's brightness is
-//      embedded in the saved JPEG (not just a preview overlay)
+//   2. EXIF-stamped with spot/anime + live GPS/heading/tilt — done by the
+//      orchestrator after this hook returns (VisionCamera has no
+//      additionalExif option, so EXIF embedding lives in a single
+//      post-capture step now, not inside takePicture).
 //
 // The hook returns the URI list and per-frame scores; bestIndex is the
 // argmax of the finite scores. Picking the best frame is the orchestrator's
@@ -15,12 +16,8 @@
 // at the time of capture, we store NaN (sentinel) and skip it during argmax.
 
 import { useCallback, useRef, useState } from 'react';
-import type { RefObject } from 'react';
-import type { CameraView } from 'expo-camera';
+import type { CameraEngineRef } from '../components/pilgrimage/camera/camera-engine';
 import type { LatLng } from '../libs/services/pilgrimage/location-service';
-import { buildAdditionalExif } from '../libs/services/pilgrimage/build-exif-metadata';
-import { applyBrightnessToImage } from '../libs/services/pilgrimage/apply-brightness';
-import { mergeCaptureExif } from '../libs/services/pilgrimage/camera-capture';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 
 export interface BurstCaptureResult {
@@ -39,28 +36,13 @@ export interface BurstCaptureSensorSnapshot {
   scoreTotal: number | null;
 }
 
-export interface BurstCaptureMetadata {
-  spotId: string;
-  spotName: string;
-  animeId?: string;
-  animeTitle?: string;
-  episode?: string;
-}
-
 export interface UseBurstCaptureInput {
-  cameraRef: RefObject<CameraView | null>;
+  engineRef: CameraEngineRef;
   getSensorSnapshot: () => BurstCaptureSensorSnapshot;
-  metadata: BurstCaptureMetadata;
-  colorMatrix: number[] | null | undefined;
-  quality: number;
-  /** When true, suppress the native shutter click (per-capture; not the same as CameraView.mute). */
+  /** When true, suppress the native shutter click on each frame. */
   silent?: boolean;
-  /**
-   * Forwards expo-camera's `skipProcessing` flag — faster capture at the cost
-   * of orientation fix-ups (some devices return rotated raw bytes). Defaults
-   * to false so behaviour is unchanged unless the caller opts in.
-   */
-  skipProcessing?: boolean;
+  /** Capture flash mode forwarded to engine.takePhoto. Defaults to 'off'. */
+  flashMode?: 'on' | 'off' | 'auto';
   frameCount?: number;
   intervalMs?: number;
 }
@@ -83,7 +65,6 @@ interface RawBurstFrame {
   uri: string;
   width: number;
   height: number;
-  exif: Record<string, unknown> | null;
   score: number;
 }
 
@@ -109,13 +90,10 @@ function delay(ms: number): Promise<void> {
 
 export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOutput {
   const {
-    cameraRef,
+    engineRef,
     getSensorSnapshot,
-    metadata,
-    colorMatrix,
-    quality,
     silent = false,
-    skipProcessing = false,
+    flashMode = 'off',
     frameCount = DEFAULT_FRAME_COUNT,
     intervalMs = DEFAULT_INTERVAL_MS,
   } = input;
@@ -123,22 +101,14 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
   const [capturing, setCapturing] = useState(false);
   const [captured, setCaptured] = useState(0);
 
-  // Refs mirror the input so the `run` callback is stable across renders
-  // without stale-closure bugs.
-  const cameraRefRef = useRef(cameraRef);
-  cameraRefRef.current = cameraRef;
+  const engineRefRef = useRef(engineRef);
+  engineRefRef.current = engineRef;
   const getSnapshotRef = useRef(getSensorSnapshot);
   getSnapshotRef.current = getSensorSnapshot;
-  const metadataRef = useRef(metadata);
-  metadataRef.current = metadata;
-  const colorMatrixRef = useRef(colorMatrix);
-  colorMatrixRef.current = colorMatrix;
-  const qualityRef = useRef(quality);
-  qualityRef.current = quality;
   const silentRef = useRef(silent);
   silentRef.current = silent;
-  const skipProcessingRef = useRef(skipProcessing);
-  skipProcessingRef.current = skipProcessing;
+  const flashRef = useRef(flashMode);
+  flashRef.current = flashMode;
   const frameCountRef = useRef(frameCount);
   frameCountRef.current = frameCount;
   const intervalMsRef = useRef(intervalMs);
@@ -152,44 +122,24 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
     setCaptured(0);
 
     const rawFrames: RawBurstFrame[] = [];
-    const uris: string[] = [];
-    const widths: number[] = [];
-    const heights: number[] = [];
-    const scores: number[] = [];
 
     try {
       for (let i = 0; i < total; i++) {
-        const camera = cameraRefRef.current.current;
-        if (!camera) break;
+        const engine = engineRefRef.current.current;
+        if (!engine) break;
 
         try {
-          const snapshot = getSnapshotRef.current();
-          const meta = metadataRef.current;
-          const additionalExif = buildAdditionalExif({
-            spotId: meta.spotId,
-            spotName: meta.spotName,
-            animeId: meta.animeId,
-            animeTitle: meta.animeTitle,
-            episode: meta.episode,
-            userLocation: snapshot.userLocation,
-            heading: snapshot.heading,
-            tilt: snapshot.tilt,
-          });
-
-          const photo = await camera.takePictureAsync({
-            quality: qualityRef.current,
-            exif: true,
-            additionalExif,
-            shutterSound: !silentRef.current,
-            skipProcessing: skipProcessingRef.current,
+          const photo = await engine.takePhoto({
+            flashMode: flashRef.current,
+            enableShutterSound: !silentRef.current,
           });
           if (!photo?.uri) continue;
+          const snapshot = getSnapshotRef.current();
 
           rawFrames.push({
             uri: photo.uri,
             width: photo.width || 0,
             height: photo.height || 0,
-            exif: mergeCaptureExif(photo.exif, additionalExif),
             score: snapshot.scoreTotal ?? NaN,
           });
           setCaptured(rawFrames.length);
@@ -204,39 +154,19 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
           await delay(interval);
         }
       }
-
-      for (const frame of rawFrames) {
-        try {
-          const baked = await applyBrightnessToImage({
-            inputUri: frame.uri,
-            exif: frame.exif,
-            colorMatrix: colorMatrixRef.current,
-            quality: qualityRef.current,
-          });
-          uris.push(baked.uri);
-          widths.push(baked.width || frame.width);
-          heights.push(baked.height || frame.height);
-        } catch (processError) {
-          console.warn('[useBurstCapture] frame processing failed', processError);
-          uris.push(frame.uri);
-          widths.push(frame.width);
-          heights.push(frame.height);
-        }
-        scores.push(frame.score);
-      }
     } finally {
       setCapturing(false);
     }
 
-    if (uris.length === 0) return null;
+    if (rawFrames.length === 0) return null;
 
     return {
-      uris,
-      widths,
-      heights,
-      scores,
-      bestIndex: computeBestIndex(scores),
-      total: uris.length,
+      uris: rawFrames.map((f) => f.uri),
+      widths: rawFrames.map((f) => f.width),
+      heights: rawFrames.map((f) => f.height),
+      scores: rawFrames.map((f) => f.score),
+      bestIndex: computeBestIndex(rawFrames.map((f) => f.score)),
+      total: rawFrames.length,
     };
   }, []);
 

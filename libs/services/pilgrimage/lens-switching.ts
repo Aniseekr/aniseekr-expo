@@ -1,92 +1,87 @@
-export type LensFocalStop = 0.5 | 1 | 2 | 3;
-export type TelephotoStop = 2 | 3;
+// Derives the zoom-dial's focal-stop set from VisionCamera device info.
+//
+// On v5 every device reports its real physical lenses (`physicalLensTypes`)
+// AND the zoom factors at which a virtual multi-lens device auto-switches
+// between them (`zoomLensSwitchFactors`). Both are real values straight from
+// the OS — no iOS-only Apple lens-name table, no Android native-patch.
+//
+// The dial is then driven entirely by `zoomShared` (a real factor): picking a
+// pillar is "set zoom to N", and the OS lights up the matching physical lens.
+// Per CLAUDE.md Rule 8 the dial only renders pillars the device truly has.
+import type {
+  CameraDeviceInfo,
+  EnginePhysicalLensType,
+} from '../../../components/pilgrimage/camera/camera-engine';
+import type { FocalStop } from '../../../components/pilgrimage/camera/types';
 
-export const LENS_ULTRA_WIDE = 'builtInUltraWideCamera';
-export const LENS_WIDE = 'builtInWideAngleCamera';
-export const LENS_TELEPHOTO = 'builtInTelephotoCamera';
+const LENS_TO_STOP: Record<EnginePhysicalLensType, FocalStop> = {
+  'ultra-wide-angle': 0.5,
+  'wide-angle': 1,
+  // Maps to 3× by default — iPhone 13/14/15/16 Pro telephoto. For older Pro
+  // devices (11/12 Pro) where the telephoto is 2× optical, pass `telephotoStop: 2`.
+  telephoto: 3,
+};
 
-// Virtual / multi-lens "auto-switching" cameras exposed by AVFoundation on
-// iPhone Pro hardware. Unlike the single-physical lenses above, these
-// composite devices let iOS pick the best underlying lens for the current
-// focal length and lighting — smoother optical zoom transitions, at the cost
-// of fine-grained user control. We surface them as a single "AUTO" pill.
-export const LENS_DUAL = 'builtInDualCamera';
-export const LENS_DUAL_WIDE = 'builtInDualWideCamera';
-export const LENS_TRIPLE = 'builtInTripleCamera';
+const SWITCH_FACTOR_TOLERANCE = 0.15;
 
-// Ordered by preference: triple beats dual beats dual-wide. Picked so the
-// device's most capable virtual stack is selected when multiple are reported.
-const VIRTUAL_LENS_PRIORITY: readonly string[] = [
-  LENS_TRIPLE,
-  LENS_DUAL,
-  LENS_DUAL_WIDE,
-] as const;
+const ALL_STOPS: readonly FocalStop[] = [0.5, 1, 2, 3] as const;
 
-export function isVirtualLens(lens: string | null | undefined): boolean {
-  if (!lens) return false;
-  return VIRTUAL_LENS_PRIORITY.includes(lens);
+function isFocalStop(value: number): value is FocalStop {
+  return value === 0.5 || value === 1 || value === 2 || value === 3;
+}
+
+function dedupeSorted(stops: FocalStop[]): FocalStop[] {
+  return [...new Set(stops)].sort((a, b) => a - b);
 }
 
 /**
- * Filters `available` down to the virtual auto-switching lenses iOS reports,
- * preserving the input order. Returns an empty array on devices without any.
+ * Returns the focal-stop pillars the dial should render for this device.
  *
- * Rule 8: only echoes back lenses that were actually present in `available` —
- * we never seed phantom virtual lenses just because the device is "probably"
- * a Pro model.
+ * The priority order is:
+ *   1. Physical lenses (`ultra-wide-angle` → 0.5, `wide-angle` → 1, `telephoto` → telephotoStop).
+ *   2. Zoom-lens switch factors (when a virtual device auto-switches at e.g.
+ *      `[1, 3]` we surface 1× and 3× as snap pillars).
+ *   3. The neutral 1× pillar — always present so the dial isn't empty on
+ *      single-lens hardware.
+ *
+ * Stops outside the device's `minZoom..maxZoom` window are filtered out.
  */
-export function virtualLensesFromAvailable(available: string[]): string[] {
-  return available.filter((lens) => VIRTUAL_LENS_PRIORITY.includes(lens));
+export function availableStopsFromDeviceInfo(
+  info: CameraDeviceInfo | null,
+  telephotoStop: 2 | 3 = 3
+): FocalStop[] {
+  if (!info) return [1];
+
+  const stops: FocalStop[] = [];
+  for (const lens of info.physicalLensTypes) {
+    if (lens === 'telephoto') {
+      stops.push(telephotoStop);
+    } else {
+      stops.push(LENS_TO_STOP[lens]);
+    }
+  }
+  for (const factor of info.zoomLensSwitchFactors) {
+    // The reported switch factor often lands near a familiar pillar (1, 2, 3) —
+    // accept up to ±0.15× off so a device reporting 2.99× telephoto still gets
+    // the 3× pillar.
+    for (const candidate of ALL_STOPS) {
+      if (Math.abs(factor - candidate) <= SWITCH_FACTOR_TOLERANCE) {
+        stops.push(candidate);
+      }
+    }
+    if (isFocalStop(factor)) stops.push(factor);
+  }
+  stops.push(1);
+
+  const filtered = stops.filter((s) => s >= info.minZoom - 0.05 && s <= info.maxZoom + 0.05);
+  const deduped = dedupeSorted(filtered);
+  return deduped.length > 0 ? deduped : [1];
 }
 
 /**
- * Picks the best virtual lens for AUTO mode given what the device actually
- * reports. Priority: triple > dual > dualWide. Returns null when no virtual
- * lens is exposed (most non-Pro phones, all Android) so callers can hide the
- * AUTO pill instead of selecting something that doesn't exist.
+ * Returns true when the device exposes more than one focal-stop pillar — i.e.
+ * the user has *some* optical (lens-switching) range, not just digital zoom.
  */
-export function pickAutoVirtualLens(available: string[]): string | null {
-  for (const candidate of VIRTUAL_LENS_PRIORITY) {
-    if (available.includes(candidate)) return candidate;
-  }
-  return null;
-}
-
-export function stopForLens(
-  lens: string | null | undefined,
-  telephotoStop: TelephotoStop = 3
-): LensFocalStop | null {
-  if (lens === LENS_ULTRA_WIDE) return 0.5;
-  if (lens === LENS_WIDE) return 1;
-  if (lens === LENS_TELEPHOTO) return telephotoStop;
-  return null;
-}
-
-export function lensForFocalStop(
-  stop: LensFocalStop,
-  availableLenses: string[],
-  telephotoStop: TelephotoStop = 3
-): string | null {
-  const lens = lensForStop(stop, telephotoStop);
-  if (!lens) return null;
-  return availableLenses.includes(lens) ? lens : null;
-}
-
-export function stopsForAvailableLenses(
-  availableLenses: string[],
-  telephotoStop: TelephotoStop = 3
-): LensFocalStop[] {
-  const stops = new Set<LensFocalStop>();
-  for (const lens of availableLenses) {
-    const stop = stopForLens(lens, telephotoStop);
-    if (stop !== null) stops.add(stop);
-  }
-  return [...stops].sort((a, b) => a - b);
-}
-
-function lensForStop(stop: LensFocalStop, telephotoStop: TelephotoStop): string | null {
-  if (stop === 0.5) return LENS_ULTRA_WIDE;
-  if (stop === 1) return LENS_WIDE;
-  if (stop === telephotoStop) return LENS_TELEPHOTO;
-  return null;
+export function hasMultipleLenses(info: CameraDeviceInfo | null): boolean {
+  return availableStopsFromDeviceInfo(info).length >= 2;
 }

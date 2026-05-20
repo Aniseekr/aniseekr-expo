@@ -9,6 +9,7 @@ interface AsyncStorageLike {
 
 let AsyncStorage: AsyncStorageLike;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   AsyncStorage = require('@react-native-async-storage/async-storage').default;
 } catch {
   const memory = new Map<string, string>();
@@ -50,7 +51,7 @@ export interface CaptureGeoLocation {
 
 export interface PilgrimageCapture {
   spotId: string;
-  /** local file URI (saved by expo-camera or via FileSystem cache). */
+  /** local file URI saved by the camera engine or via FileSystem cache. */
   uri: string;
   /** comparison composite URI (left+right or top+bottom). Optional. */
   compositeUri?: string;

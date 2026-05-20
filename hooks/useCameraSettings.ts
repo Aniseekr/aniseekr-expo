@@ -17,7 +17,7 @@ export {
   PICTURE_QUALITIES,
   RESOLUTION_TIERS,
   qualityToNumber,
-  resolvePictureSize,
+  qualityToPrioritization,
 } from '../libs/services/pilgrimage/camera-settings';
 export type {
   CameraSettings,

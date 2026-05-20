@@ -1,11 +1,11 @@
 /**
  * Build additional EXIF metadata for a pilgrimage capture.
  *
- * Output keys use standard EXIF tag names so they get embedded by
- * expo-camera's native EXIF writer. Rule 8 (no fake data) is strictly
- * enforced: any field whose source is missing or non-finite is OMITTED
- * from the output entirely. We never write `0` for missing GPS or
- * `'Unknown'` for a missing title.
+ * Output keys use standard EXIF tag names so the camera metadata embed step
+ * can write them into the JPEG. Rule 8 (no fake data) is strictly enforced:
+ * any field whose source is missing or non-finite is OMITTED from the output
+ * entirely. We never write `0` for missing GPS or `'Unknown'` for a missing
+ * title.
  */
 
 export interface ExifMetadataInput {

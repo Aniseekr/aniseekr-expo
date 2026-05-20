@@ -1,22 +1,21 @@
 // Pseudo-HDR compositing for the pilgrimage camera.
 //
-// HONEST NOTE — this is NOT real HDR. expo-camera v17 exposes no hardware
-// exposure control (no ISO / shutter / EV bracketing), so we cannot produce a
-// true bracketed exposure stack. Instead we capture three frames in quick
+// HONEST NOTE — this fallback is NOT real HDR. Real hardware photo-HDR now
+// goes through VisionCamera's PhotoHDR constraint; this module is used only
+// when that capability is unavailable. It captures three frames in quick
 // succession (which differ only by ambient lighting noise and motion), then
-// tonemap them in software with a Skia ColorMatrix at EV ≈ {-1, 0, +1}. The
+// tonemaps them in software with a Skia ColorMatrix at EV ≈ {-1, 0, +1}. The
 // three tonemapped images are composited via Plus-blended weighted average
-// (1/3 alpha each) so the result reads as a single image with a slightly
-// extended perceived dynamic range. It is a "tonemapped composite", not HDR.
+// (1/3 alpha each). It is a "tonemapped composite", not hardware HDR.
 // Rule 8 (no fake data): on any decode/surface/encode failure we return the
 // mid-frame URI — a real file on disk, never a fabricated path.
 //
-// The math mirrors `useBrightnessPreview`:
+// The EV math is the same simple RGB scale used by the camera preview pipeline:
 //   b = pow(2, ev)
 //   matrix = [b,0,0,0,0,  0,b,0,0,0,  0,0,b,0,0,  0,0,0,1,0]
-// and the file I/O mirrors `apply-brightness.ts`: Skia.Data.fromURI →
-// MakeImageFromEncoded → offscreen surface → encodeToBytes(JPEG) → write to
-// `Paths.cache` via the expo-file-system modular File API.
+// and the file I/O is Skia.Data.fromURI → MakeImageFromEncoded → offscreen
+// surface → encodeToBytes(JPEG) → write to `Paths.cache` via the
+// expo-file-system modular File API.
 
 import { Skia, ImageFormat, BlendMode } from '@shopify/react-native-skia';
 import type { SkImage, SkPaint, SkSurface } from '@shopify/react-native-skia';
@@ -45,7 +44,7 @@ const DEFAULT_QUALITY = 0.92;
 const FRAME_COUNT = 3;
 const MID_INDEX = 1;
 
-/** Build the same diagonal RGB-scale ColorMatrix that `useBrightnessPreview` uses. */
+/** Build a diagonal RGB-scale ColorMatrix for one EV stop. */
 function buildEvMatrix(ev: number): number[] {
   const b = Math.pow(2, ev);
   return [b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, b, 0, 0, 0, 0, 0, 1, 0];

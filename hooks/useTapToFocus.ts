@@ -1,48 +1,53 @@
-// expo-camera v17 has no focus-point API. This hook uses `autofocus: 'on'`
-// which means "autofocus once and lock" on iOS — real AF lock behavior, but
-// NOT point-of-focus. Tap = enter LOCK (we surface 'on' to CameraView), tap
-// again or 5s timeout = release back to continuous ('off'). The reticle
-// position is purely a visual confirmation of where the user tapped — it
-// does NOT drive the lens. See CLAUDE.md Rule 8: be honest about what we
-// actually know.
+// Tap-to-focus for the camera screen.
+//
+// VisionCamera supports real point-of-focus via `CameraRef.focusTo({x,y})` —
+// the tap drives an actual AE/AF/AWB metering operation, not just the
+// preview-only AF-lock hack we used with expo-camera v17.
+//
+// This hook owns:
+//   - The tap gesture (single-tap, 250ms maxDuration)
+//   - The reticle's visual state (point + locked flag for the FocusReticle)
+//   - A JS lock-timeout that mirrors VisionCamera's default `autoResetAfter`
+//     so the reticle clears around the same time the native focus releases.
+//
+// The hook does NOT import the engine directly — the screen wires the tap to
+// the engine via `onFocus`, keeping the hook reusable / decoupled.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Gesture, type TapGesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import type { FocusPoint } from '../components/pilgrimage/camera/types';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 
-// Matches expo-camera's FocusMode ('on' | 'off'). Re-exported locally so
-// callers don't need to import the SDK type just to type the prop.
-export type AutofocusMode = 'on' | 'off';
-
 interface UseTapToFocusInput {
-  /** Auto-release the lock after this many ms (default 5000). Set 0 to disable timeout. */
+  /** Auto-release the reticle after this many ms. Mirrors the native auto-reset. */
   lockTimeoutMs?: number;
+  /**
+   * Fired with the view-relative tap point. Wire this to the camera engine's
+   * `focus({x,y})` so the metering operation actually runs.
+   */
+  onFocus?: (point: { x: number; y: number }) => void;
 }
 
 interface UseTapToFocusOutput {
   tapGesture: TapGesture;
   focusPoint: FocusPoint | null;
+  /** True while the JS-side lock timer is running — drives reticle highlight. */
   afLocked: boolean;
-  autofocus: AutofocusMode;
-  /** Imperative release — call from shutter/capture so a stale lock doesn't outlive the shot. */
+  /** Imperative release — call from shutter/capture so a stale reticle doesn't outlive the shot. */
   releaseLock: () => void;
 }
 
 const DEFAULT_LOCK_TIMEOUT_MS = 5000;
-// 250ms maxDuration keeps the gesture snappy — anything longer feels like a
-// long-press to users. Single tap only; double-tap is reserved for future
-// shortcuts (e.g. reset overlay).
 const TAP_MAX_DURATION_MS = 250;
 
 export function useTapToFocus(input?: UseTapToFocusInput): UseTapToFocusOutput {
   const lockTimeoutMs = input?.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
+  const onFocusRef = useRef(input?.onFocus);
+  onFocusRef.current = input?.onFocus;
 
   const [focusPoint, setFocusPoint] = useState<FocusPoint | null>(null);
   const [afLocked, setAfLocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // afLockedRef mirrors state so handleTap's toggle decision doesn't depend on
-  // a stale closure value when the gesture re-fires quickly.
   const afLockedRef = useRef(false);
 
   const clearTimer = useCallback(() => {
@@ -62,7 +67,8 @@ export function useTapToFocus(input?: UseTapToFocusInput): UseTapToFocusOutput {
 
   const handleTap = useCallback(
     (x: number, y: number) => {
-      // Second tap while locked → release. First tap → enter lock.
+      // Second tap while locked → release. First tap → enter lock + run a
+      // real metering operation at the point.
       if (afLockedRef.current) {
         releaseLock();
         return;
@@ -72,6 +78,7 @@ export function useTapToFocus(input?: UseTapToFocusInput): UseTapToFocusOutput {
       setAfLocked(true);
       setFocusPoint({ x, y, createdAt: Date.now() });
       hapticsBridge.selection();
+      onFocusRef.current?.({ x, y });
       if (lockTimeoutMs > 0) {
         timerRef.current = setTimeout(() => {
           afLockedRef.current = false;
@@ -99,11 +106,8 @@ export function useTapToFocus(input?: UseTapToFocusInput): UseTapToFocusOutput {
           if (!success) return;
           runOnJS(handleTap)(e.x, e.y);
         }),
-    // lockTimeoutMs flows in via handleTap; rebuild gesture when it changes.
     [handleTap]
   );
 
-  const autofocus: AutofocusMode = afLocked ? 'on' : 'off';
-
-  return { tapGesture, focusPoint, afLocked, autofocus, releaseLock };
+  return { tapGesture, focusPoint, afLocked, releaseLock };
 }

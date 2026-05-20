@@ -1,23 +1,22 @@
 // Pure, React-free math for the camera ZoomDial — a CD-style continuous zoom
 // dial that replaces the old 4-button FocalPills row.
 //
-// WHY equal-pixel segments (not linear-in-raw-zoom):
-// expo-camera's normalized `zoom` (0..1) maps EXPONENTIALLY to the real lens
-// factor, so the labeled detents 1x/2x/3x land at STOP_TO_ZOOM ~ 0 / 0.177 /
-// 0.281 — i.e. 2x and 3x are crammed into the first ~28% of the raw axis. A
-// dial laid out linearly in raw zoom would bunch every label at the far left
-// and leave 70% of the strip as an unlabeled void. Instead we give each gap
-// between consecutive detents an EQUAL pixel width (`segPx`) and interpolate
-// the zoom value linearly *within* each segment. The mapping stays monotonic
-// and invertible, so position<->zoom round-trips exactly.
+// WHY equal-pixel segments:
+// VisionCamera exposes zoom in real factor units (0.5x, 1x, 2x, 3x...). A
+// physically linear strip would make the 1x->2x segment tiny on devices whose
+// max zoom reaches 15x+, so the labeled stops would bunch at the start and the
+// rest would be an unlabeled tail. Instead we give each gap between consecutive
+// detents an EQUAL pixel width (`segPx`) and interpolate the real zoom factor
+// linearly *within* each segment. The mapping stays monotonic and invertible,
+// so position<->zoom round-trips exactly.
 //
 // Rule 8 (no fake data): the dial only ever LABELS the real detents
 // (0.5/1/2/3x). Past the last detent we render one more equal-width segment of
-// neutral, UNLABELED ticks — the app does not know the device's true max zoom
-// factor, so it must never print an invented intermediate value like "4.2x".
+// neutral, UNLABELED ticks up to the native device max zoom. The app must never
+// print invented intermediate labels like "4.2x".
 import type { FocalStop } from '../../../components/pilgrimage/camera/types';
 
-/** Normalized 0..1 zoom value each focal stop targets. Mirrors useCameraZoom's
+/** Real zoom factor each focal stop targets. Mirrors useCameraZoom's
  *  STOP_TO_ZOOM but kept here as the dial's input contract so this module has
  *  no React/hook dependency. The caller passes the live map in. */
 export type StopZoomMap = Record<FocalStop, number>;
@@ -29,9 +28,8 @@ export interface Detent {
   /** Pixel offset of this detent's tick, measured from the strip's left edge. */
   px: number;
   /**
-   * Normalized 0..1 digital zoom value at this detent. Note: 0.5 has NO digital
-   * zoom (it's a separate ultrawide LENS), so its zoom is always 0 — it is a
-   * discrete tap/snap target only.
+   * Real native zoom factor at this detent. The value is passed straight to
+   * VisionCamera, so 0.5x stays 0.5 and 3x stays 3.
    */
   zoom: number;
 }
@@ -72,13 +70,22 @@ function isFiniteNumber(value: number): boolean {
   return value === value && value !== Infinity && value !== -Infinity;
 }
 
+function tailMaxZoom(detents: readonly Detent[], maxZoom?: number): number {
+  'worklet';
+  if (detents.length === 0) return 0;
+  const lastZoom = detents[detents.length - 1].zoom;
+  if (typeof maxZoom === 'number' && isFiniteNumber(maxZoom) && maxZoom > lastZoom) {
+    return maxZoom;
+  }
+  return lastZoom;
+}
+
 /**
  * Builds the ordered detent list for the dial. `stops` is the ascending list
  * of focal stops the device exposes (e.g. `[1,2,3]` digital-only, `[0.5,1,2,3]`
  * on an ultrawide-equipped device). Each detent gets an equal-pixel offset.
  *
- * - `stopZoom` supplies the normalized zoom value for 1/2/3x (0.5x is forced to
- *   0 — there is no digital zoom below 1x).
+ * - `stopZoom` supplies the real native zoom factor for 0.5/1/2/3x.
  * - The first detent sits at `px = 0`; each subsequent detent is `segPx` further
  *   right. The dial then appends one more `segPx`-wide neutral tail past the
  *   last detent.
@@ -89,12 +96,14 @@ export function buildDetents(
   segPx: number = SEGMENT_PX
 ): Detent[] {
   const sorted = [...new Set(stops)].sort((a, b) => a - b);
-  return sorted.map((stop, index) => ({
-    stop,
-    px: index * segPx,
-    // 0.5x is a discrete ultrawide lens — no continuous digital zoom there.
-    zoom: stop === 0.5 ? 0 : clampNumber(stopZoom[stop] ?? 0, 0, 1),
-  }));
+  return sorted.map((stop, index) => {
+    const rawZoom = stopZoom[stop] ?? stop;
+    return {
+      stop,
+      px: index * segPx,
+      zoom: isFiniteNumber(rawZoom) && rawZoom > 0 ? rawZoom : stop,
+    };
+  });
 }
 
 /**
@@ -126,60 +135,68 @@ export function dragPositionForTranslation(
 }
 
 /**
- * position px -> normalized 0..1 zoom value.
+ * position px -> real native zoom factor.
  *
  * Within each detent-to-detent segment the zoom is interpolated linearly
  * between the two detents' zoom values. Past the last detent the tail runs
- * linearly from the last detent's zoom up to 1 (full zoom). Out-of-range px is
- * clamped to the strip span.
+ * linearly from the last detent's zoom up to `maxZoom` when known.
+ * Out-of-range px is clamped to the strip span.
  */
 export function zoomForPosition(
   px: number,
   detents: readonly Detent[],
-  segPx: number = SEGMENT_PX
+  segPx: number = SEGMENT_PX,
+  maxZoom?: number
 ): number {
   'worklet';
   if (detents.length === 0) return 0;
   const span = dialSpanPx(detents, segPx);
-  const clamped = clampNumber(px, 0, span);
+  const safePx = isFiniteNumber(px) ? px : 0;
+  const clamped = clampNumber(safePx, 0, span);
   if (detents.length === 1) {
-    // Single detent (e.g. front camera) — tail interpolates detent.zoom -> 1.
     const d = detents[0];
+    const tailZoom = tailMaxZoom(detents, maxZoom);
+    if (tailZoom <= d.zoom) return d.zoom;
     const t = clampNumber((clamped - d.px) / segPx, 0, 1);
-    return clampNumber(lerp(d.zoom, 1, t), 0, 1);
+    return lerp(d.zoom, tailZoom, t);
   }
   for (let i = 0; i < detents.length - 1; i += 1) {
     const a = detents[i];
     const b = detents[i + 1];
     if (clamped <= b.px) {
-      const t = clampNumber((clamped - a.px) / (b.px - a.px), 0, 1);
-      return clampNumber(lerp(a.zoom, b.zoom, t), 0, 1);
+      const segmentWidth = b.px - a.px;
+      const t = segmentWidth <= 0 ? 0 : clampNumber((clamped - a.px) / segmentWidth, 0, 1);
+      return lerp(a.zoom, b.zoom, t);
     }
   }
-  // Beyond the last detent: neutral tail interpolating last.zoom -> 1.
   const last = detents[detents.length - 1];
+  const tailZoom = tailMaxZoom(detents, maxZoom);
+  if (tailZoom <= last.zoom) return last.zoom;
   const t = clampNumber((clamped - last.px) / segPx, 0, 1);
-  return clampNumber(lerp(last.zoom, 1, t), 0, 1);
+  return lerp(last.zoom, tailZoom, t);
 }
 
 /**
- * normalized 0..1 zoom value -> position px. Inverse of `zoomForPosition`;
+ * Real native zoom factor -> position px. Inverse of `zoomForPosition`;
  * round-trips exactly for any in-range zoom because every segment is a strictly
  * monotonic linear map. Out-of-range zoom is clamped to the strip span.
  */
 export function positionForZoom(
   zoom: number,
   detents: readonly Detent[],
-  segPx: number = SEGMENT_PX
+  segPx: number = SEGMENT_PX,
+  maxZoom?: number
 ): number {
   'worklet';
   if (detents.length === 0) return 0;
-  const z = clampNumber(zoom, 0, 1);
+  const first = detents[0];
+  const z = isFiniteNumber(zoom) ? zoom : first.zoom;
+  if (z <= first.zoom) return first.px;
   if (detents.length === 1) {
-    const d = detents[0];
-    if (z <= d.zoom) return d.px;
-    const t = d.zoom >= 1 ? 1 : (z - d.zoom) / (1 - d.zoom);
-    return d.px + clampNumber(t, 0, 1) * segPx;
+    const tailZoom = tailMaxZoom(detents, maxZoom);
+    if (tailZoom <= first.zoom) return first.px;
+    const t = (z - first.zoom) / (tailZoom - first.zoom);
+    return first.px + clampNumber(t, 0, 1) * segPx;
   }
   for (let i = 0; i < detents.length - 1; i += 1) {
     const a = detents[i];
@@ -194,7 +211,9 @@ export function positionForZoom(
   }
   const last = detents[detents.length - 1];
   if (z <= last.zoom) return last.px;
-  const t = last.zoom >= 1 ? 1 : (z - last.zoom) / (1 - last.zoom);
+  const tailZoom = tailMaxZoom(detents, maxZoom);
+  if (tailZoom <= last.zoom) return last.px;
+  const t = (z - last.zoom) / (tailZoom - last.zoom);
   return last.px + clampNumber(t, 0, 1) * segPx;
 }
 

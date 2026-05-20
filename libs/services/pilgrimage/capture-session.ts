@@ -22,7 +22,7 @@ export type CaptureSessionSource = 'manual' | 'auto' | 'library';
 export interface CaptureSessionShot {
   /** Unique id, e.g. `${createdAt}-${Math.random()}`. */
   id: string;
-  /** The brightness-baked photo file uri. */
+  /** Captured photo file URI after any post-capture metadata/composite step. */
   uri: string;
   width: number;
   height: number;
