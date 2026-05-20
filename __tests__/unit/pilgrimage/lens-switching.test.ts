@@ -13,6 +13,7 @@ function makeDevice(overrides: Partial<CameraDeviceInfo>): CameraDeviceInfo {
     physicalLensTypes: [],
     zoomLensSwitchFactors: [],
     physicalFocalLengths: [],
+    physicalDeviceCount: 0,
     supportsPhotoHdr: false,
     minExposureBias: 0,
     maxExposureBias: 0,
@@ -125,6 +126,107 @@ describe('availableStopsFromDeviceInfo', () => {
       maxZoom: 8,
     });
     expect(availableStopsFromDeviceInfo(device)).toEqual([1]);
+  });
+
+  it('exposes the 0.5× pillar on Pixel-class Android (minZoom 0.67)', () => {
+    // Pixel 6/7/8 / 8 Pro report `zoomState.minZoomRatio = 0.67` — Pixel's
+    // hardware ultra-wide floor. The previous threshold of `<= 0.65` silently
+    // dropped Pixel because 0.67 fell into a "suspicious" window. Aligned
+    // with the picker's `< 1.0`, Pixel now gets the 0.5× pillar. Tapping the
+    // pillar still routes through useCameraZoom which clamps to 0.67 so the
+    // request never leaves the device's real zoom range.
+    const device = makeDevice({
+      minZoom: 0.67,
+      maxZoom: 30,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toContain(0.5);
+  });
+
+  it('infers a 3× telephoto pillar from physicalDeviceCount on Android multi-cam', () => {
+    // Samsung S22 / S23 / S24-shaped Triple-Camera on Android. CameraX's
+    // PhysicalCameraInfoAdapter stubs out per-child `focalLength` (null) and
+    // `type` (UNKNOWN), so the focal-length-ratio path has nothing to chew
+    // on. The lens *count* still comes through correctly though —
+    // `cameraInfo.physicalCameraInfos.size == 3` → `physicalDeviceCount = 3`
+    // — and combined with the sub-1× minZoom that's the canonical
+    // [ultra-wide, wide, telephoto] hardware. The dial gets [0.5, 1, 3]
+    // even with empty `physicalFocalLengths`.
+    const device = makeDevice({
+      minZoom: 0.5,
+      maxZoom: 30,
+      physicalDeviceCount: 3,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toEqual([0.5, 1, 3]);
+  });
+
+  it('infers [0.5, 1, 3] on Pixel-class with no per-child focals reported', () => {
+    // Pixel 6 Pro / 7 Pro / 8 Pro shape: minZoom 0.67, 3 physical children
+    // but CameraX returns null focalLength for each (the PhysicalCameraInfoAdapter
+    // limitation). The lens-count path is what makes the 3× pillar appear,
+    // not focal-length ratios.
+    const device = makeDevice({
+      minZoom: 0.67,
+      maxZoom: 30,
+      physicalDeviceCount: 3,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toEqual([0.5, 1, 3]);
+  });
+
+  it('does not invent a telephoto on a dual-wide Android device (count 2)', () => {
+    // Samsung A-series / mid-range phones with [ultra-wide, wide] only.
+    // `physicalDeviceCount = 2` + `minZoom < 1` is dual-wide, NOT a wide+tele
+    // dual. The fallback floor for telephoto inference is 3 children, so
+    // this device correctly stays at [0.5, 1] — no fake 3× pillar.
+    const device = makeDevice({
+      minZoom: 0.5,
+      maxZoom: 10,
+      physicalDeviceCount: 2,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toEqual([0.5, 1]);
+  });
+
+  it('keeps the focal-length-derived telephoto when both signals are present', () => {
+    // Pixel device that *did* manage to report per-child focals (rare on
+    // Android). The focal-ratio path runs first and pushes 3×; the
+    // lens-count path then short-circuits so we don't push a duplicate.
+    // Verifies the [0.5, 1, 3] result is stable, not [0.5, 1, 3, 3].
+    const device = makeDevice({
+      minZoom: 0.6,
+      maxZoom: 30,
+      physicalFocalLengths: [1.6, 6.8, 19.4],
+      physicalDeviceCount: 3,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toEqual([0.5, 1, 3]);
+  });
+
+  it('recovers the telephoto when Xiaomi-style OEMs stub the ultra-wide focal as 0', () => {
+    // Xiaomi MIUI reports the ultra-wide child's focalLength as 0 (see
+    // comment in android-camera-device.ts). CameraStage filters 0 out, so
+    // `physicalFocalLengths` arrives as just [main, tele] = [5.4, 19].
+    // The "main lens" used to be hardcoded to index 1 (assuming the
+    // ultra-wide entry was present), so the loop mistakenly used 19mm as
+    // the main and the telephoto pillar disappeared. Now the main is found
+    // by focal-length threshold (> 3.5mm), so this device gets a 3× pillar
+    // again.
+    const device = makeDevice({
+      minZoom: 0.6,
+      maxZoom: 30,
+      physicalFocalLengths: [5.4, 19],
+      physicalDeviceCount: 3,
+    });
+    expect(availableStopsFromDeviceInfo(device)).toEqual([0.5, 1, 3]);
+  });
+
+  it('respects telephotoStop=2 even when inferring via lens count', () => {
+    // Hypothetical Android phone with a 2× telephoto (rare today but the
+    // 2 override exists for iPhone 11/12 Pro). The lens-count path snaps
+    // to the caller-supplied telephoto stop, not a hardcoded 3.
+    const device = makeDevice({
+      minZoom: 0.5,
+      maxZoom: 8,
+      physicalDeviceCount: 3,
+    });
+    expect(availableStopsFromDeviceInfo(device, 2)).toEqual([0.5, 1, 2]);
   });
 });
 

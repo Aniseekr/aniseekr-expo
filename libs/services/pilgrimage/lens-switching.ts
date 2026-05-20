@@ -9,21 +9,34 @@
 // VisionCamera's CameraX adapter stubs them out to avoid Camera2 interop
 // crashes (`CameraInfo+zoomLensSwitchFactors.kt` always returns an empty
 // DoubleArray; `CameraInfo+deviceType.kt` returns UNKNOWN on every
-// `PhysicalCameraInfoAdapter`). Without a fallback the dial would render only
-// the neutral 1× pillar even on a Pixel 8 Pro or Samsung S24 Ultra.
+// `PhysicalCameraInfoAdapter`, and per-child `focalLength` is null because
+// `Camera2CameraInfo.fromSafe()` rejects the adapter — upstream tracking:
+// https://issuetracker.google.com/issues/496096527). Without a fallback the
+// dial would render only the neutral 1× pillar even on a Pixel 8 Pro or
+// Samsung S24 Ultra.
 //
-// The fallback consumes the two real signals CameraX *does* give us:
-//   * The virtual device's `minZoom` (from `zoomState.minZoomRatio`) — values
-//     under ~1.0 are only physically reachable through an ultra-wide lens, so
-//     `minZoom <= 0.65` reliably means a 0.5× pillar should appear.
+// The fallback consumes the three real signals CameraX *does* give us:
+//   * The virtual device's `minZoom` (from `zoomState.minZoomRatio`) — any
+//     value strictly under 1.0 is physically only reachable through an
+//     ultra-wide lens (digital crop can't zoom out below 1.0).
 //   * Each physical child's raw focal length (from
 //     `LENS_INFO_AVAILABLE_FOCAL_LENGTHS`) — ratios across siblings approximate
-//     the optical zoom factor of the telephoto sibling. Rounded conservatively
-//     to the closest 2× or 3× pillar in our snap set.
+//     the optical zoom factor of the telephoto sibling. Rare on Android (the
+//     adapter usually nulls these out) but reliable on iOS and on the OEMs
+//     that do populate it.
+//   * The count of physical children grouped into this logical multi-camera
+//     (`physicalCameraInfos.size` → `device.physicalDevices.length`) — this
+//     is the only multi-cam signal CameraX doesn't stub out, and a back
+//     camera with `count >= 3` + `minZoom < 1` is the canonical
+//     [ultra-wide, wide, telephoto] hardware on every shipped Android phone
+//     that exposes a logical multi-cam (Samsung S20FE/S22/S23/S24, Pixel
+//     6+ Pro, Xiaomi/Oppo/Vivo flagships).
 //
 // Per CLAUDE.md Rule 8 the dial still only renders pillars the device truly
 // has: every pillar comes from a *real* CameraX value, never a hash, random,
-// or platform guess.
+// or platform guess. The lens-count inference is bounded by the OS's own
+// grouping of cameras into a single logical device — we don't invent that
+// grouping, we just read its size.
 import type {
   CameraDeviceInfo,
   EnginePhysicalLensType,
@@ -58,10 +71,38 @@ const ALL_STOPS: readonly FocalStop[] = [0.5, 1, 2, 3] as const;
 const TELEPHOTO_SNAP_BOUNDARY = 2.2;
 const TELEPHOTO_MIN_RATIO = 1.7;
 
-/** A reported sub-1× minZoom this small (or smaller) is the canonical Android
- *  signal that a physical ultra-wide lens is present — digital crop cannot
- *  zoom out below 1.0. Anything in (0.65, 1) is suspicious enough to ignore. */
-const ULTRA_WIDE_MIN_ZOOM_THRESHOLD = 0.65;
+/** Any reported sub-1× minZoom is hardware-derived: digital crop cannot zoom
+ *  out below 1.0, so the camera must have an ultra-wide lens in its physical
+ *  set. Empirical reports across vendors that this catches:
+ *    * Samsung Galaxy S20FE/S22/S23/S24: 0.5
+ *    * iPhone Triple-Camera (iOS path uses physicalLensTypes, this is just
+ *      defensive): 0.5
+ *    * Xiaomi 12/13/14: 0.5-0.6
+ *    * Oppo Find X5/X6 / Vivo X90/X100: 0.5-0.6
+ *    * Pixel 6/7/8 / 8 Pro: 0.67 (Pixel's ultra-wide reach floor)
+ *  Aligned with `ULTRA_WIDE_MIN_ZOOM_EXCLUSIVE = 1.0` in `android-camera-device.ts`
+ *  so a device the picker selects (because its minZoom < 1) actually gets the
+ *  0.5× pillar in the dial. A previous tighter threshold (0.65) silently
+ *  dropped Pixel even though the picker correctly selected its multi-cam. */
+const ULTRA_WIDE_MIN_ZOOM_EXCLUSIVE = 1;
+
+/** Smartphone ultra-wide-angle lenses sit at ≤ 3.5mm raw focal length.
+ *  Mainstream main-wide lenses are 4–8mm. Used to find which entry in the
+ *  sorted `physicalFocalLengths` array is the "main" lens regardless of
+ *  whether the ultra-wide entry was reported (Pixel: yes) or filtered out
+ *  upstream because the OEM stubbed it as 0 (Xiaomi MIUI). */
+const ULTRA_WIDE_FOCAL_LENGTH_MAX_MM = 3.5;
+
+/** Count of physical lens children that signals a back-camera virtual device
+ *  with a telephoto sibling on Android. CameraX's `PhysicalCameraInfoAdapter`
+ *  stubs per-child `type` and `focalLength` (see camera-engine.ts comment on
+ *  `physicalDeviceCount`), but the count is real — every shipped Android
+ *  phone with `physicalDeviceCount >= 3` AND `minZoom < 1` carries
+ *  `[ultra-wide, wide, telephoto]` hardware (Samsung S20FE/S22/S23/S24,
+ *  Pixel 6+ Pro, Xiaomi/Oppo/Vivo flagships). 'dual' devices with sub-1×
+ *  reach are dual-wide style (ultra-wide + wide, no telephoto), so the floor
+ *  is 3. */
+const VIRTUAL_DEVICE_COUNT_WITH_TELEPHOTO = 3;
 
 function isFocalStop(value: number): value is FocalStop {
   return value === 0.5 || value === 1 || value === 2 || value === 3;
@@ -72,31 +113,65 @@ function dedupeSorted(stops: FocalStop[]): FocalStop[] {
 }
 
 /**
- * Android fallback that infers focal stops from the two real CameraX signals
- * we still have access to when `physicalLensTypes` / `zoomLensSwitchFactors`
- * come back empty: the virtual device's `minZoom` and each physical child's
- * raw `focalLength`.
+ * Android fallback that infers focal stops from the three real signals we
+ * still have access to when `physicalLensTypes` / `zoomLensSwitchFactors`
+ * come back empty: the virtual device's `minZoom`, each physical child's raw
+ * `focalLength` (when reported), and the count of physical children the OS
+ * grouped into this logical multi-camera.
+ *
+ * Two sub-paths feed the telephoto pillar:
+ *   1. Focal-length ratio (works on iOS for sanity-checking; works on Android
+ *      only on the rare OEMs that expose per-child focals via
+ *      `LENS_INFO_AVAILABLE_FOCAL_LENGTHS`). The "main" lens is the shortest
+ *      focal above the ultra-wide cutoff (~3.5mm) — robust to either Pixel
+ *      (all three focals reported) or Xiaomi MIUI (ultra-wide reported as 0
+ *      and filtered out upstream by CameraStage).
+ *   2. Lens count (the practical Android path). `physicalDeviceCount` is the
+ *      only multi-cam signal CameraX doesn't stub out. `>= 3` + `minZoom < 1`
+ *      reliably implies the third lens is a telephoto on every shipped
+ *      Android phone with a logical back-camera multi-cam — no need to
+ *      reconstruct focal lengths through Camera2 interop.
  */
-function inferStopsFromFallbackSignals(info: CameraDeviceInfo): FocalStop[] {
+function inferStopsFromFallbackSignals(
+  info: CameraDeviceInfo,
+  telephotoStop: 2 | 3
+): FocalStop[] {
   const stops: FocalStop[] = [];
-  const hasUltraWide = info.minZoom > 0 && info.minZoom <= ULTRA_WIDE_MIN_ZOOM_THRESHOLD;
+  const hasUltraWide = info.minZoom > 0 && info.minZoom < ULTRA_WIDE_MIN_ZOOM_EXCLUSIVE;
   if (hasUltraWide) stops.push(0.5);
 
-  // Sorted ascending by CameraStage. With an ultra-wide present, the main
-  // wide lens is the second-shortest focal length; without one the main is
-  // simply the shortest sibling.
+  // Sub-path 1: per-child focal lengths reported (Pixel, iOS, OEMs that
+  // happen to populate `LENS_INFO_AVAILABLE_FOCAL_LENGTHS` on the
+  // PhysicalCameraInfoAdapter — rare but real).
   const lengths = info.physicalFocalLengths;
+  let telephotoFromFocals = false;
   if (lengths.length >= 2) {
-    const mainIndex = hasUltraWide ? 1 : 0;
-    const mainFocal = lengths[mainIndex];
-    if (mainFocal > 0) {
+    const mainIndex = lengths.findIndex((f) => f > ULTRA_WIDE_FOCAL_LENGTH_MAX_MM);
+    if (mainIndex >= 0) {
+      const mainFocal = lengths[mainIndex];
       for (let i = mainIndex + 1; i < lengths.length; i++) {
         const ratio = lengths[i] / mainFocal;
         if (ratio < TELEPHOTO_MIN_RATIO) continue;
         stops.push(ratio <= TELEPHOTO_SNAP_BOUNDARY ? 2 : 3);
+        telephotoFromFocals = true;
       }
     }
   }
+
+  // Sub-path 2: lens-count signal. Only runs when sub-path 1 didn't already
+  // surface a telephoto (so a Pixel with [1.6, 6.8, 19.4] keeps its
+  // focal-derived 3× pillar, not a duplicate). Snaps to the caller-supplied
+  // `telephotoStop` so legacy 2× hardware (iPhone 11 Pro / 12 Pro) doesn't
+  // get mis-labelled — that override flows through from
+  // `availableStopsFromDeviceInfo`.
+  if (
+    !telephotoFromFocals &&
+    hasUltraWide &&
+    info.physicalDeviceCount >= VIRTUAL_DEVICE_COUNT_WITH_TELEPHOTO
+  ) {
+    stops.push(telephotoStop);
+  }
+
   return stops;
 }
 
@@ -141,15 +216,23 @@ export function availableStopsFromDeviceInfo(
     if (isFocalStop(factor)) stops.push(factor);
   }
 
-  // Android path: both iOS-derived signals are empty, but CameraX still hands
-  // us a real `minZoom` and per-child `focalLength`. Use those before we fall
-  // back to the lonely 1× pillar.
+  // Android path: both iOS-derived signals are empty, but CameraX still
+  // hands us a real `minZoom`, per-child `focalLength` (sometimes), and the
+  // count of physical children grouped into this logical multi-camera. Use
+  // those before we fall back to the lonely 1× pillar. The trigger admits
+  // any of the three signals so we don't ignore lens count on a phone where
+  // CameraX happens to return minZoom == 1 transiently while still reporting
+  // 3+ children.
   if (
     info.physicalLensTypes.length === 0 &&
     info.zoomLensSwitchFactors.length === 0 &&
-    (info.minZoom < 1 || info.physicalFocalLengths.length >= 2)
+    (info.minZoom < 1 ||
+      info.physicalFocalLengths.length >= 2 ||
+      info.physicalDeviceCount >= 2)
   ) {
-    for (const inferred of inferStopsFromFallbackSignals(info)) stops.push(inferred);
+    for (const inferred of inferStopsFromFallbackSignals(info, telephotoStop)) {
+      stops.push(inferred);
+    }
   }
 
   stops.push(1);

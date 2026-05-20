@@ -62,6 +62,24 @@ export interface CameraDeviceInfo {
    * extension stubs that data out to avoid a Camera2 interop crash).
    */
   physicalFocalLengths: number[];
+  /**
+   * Count of physical lens children for a logical multi-camera virtual
+   * device, as reported by the OS (`device.physicalDevices.length`). `0` for
+   * single-lens devices, `2`-`4` for multi-cam virtual devices ('dual',
+   * 'triple', 'quad').
+   *
+   * This is the count signal we still have on Android when each child's type
+   * is `UNKNOWN` and focalLength is `null` (CameraX `PhysicalCameraInfoAdapter`
+   * does not expose Camera2 characteristics for children — upstream tracking:
+   * https://issuetracker.google.com/issues/496096527). A back-camera virtual
+   * device with `physicalDeviceCount >= 3` AND `minZoom < 1` is the canonical
+   * `[ultra-wide, wide, telephoto]` hardware on every shipped Android phone
+   * that exposes a logical multi-camera (Samsung S20FE/S22/S23/S24, Pixel
+   * 6+ Pro, Xiaomi/Oppo/Vivo flagships) — lets the dial surface the 3× pillar
+   * that the focal-length-ratio path can't reach when children focals are
+   * stubbed out.
+   */
+  physicalDeviceCount: number;
   /** True if the device's chosen format supports real photo-HDR capture. */
   supportsPhotoHdr: boolean;
   /** Real exposure bias range in EV units. `0`/`0` if the device doesn't support bias. */

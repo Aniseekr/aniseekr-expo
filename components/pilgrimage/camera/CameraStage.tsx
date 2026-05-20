@@ -200,6 +200,11 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
       physicalLensTypes,
       zoomLensSwitchFactors: [...device.zoomLensSwitchFactors],
       physicalFocalLengths,
+      // Real count from VisionCamera — `device.physicalDevices.length` mirrors
+      // CameraX's `cameraInfo.physicalCameraInfos.size` on Android (which is
+      // the *only* multi-cam signal the adapter doesn't stub out) and matches
+      // `AVCaptureDevice.constituentDevices.count` on iOS.
+      physicalDeviceCount: device.physicalDevices.length,
       supportsPhotoHdr: device.supportsPhotoHDR,
       minExposureBias: device.minExposureBias,
       maxExposureBias: device.maxExposureBias,
