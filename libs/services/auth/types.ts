@@ -129,9 +129,10 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     icon: 'paw',
     color: '#F75239',
     oauth: {
-      // The previously hardcoded clientId/clientSecret values are considered
-      // leaked - rotate them on Kitsu before reuse. Token exchange must go
-      // through a backend proxy that holds KITSU_CLIENT_SECRET server-side.
+      // Kitsu has not implemented per-app registration; their docs publish a
+      // shared placeholder client_id/secret that every client uses (or empty
+      // strings also work). Read from env so we can swap in real values once
+      // Kitsu ships app registration.
       clientId: process.env.EXPO_PUBLIC_KITSU_CLIENT_ID || '',
       redirectUri: '',
       authorizationEndpoint: '',
