@@ -48,6 +48,10 @@ export interface ExposureBracketResult {
   height: number;
   /** True if all 3 frames captured AND composite returned a different file than the mid frame. */
   wasHdr: boolean;
+  /** Lens family the bracket was captured on. All 3 frames come from the
+   *  same active session so a single tag covers the set. `undefined` for
+   *  legacy / iOS captures. */
+  lensType?: 'ultra-wide-angle' | 'wide-angle' | 'telephoto';
 }
 
 export interface UseExposureBracketOutput {
@@ -62,6 +66,7 @@ interface BracketFrame {
   height: number;
   /** The (clamped) EV bias that was applied when this frame was captured. */
   ev: number;
+  lensType?: 'ultra-wide-angle' | 'wide-angle' | 'telephoto';
 }
 
 const FRAME_COUNT = 3;
@@ -163,6 +168,7 @@ export function useExposureBracket(input: UseExposureBracketInput): UseExposureB
             width: photo.width || 0,
             height: photo.height || 0,
             ev: clamped[i],
+            lensType: photo.lensType,
           });
           setCaptured(frames.length);
         } catch (frameError) {
@@ -181,6 +187,7 @@ export function useExposureBracket(input: UseExposureBracketInput): UseExposureB
           width: fallback.width,
           height: fallback.height,
           wasHdr: false,
+          lensType: fallback.lensType,
         };
       }
 
@@ -213,6 +220,7 @@ export function useExposureBracket(input: UseExposureBracketInput): UseExposureB
         width: composite.width,
         height: composite.height,
         wasHdr,
+        lensType: sorted[0].lensType,
       };
     } catch (error) {
       console.warn('[useExposureBracket] capture aborted', error);

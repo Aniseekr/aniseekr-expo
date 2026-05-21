@@ -14,9 +14,21 @@
 //
 // The parent (`compare/[spotId].tsx`) keeps doing its own composition of
 // onCameraReady / lens-info refresh / picture-size probing.
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import type { SharedValue } from 'react-native-reanimated';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Image as RNImage, Platform, StyleSheet, View } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Gesture,
   GestureDetector,
@@ -26,6 +38,7 @@ import {
 import {
   Camera,
   CommonResolutions,
+  type CameraDevice,
   type CameraFrameOutput,
   type CameraRef,
   type Constraint,
@@ -38,7 +51,6 @@ import {
 import { useTheme } from '../../../context/ThemeContext';
 import { resolveCapturedPhotoDimensions } from '../../../libs/services/pilgrimage/camera-engine-parity';
 import { useResolvedCameraDevice } from '../../../hooks/useResolvedCameraDevice';
-import { ThemedText } from '../../themed';
 import type {
   CameraDeviceInfo,
   CameraEngineHandle,
@@ -114,6 +126,38 @@ export interface CameraStageProps {
    * frame processor is attached and the session runs with photo-only outputs.
    */
   frameOutput?: CameraFrameOutput;
+
+  /**
+   * Caller-supplied active CameraDevice. When provided (e.g. by the strategic
+   * lens-switching hook), it OVERRIDES the internal `useResolvedCameraDevice`
+   * pick — so the camera session opens on the lens the FSM chose
+   * (`cohort.primary` or `cohort.ultraWide`). When omitted, behaviour falls
+   * back to the legacy in-stage resolver path, preserving every existing
+   * call site that hasn't migrated yet.
+   *
+   * SESSION LIFECYCLE: changing `device` mid-flight forces VisionCamera to
+   * tear down the previous CameraX session and bring up a new one for the
+   * new device (~200–400ms on Android). During that window `sessionStarted`
+   * flips back to false, gating zoom/exposure/torch back to `undefined` and
+   * preventing the OperationCanceledException race that would otherwise
+   * fire on the dead controller.
+   */
+  device?: CameraDevice;
+
+  /**
+   * Optional file URI of a snapshot of the previous preview, captured by the
+   * caller right before requesting a lens swap (via `engine.takeSnapshot()`).
+   * When provided AND `showWarmup` is true, the snapshot is rendered as a
+   * still image at full opacity ABOVE the (now-black) live preview and below
+   * the vignette overlay — so the user never sees the CameraX swap blackout.
+   * Crossfades out via Reanimated when `showWarmup` flips back to false.
+   *
+   * Android-only — VisionCamera v5's PreviewView.takeSnapshot is documented as
+   * Android-only. On iOS this prop is always `null`; the snapshot path falls
+   * through to the animated vignette alone, which is still much softer than
+   * the old hard-cut overlay.
+   */
+  freezeFrameUri?: string | null;
 }
 
 export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(function CameraStage(
@@ -137,6 +181,8 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
     onDeviceInfo,
     showWarmup,
     frameOutput,
+    device: deviceProp,
+    freezeFrameUri,
   },
   ref
 ) {
@@ -145,14 +191,15 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
   const enableShutterSoundRef = useRef(enableShutterSound);
   enableShutterSoundRef.current = enableShutterSound;
 
-  // Device resolution lives in `useResolvedCameraDevice` because Android's
-  // VisionCamera picker scores by a broken `type` field and would drop the
-  // ultra-wide multi-cam in favour of a single-lens wide. The resolver
-  // routes Android back-camera selection through `selectAndroidBackDevice`,
-  // which scores by the CameraX values that actually work (minZoom,
-  // isVirtualDevice, physical-child focalLength), and lets iOS / front
-  // selection fall straight through to the stock VisionCamera filter.
-  const device = useResolvedCameraDevice(facing);
+  // Device resolution: caller-supplied `deviceProp` wins (the strategic
+  // lens-switching hook owns this end), with the legacy in-stage resolver
+  // as fallback for screens that haven't migrated. The resolver still has
+  // to run unconditionally even when deviceProp is provided — `useCameraDevices`
+  // is a subscription that returns the same array reference and is otherwise
+  // free to memoise. Cheap to call; the only real cost is `classifyCohort`-
+  // adjacent picker math which is microsecond-scale.
+  const fallbackDevice = useResolvedCameraDevice(facing);
+  const device = deviceProp ?? fallbackDevice;
   const targetResolution = useMemo(
     () => resolveTargetResolution(resolutionTier, aspect),
     [resolutionTier, aspect]
@@ -221,6 +268,17 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
     onDeviceInfo?.(deviceInfo);
   }, [deviceInfo, onDeviceInfo]);
 
+  // Stable ref to the active device's physical lens type for capture
+  // metadata. We can't pass `device` straight to `takePhoto` because the
+  // callback is memoised; instead, the ref reads the current value each
+  // time a photo is captured. The lens type is derived from `device.type`
+  // when it's a known physical lens; if it's `wide-angle` (or any unknown
+  // value on Android where CameraX stubs the type field) we fall back to
+  // `wide-angle` so the compare-screen analysis treats the capture as
+  // baseline.
+  const captureLensTypeRef = useRef<EnginePhysicalLensType | undefined>(undefined);
+  captureLensTypeRef.current = device && isPhysicalLensType(device.type) ? device.type : undefined;
+
   const takePhoto = useCallback(
     async (opts?: {
       flashMode?: 'on' | 'off' | 'auto';
@@ -242,7 +300,12 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
       // once so preview, subject-composite, burst, and HDR records carry the real
       // pixel dimensions instead of the requested target resolution.
       const dimensions = await resolveCapturedPhotoDimensions(uri, targetResolution);
-      return { uri, width: dimensions.width, height: dimensions.height };
+      return {
+        uri,
+        width: dimensions.width,
+        height: dimensions.height,
+        lensType: captureLensTypeRef.current,
+      };
     },
     [photoOutput, targetResolution]
   );
@@ -265,10 +328,41 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
 
   const getDeviceInfo = useCallback(() => deviceInfoRef.current, []);
 
-  useImperativeHandle(ref, () => ({ takePhoto, focus, getDeviceInfo }), [
+  // Grab a fast snapshot of the current preview surface and save it to the
+  // app's cache directory so the screen can paint it as a freeze-frame
+  // during the next lens-switch session swap. Resolves to the file URI on
+  // success and to `null` on every failure mode (iOS — no API, missing ref,
+  // PreviewView not ready, file save error). Callers MUST treat `null` as
+  // "no overlay" — the animated vignette already covers that path.
+  const takeSnapshot = useCallback(async (): Promise<string | null> => {
+    // VisionCamera v5's PreviewView.takeSnapshot is documented as Android-only;
+    // calling it on iOS throws synchronously. Short-circuit so the caller's
+    // optional-chain (`takeSnapshot()?.then(...)`) never inflates the JS
+    // microtask queue with an immediate rejection.
+    if (Platform.OS !== 'android') return null;
+    const camera = cameraRef.current;
+    const preview = camera?.preview;
+    if (!preview) return null;
+    if (!FileSystem.cacheDirectory) return null;
+    try {
+      const image = await preview.takeSnapshot();
+      const path = `${FileSystem.cacheDirectory}lens-switch-snapshot-${Date.now()}.jpg`;
+      // 60 quality keeps the file under ~100 kB for a 1080p preview — fast
+      // enough that the save finishes well before CameraX has finished
+      // tearing down the old session.
+      await image.saveToFileAsync(path, 'jpg', 60);
+      return path.startsWith(FILE_SCHEME) ? path : `${FILE_SCHEME}${path.replace(/^file:\/+/, '/')}`;
+    } catch (error) {
+      console.warn('[CameraStage] takeSnapshot failed', error);
+      return null;
+    }
+  }, []);
+
+  useImperativeHandle(ref, () => ({ takePhoto, focus, getDeviceInfo, takeSnapshot }), [
     takePhoto,
     focus,
     getDeviceInfo,
+    takeSnapshot,
   ]);
 
   // Selfie mirroring is a Camera prop in VisionCamera v5 (it mirrors the
@@ -280,31 +374,59 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
     return mirrorSelfie === false ? 'off' : 'auto';
   }, [facing, mirrorSelfie]);
 
-  // Torch / exposure / zoom props feed CameraX directly. When the session is
-  // stopped (`active=false`), CameraX rejects `enableTorch()`,
-  // `setExposureBias()`, and `setZoom()` with "Camera is not active" and
-  // VisionCamera surfaces that as an unhandled JS promise rejection.
+  // Torch / exposure / zoom props feed CameraX directly. Two gates protect
+  // these from racing the underlying session:
   //
-  // The fix is to pass `undefined` for these props while the session is
-  // paused so VisionCamera's *Updater hooks early-return without ever
-  // touching the dormant controller. VisionCamera also runs its own
-  // `useCameraSessionIsRunning` effect first (declared before the
-  // *Updater hooks in `Camera.tsx`), so the session stop completes before
-  // these effects re-evaluate — meaning the "undefined → no-op" branch is
-  // what actually runs, not a stale "set value" call.
+  //   1. `active=false` — the user has paused the session (sheet covers the
+  //      preview, app backgrounded). VisionCamera's *Updater hooks call
+  //      setZoom / setExposureBias / setTorchMode unconditionally on every
+  //      re-render of the relevant prop, so we substitute `undefined` to
+  //      make them early-return.
   //
-  // When `active` flips back to true the SharedValues / TorchMode flow
-  // through again on the next render and the Updater hooks call
-  // setTorchMode / setExposureBias / setZoom against the freshly running
-  // session. No reset gymnastics required: the SharedValues retain their
-  // current values across the pause.
-  const resolvedTorchMode: TorchMode | undefined = active
+  //   2. `sessionStarted=false` — the Camera view has mounted but the
+  //      CameraX session hasn't yet reached its "active" state. The
+  //      *Updater hooks fire on first mount with a defined `controller`,
+  //      but CameraX takes ~100–500ms more before accepting operations.
+  //      In that window every setZoom / setExposureBias / setTorchMode
+  //      throws `androidx.camera.core.CameraControl$OperationCanceledException:
+  //      Camera is not active` — an unhandled promise rejection that
+  //      shows up in the dev red box even though the camera continues to
+  //      come up cleanly. Holding the props at `undefined` until
+  //      `onStarted` fires sidesteps the race; the SharedValues flow
+  //      through on the next render and reach a controller that's truly
+  //      ready.
+  //
+  // `sessionStarted` stays `true` across pauses (CameraX's
+  // startRunning/stopRunning doesn't re-fire onStarted), so the gate only
+  // bites during the cold-start window.
+  const [sessionStarted, setSessionStarted] = useState(false);
+  // When the active `device` changes (lens swap via the strategic FSM, or
+  // facing flip), VisionCamera tears down the previous CameraX session and
+  // brings up a new one for the new device. `sessionStarted` must reset to
+  // `false` for the duration of that swap — otherwise zoom/exposure/torch
+  // would re-fire against a freshly-dead controller before the new session
+  // reports `onStarted`, throwing the same OperationCanceledException the
+  // cold-start gate was added to suppress.
+  const lastDeviceIdRef = useRef<string | undefined>(device?.id);
+  useEffect(() => {
+    if (device?.id !== lastDeviceIdRef.current) {
+      lastDeviceIdRef.current = device?.id;
+      setSessionStarted(false);
+    }
+  }, [device]);
+  const sessionReady = active && sessionStarted;
+  const resolvedTorchMode: TorchMode | undefined = sessionReady
     ? enableTorch
       ? 'on'
       : 'off'
     : undefined;
-  const resolvedExposure = active ? exposureShared : undefined;
-  const resolvedZoom = active ? zoomShared : undefined;
+  const resolvedExposure = sessionReady ? exposureShared : undefined;
+  const resolvedZoom = sessionReady ? zoomShared : undefined;
+
+  const handleStarted = useCallback(() => {
+    setSessionStarted(true);
+    onCameraReady?.();
+  }, [onCameraReady]);
 
   const handleMountError = useCallback(
     (err: Error) => {
@@ -313,43 +435,165 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
     [onMountError]
   );
 
+  // Animated curtain that smoothly masks the CameraX session swap.
+  // `overlayOpacity` drives the dark vignette; `pulseProgress` drives the
+  // faint 1 Hz pulse that signals "something is happening" without the
+  // judgmental spinner. `cameraScale` gives the preview a barely-perceptible
+  // 1 → 0.985 → 1 squeeze so the transition feels intentional rather than
+  // jolting. `freezeOpacity` crossfades the captured freeze-frame in over the
+  // black preview surface (Android-only path; see `takeSnapshot`). All four
+  // are SharedValues so React never re-renders during the animation — every
+  // tween stays on the UI thread.
+  const overlayOpacity = useSharedValue(0);
+  const pulseProgress = useSharedValue(0);
+  const cameraScale = useSharedValue(1);
+  const freezeOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (showWarmup) {
+      // 80 ms delay swallows the cache-warm cases where the session is up
+      // before the user could even see a flash. Past that, ease in over 220 ms
+      // to ~75 % opacity — dark enough to mask the black preview surface
+      // without going full black.
+      overlayOpacity.value = withDelay(
+        80,
+        withTiming(0.75, { duration: 220, easing: Easing.out(Easing.cubic) })
+      );
+      // 1 Hz breathing pulse on a 0→1→0 cycle, repeated until the swap ends.
+      pulseProgress.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 700, easing: Easing.inOut(Easing.quad) })
+        ),
+        -1,
+        false
+      );
+      // Squeeze the live preview by a hair so the eye reads the transition as
+      // optical zoom motion rather than a freeze.
+      cameraScale.value = withTiming(0.985, {
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+      });
+    } else {
+      // Ease everything out together. 200 ms feels snappy without clipping.
+      overlayOpacity.value = withTiming(0, {
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+      });
+      cancelAnimation(pulseProgress);
+      pulseProgress.value = withTiming(0, { duration: 200 });
+      cameraScale.value = withTiming(1, {
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+    return () => {
+      // Stop the repeat when unmounting / re-running so a torn-down session
+      // doesn't leave the pulse animation churning the UI thread.
+      cancelAnimation(pulseProgress);
+    };
+  }, [showWarmup, overlayOpacity, pulseProgress, cameraScale]);
+
+  // Crossfade the freeze-frame snapshot. When `freezeFrameUri` lands AND the
+  // warmup is active, fade it in at full opacity over the black preview.
+  // When the new session reports ready (`showWarmup` flips false) OR the
+  // caller clears the URI, fade back to 0.
+  useEffect(() => {
+    if (showWarmup && freezeFrameUri) {
+      freezeOpacity.value = withTiming(1, {
+        duration: 140,
+        easing: Easing.out(Easing.cubic),
+      });
+    } else {
+      freezeOpacity.value = withTiming(0, {
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [showWarmup, freezeFrameUri, freezeOpacity]);
+
+  const cameraAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cameraScale.value }],
+  }));
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+  // Faint center pulse that breathes in and out. Lifts opacity from 0.15→0.32
+  // with a tiny scale change so the eye reads it as a heartbeat, not a spinner.
+  const pulseAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.15 + 0.17 * pulseProgress.value,
+    transform: [{ scale: 0.92 + 0.18 * pulseProgress.value }],
+  }));
+  const freezeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: freezeOpacity.value,
+  }));
+
   return (
     <View style={styles.root}>
       <GestureDetector gesture={Gesture.Simultaneous(pinchGesture, tapGesture)}>
         <View style={StyleSheet.absoluteFill}>
           {device ? (
-            <Camera
-              ref={cameraRef}
-              style={StyleSheet.absoluteFill}
-              device={device}
-              outputs={outputs}
-              isActive={active}
-              zoom={resolvedZoom}
-              exposure={resolvedExposure}
-              torchMode={resolvedTorchMode}
-              mirrorMode={mirrorMode}
-              constraints={constraints}
-              orientationSource="interface"
-              onStarted={onCameraReady}
-              onError={handleMountError}
-            />
+            <Animated.View style={[StyleSheet.absoluteFill, cameraAnimatedStyle]}>
+              <Camera
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                device={device}
+                outputs={outputs}
+                isActive={active}
+                zoom={resolvedZoom}
+                exposure={resolvedExposure}
+                torchMode={resolvedTorchMode}
+                mirrorMode={mirrorMode}
+                constraints={constraints}
+                orientationSource="interface"
+                onStarted={handleStarted}
+                onError={handleMountError}
+              />
+            </Animated.View>
           ) : null}
-          {showWarmup ? (
-            <View
+          {/* Android-only freeze-frame. Painted ABOVE the live preview (which
+              has gone black during the CameraX swap) and BELOW the vignette
+              overlay, so the user sees the previous lens's framing held still
+              instead of a jarring black flash. iOS skips this layer because
+              VisionCamera's PreviewView.takeSnapshot is Android-only. */}
+          {freezeFrameUri ? (
+            <Animated.View
               pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                styles.warmup,
-                { backgroundColor: theme.background.primary, opacity: 0.5 },
-              ]}>
-              <View style={styles.warmupInner}>
-                <ActivityIndicator color={theme.accent} />
-                <ThemedText variant="bodyMedium" tone="secondary" style={styles.warmupLabel}>
-                  Preparing camera…
-                </ThemedText>
-              </View>
-            </View>
+              style={[StyleSheet.absoluteFill, freezeAnimatedStyle]}>
+              <RNImage
+                source={{ uri: freezeFrameUri }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+                fadeDuration={0}
+              />
+            </Animated.View>
           ) : null}
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, styles.warmup, overlayAnimatedStyle]}>
+            {/* Radial-ish vignette painted with two stacked linear gradients
+                — dark at the edges, transparent in the middle. Reads as a soft
+                "moment of focus" instead of a flat tint. */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
+              locations={[0, 0.5, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.45)']}
+              locations={[0, 0.5, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {/* Faint accent pulse at the center. Uses theme.accent so brand
+                identity carries through even during the transition. */}
+            <Animated.View style={[styles.pulseDot, { backgroundColor: theme.accent }, pulseAnimatedStyle]} />
+          </Animated.View>
         </View>
       </GestureDetector>
     </View>
@@ -366,11 +610,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  warmupInner: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  warmupLabel: {
-    textAlign: 'center',
+  pulseDot: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
 });

@@ -27,6 +27,11 @@ export interface BurstCaptureResult {
   scores: number[];
   bestIndex: number;
   total: number;
+  /** Lens family the burst was captured on. All frames in a burst come from
+   *  the same active camera session, so a single lens tag covers the set.
+   *  `undefined` for legacy / iOS captures where the engine doesn't report
+   *  a lens type. */
+  lensType?: 'ultra-wide-angle' | 'wide-angle' | 'telephoto';
 }
 
 export interface BurstCaptureSensorSnapshot {
@@ -66,6 +71,7 @@ interface RawBurstFrame {
   width: number;
   height: number;
   score: number;
+  lensType?: 'ultra-wide-angle' | 'wide-angle' | 'telephoto';
 }
 
 function computeBestIndex(scores: number[]): number {
@@ -141,6 +147,7 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
             width: photo.width || 0,
             height: photo.height || 0,
             score: snapshot.scoreTotal ?? NaN,
+            lensType: photo.lensType,
           });
           setCaptured(rawFrames.length);
 
@@ -160,6 +167,9 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
 
     if (rawFrames.length === 0) return null;
 
+    // All burst frames come from the same active session, so they share a
+    // lens. Take the first frame's tag as the burst's lens identity (every
+    // frame either matches or is missing the tag entirely).
     return {
       uris: rawFrames.map((f) => f.uri),
       widths: rawFrames.map((f) => f.width),
@@ -167,6 +177,7 @@ export function useBurstCapture(input: UseBurstCaptureInput): UseBurstCaptureOut
       scores: rawFrames.map((f) => f.score),
       bestIndex: computeBestIndex(rawFrames.map((f) => f.score)),
       total: rawFrames.length,
+      lensType: rawFrames[0]?.lensType,
     };
   }, []);
 

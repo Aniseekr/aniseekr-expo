@@ -44,6 +44,14 @@ export interface CaptureSessionShot {
   burstTotal?: number;
   burstUris?: string[];
   burstBestIndex?: number;
+  /**
+   * Physical lens family the capture was taken on. Drives the compare-screen
+   * analysis gate (frame-match / HDR composite / scene-analysis only run on
+   * 'wide-angle' captures because that's the optical signature of the
+   * reference shot). `undefined` for legacy / iOS captures, in which case
+   * the gate is permissive — see `capture-lens-gate.ts`.
+   */
+  lensType?: 'ultra-wide-angle' | 'wide-angle' | 'telephoto';
 }
 
 export interface LibraryCaptureAsset {

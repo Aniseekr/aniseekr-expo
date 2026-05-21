@@ -16,6 +16,16 @@ export interface EnginePhoto {
   uri: string;
   width: number;
   height: number;
+  /**
+   * Physical lens family the photo was taken with. Carried downstream so
+   * compare-screen analysis (frame-match / HDR composite / scene-analysis)
+   * can SKIP itself when a photo was taken on a non-`wide-angle` lens —
+   * the original reference shot was always wide-angle, so cross-lens
+   * comparison would surface meaningless deltas. `undefined` means the
+   * engine couldn't determine the lens (preserve back-compat: legacy
+   * callers that don't check this field still work).
+   */
+  lensType?: EnginePhysicalLensType;
 }
 
 /**
@@ -112,6 +122,19 @@ export interface CameraEngineHandle {
   focus(point: { x: number; y: number }): Promise<void>;
   /** Latest device capabilities. `null` while the camera is still starting up. */
   getDeviceInfo(): CameraDeviceInfo | null;
+  /**
+   * Grab a fast snapshot of the current preview surface and save it to a
+   * temporary file. Used to paint a "freeze frame" during a lens-switch
+   * session swap so the user never sees the black surface that CameraX shows
+   * while it tears down the old session and brings up the new one.
+   *
+   * Returns `null` when the underlying PreviewView can't snapshot
+   * (iOS — VisionCamera v5's PreviewView.takeSnapshot is Android-only) or
+   * when the snapshot fails for any reason. Callers should treat the
+   * fallback as "no crossfade overlay" — the animated warmup vignette
+   * already covers that case.
+   */
+  takeSnapshot(): Promise<string | null>;
 }
 
 export type CameraEngineRef = RefObject<CameraEngineHandle | null>;
