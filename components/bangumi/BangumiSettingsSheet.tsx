@@ -10,11 +10,17 @@ import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { BrowseSourceChip } from '../common/BrowseSourceChip';
 
 export type BangumiViewMode = 'calendar' | 'list' | 'cards';
+export type BangumiBaseViewMode = 'calendar' | 'list';
 export type BangumiFilterMode = 'all' | 'tracking';
 export type BangumiTypeFilter = 'all' | 'tv' | 'movie' | 'ova' | 'special';
 
 export interface BangumiPreferences {
   viewMode: BangumiViewMode;
+  /**
+   * Most recently chosen non-swipe (calendar | list) view. The header swipe
+   * toggle restores this when the user taps X to leave cards mode.
+   */
+  baseViewMode: BangumiBaseViewMode;
   filterMode: BangumiFilterMode;
   typeFilter: BangumiTypeFilter;
   showUnknownDays: boolean;
@@ -51,6 +57,19 @@ function BangumiSettingsSheetComponent({
     <K extends keyof BangumiPreferences>(key: K, value: BangumiPreferences[K]) => {
       hapticsBridge.selection();
       onChange({ ...preferences, [key]: value });
+    },
+    [preferences, onChange]
+  );
+
+  const setBaseViewMode = useCallback(
+    (mode: BangumiBaseViewMode) => {
+      hapticsBridge.selection();
+      onChange({
+        ...preferences,
+        baseViewMode: mode,
+        // Stay in cards if currently swiping; otherwise apply immediately.
+        viewMode: preferences.viewMode === 'cards' ? 'cards' : mode,
+      });
     },
     [preferences, onChange]
   );
@@ -93,12 +112,14 @@ function BangumiSettingsSheetComponent({
 
             <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>View mode</Text>
             <View style={styles.segmented}>
-              {(['calendar', 'list'] as BangumiViewMode[]).map((mode) => {
-                const active = preferences.viewMode === mode;
+              {(['calendar', 'list'] as BangumiBaseViewMode[]).map((mode) => {
+                // Swipe-mode (cards) lives on the header toggle; settings only
+                // picks the base view that swipe falls back to when exited.
+                const active = preferences.baseViewMode === mode;
                 return (
                   <Pressable
                     key={mode}
-                    onPress={() => update('viewMode', mode)}
+                    onPress={() => setBaseViewMode(mode)}
                     style={({ pressed }) => [
                       styles.segmentItem,
                       {
@@ -312,6 +333,7 @@ function ToggleRow({
 
 export const DEFAULT_BANGUMI_PREFS: BangumiPreferences = {
   viewMode: 'calendar',
+  baseViewMode: 'calendar',
   filterMode: 'tracking',
   typeFilter: 'all',
   showUnknownDays: true,

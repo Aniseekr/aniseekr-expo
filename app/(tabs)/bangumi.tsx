@@ -299,6 +299,8 @@ export default function BangumiScreen() {
   }, []);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
+  const openYearPicker = useCallback(() => setShowYearPicker(true), []);
+  const openSettings = useCallback(() => setShowSettings(true), []);
 
   const viewMode = prefs.viewMode;
   const filterMode = prefs.filterMode;
@@ -481,14 +483,21 @@ export default function BangumiScreen() {
     ];
   }, [filteredAnime]);
 
-  const setViewMode = useCallback(
-    (mode: 'calendar' | 'list' | 'cards') => {
-      setFloatingTabBarHidden(BANGUMI_CARDS_TAB_BAR_REASON, mode === 'cards');
-      hapticsBridge.selection();
-      setPrefs((p) => (p.viewMode === mode ? p : { ...p, viewMode: mode }));
-    },
-    [setPrefs]
-  );
+  const toggleSwipe = useCallback(() => {
+    hapticsBridge.selection();
+    setPrefs((p) => {
+      if (p.viewMode === 'cards') {
+        // Exit swipe — restore the last base view (calendar | list).
+        const next = p.baseViewMode ?? 'calendar';
+        setFloatingTabBarHidden(BANGUMI_CARDS_TAB_BAR_REASON, false);
+        return { ...p, viewMode: next };
+      }
+      // Enter swipe — remember the current base view so X restores it.
+      setFloatingTabBarHidden(BANGUMI_CARDS_TAB_BAR_REASON, true);
+      const base = p.viewMode === 'list' ? 'list' : 'calendar';
+      return { ...p, viewMode: 'cards', baseViewMode: base };
+    });
+  }, [setPrefs]);
 
   const handleSettingsChange = useCallback(
     (next: BangumiPreferences) => {
@@ -571,6 +580,50 @@ export default function BangumiScreen() {
     [groupedAnime, showUnknownDays]
   );
 
+  const renderListRowCard = useCallback(
+    (anime: Anime) => (
+      <AnimeRowCard
+        anime={anime}
+        sourcePlatform={sourcePlatform}
+        isTracked={trackedIds.has(anime.id)}
+        onAddTracking={setTrackingTarget}
+        onQuickWishlist={handleQuickAddWishlist}
+        onToggleReminder={handleToggleReminder}
+      />
+    ),
+    [sourcePlatform, trackedIds, handleQuickAddWishlist, handleToggleReminder]
+  );
+
+  const listHeader = useMemo(() => {
+    const showHint = !hideSwipeHint;
+    const showToday = todayAnime.length > 0;
+    if (!showHint && !showToday) return null;
+    return (
+      <>
+        {showHint ? <SwipeHintChip onDismiss={dismissSwipeHint} /> : null}
+        {showToday ? (
+          <TodayUpdatesSection
+            todayAnime={todayAnime}
+            onLongPressAnime={setTrackingTarget}
+            trackedIds={trackedIds}
+          />
+        ) : null}
+      </>
+    );
+  }, [hideSwipeHint, todayAnime, trackedIds, dismissSwipeHint]);
+
+  const listFooter = useMemo(() => {
+    if (specialAnime.length === 0) return null;
+    return (
+      <SpecialContentSection
+        title="Movies & specials"
+        subtitle={`${specialAnime.length} releases this season`}
+        icon="movie-creation"
+        anime={specialAnime}
+      />
+    );
+  }, [specialAnime]);
+
   const scrollToTodayKey = `${selectedSeason}-${selectedYear}-${typeFilter ?? 'all'}`;
 
   // Request notification permissions on mount
@@ -594,10 +647,10 @@ export default function BangumiScreen() {
             filterMode={filterMode}
             onFilterChange={setFilterMode}
             viewMode={viewMode}
-            onSetViewMode={setViewMode}
+            onToggleSwipe={toggleSwipe}
             totalCount={totalCount}
-            onLabelTap={() => setShowYearPicker(true)}
-            onOpenSettings={() => setShowSettings(true)}
+            onLabelTap={openYearPicker}
+            onOpenSettings={openSettings}
           />
         </View>
 
@@ -734,7 +787,7 @@ export default function BangumiScreen() {
               />
             )}
           </View>
-        ) : (
+        ) : showSkeleton ? (
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingBottom: 140 }}
@@ -747,44 +800,24 @@ export default function BangumiScreen() {
                 progressBackgroundColor={theme.background.secondary}
               />
             }>
-            {showSkeleton ? (
-              <BangumiListSkeleton theme={theme} />
-            ) : (
-              <>
-                {!hideSwipeHint ? <SwipeHintChip onDismiss={dismissSwipeHint} /> : null}
-                {/* Show a compact weekly calendar above the list as a navigator */}
-                {todayAnime.length > 0 ? (
-                  <TodayUpdatesSection
-                    todayAnime={todayAnime}
-                    onLongPressAnime={setTrackingTarget}
-                    trackedIds={trackedIds}
-                  />
-                ) : null}
-                <AnimeList
-                  listViewData={listViewData}
-                  renderAnimeCard={(anime) => (
-                    <AnimeRowCard
-                      key={anime.id}
-                      anime={anime}
-                      sourcePlatform={sourcePlatform}
-                      isTracked={trackedIds.has(anime.id)}
-                      onAddTracking={setTrackingTarget}
-                      onQuickWishlist={handleQuickAddWishlist}
-                      onToggleReminder={handleToggleReminder}
-                    />
-                  )}
-                />
-                {specialAnime.length > 0 ? (
-                  <SpecialContentSection
-                    title="Movies & specials"
-                    subtitle={`${specialAnime.length} releases this season`}
-                    icon="movie-creation"
-                    anime={specialAnime}
-                  />
-                ) : null}
-              </>
-            )}
+            <BangumiListSkeleton theme={theme} />
           </ScrollView>
+        ) : (
+          <AnimeList
+            listViewData={listViewData}
+            renderAnimeCard={renderListRowCard}
+            refreshControl={
+              <RefreshControl
+                tintColor={theme.text.primary}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.accent]}
+                progressBackgroundColor={theme.background.secondary}
+              />
+            }
+            ListHeaderComponent={listHeader}
+            ListFooterComponent={listFooter}
+          />
         )}
       </SafeAreaView>
       <BangumiActionSnackbar

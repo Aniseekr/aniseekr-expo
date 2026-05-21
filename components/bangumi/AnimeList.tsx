@@ -1,7 +1,16 @@
-import { useMemo, useRef, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Image,
+  Platform,
+  Pressable,
+  RefreshControlProps,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
+import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import ReanimatedSwipeable, {
   SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -22,37 +31,80 @@ import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignS
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 
-interface AnimeListProps {
-  listViewData: { day: string; anime: Anime[] }[];
-  renderAnimeCard: (anime: Anime) => React.ReactNode;
+interface AnimeListGroup {
+  day: string;
+  anime: Anime[];
 }
 
-export function AnimeList({ listViewData, renderAnimeCard }: AnimeListProps) {
+type FlashRow =
+  | { kind: 'header'; key: string; day: string }
+  | { kind: 'anime'; key: string; anime: Anime };
+
+interface AnimeListProps {
+  listViewData: AnimeListGroup[];
+  renderAnimeCard: (anime: Anime) => React.ReactNode;
+  ListHeaderComponent?: React.ComponentType | React.ReactElement | null;
+  ListFooterComponent?: React.ComponentType | React.ReactElement | null;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
+}
+
+function flattenGroups(groups: AnimeListGroup[]): FlashRow[] {
+  const out: FlashRow[] = [];
+  for (const g of groups) {
+    out.push({ kind: 'header', key: `h:${g.day}`, day: g.day });
+    for (const anime of g.anime) {
+      out.push({ kind: 'anime', key: anime.id, anime });
+    }
+  }
+  return out;
+}
+
+export const AnimeList = memo(function AnimeList({
+  listViewData,
+  renderAnimeCard,
+  ListHeaderComponent,
+  ListFooterComponent,
+  refreshControl,
+}: AnimeListProps) {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  return (
-    <View className="px-5">
-      {listViewData.map((group) => (
-        <View key={group.day} className="mb-8">
-          <Text style={styles.sectionTitle}>{group.day}</Text>
-          {group.anime.map((anime) => renderAnimeCard(anime))}
-        </View>
-      ))}
-    </View>
+
+  const data = useMemo(() => flattenGroups(listViewData), [listViewData]);
+
+  const renderItem: ListRenderItem<FlashRow> = useCallback(
+    ({ item }) => {
+      if (item.kind === 'header') {
+        return <Text style={styles.sectionTitle}>{item.day}</Text>;
+      }
+      // Wrap so each row has its own animated swipe context without the
+      // FlashList recycling that into a different anime.
+      return <View>{renderAnimeCard(item.anime)}</View>;
+    },
+    [renderAnimeCard, styles.sectionTitle]
   );
-}
+
+  const keyExtractor = useCallback((item: FlashRow) => item.key, []);
+  const getItemType = useCallback((item: FlashRow) => item.kind, []);
+
+  return (
+    <FlashList<FlashRow>
+      data={data}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      getItemType={getItemType}
+      ListHeaderComponent={ListHeaderComponent ?? undefined}
+      ListFooterComponent={ListFooterComponent ?? undefined}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      drawDistance={500}
+    />
+  );
+});
 
 const SWIPE_ACTION_WIDTH = 96;
 
-export function AnimeRowCard({
-  anime,
-  bangumiId,
-  sourcePlatform,
-  isTracked = false,
-  onAddTracking,
-  onQuickWishlist,
-  onToggleReminder,
-}: {
+interface AnimeRowCardProps {
   anime: Anime;
   bangumiId?: number;
   sourcePlatform?: string;
@@ -63,7 +115,17 @@ export function AnimeRowCard({
   onQuickWishlist?: (anime: Anime) => void;
   /** Left-swipe quick action — toggle the reminder notification. */
   onToggleReminder?: (anime: Anime, currentlyScheduled: boolean) => void;
-}) {
+}
+
+function AnimeRowCardImpl({
+  anime,
+  bangumiId,
+  sourcePlatform,
+  isTracked = false,
+  onAddTracking,
+  onQuickWishlist,
+  onToggleReminder,
+}: AnimeRowCardProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -234,6 +296,8 @@ export function AnimeRowCard({
   );
 }
 
+export const AnimeRowCard = memo(AnimeRowCardImpl);
+
 interface SwipeActionPanelProps {
   side: 'left' | 'right';
   dragX: SharedValue<number>;
@@ -283,10 +347,15 @@ function SwipeActionPanel({ side, dragX, icon, label, tint }: SwipeActionPanelPr
 
 const makeStyles = (theme: ThemePalette) =>
   StyleSheet.create({
+    contentContainer: {
+      paddingHorizontal: Spacing.lg,
+      paddingBottom: 140,
+    },
     sectionTitle: {
       ...Typography.headlineSmall,
       color: theme.text.primary,
       fontFamily: FontFamily.rounded,
+      marginTop: Spacing.lg,
       marginBottom: Spacing.md,
       paddingLeft: Spacing.xs,
     },

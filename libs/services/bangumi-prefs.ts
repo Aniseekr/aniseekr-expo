@@ -45,7 +45,13 @@ export async function loadBangumiPrefs(): Promise<BangumiPreferences> {
     if (showAdult === true) {
       void patchUserPrefs({ allowAdultContent: true }).catch(() => {});
     }
-    return { ...DEFAULT_BANGUMI_PREFS, ...rest };
+    const merged = { ...DEFAULT_BANGUMI_PREFS, ...rest };
+    // Migration: old blobs may not have `baseViewMode`. Seed it from the
+    // current viewMode if it's a base view; otherwise keep the default.
+    if (rest.baseViewMode === undefined && (rest.viewMode === 'calendar' || rest.viewMode === 'list')) {
+      merged.baseViewMode = rest.viewMode;
+    }
+    return merged;
   } catch (err) {
     Logger.warn('[BangumiPrefs] load failed, using defaults', err);
     return DEFAULT_BANGUMI_PREFS;

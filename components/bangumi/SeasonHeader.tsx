@@ -1,8 +1,8 @@
 // Season header for the Bangumi screen.
 // Mirrors the iOS layout: a glass capsule containing prev / season label / next,
-// followed by an All|Tracking filter pill and a calendar/list toggle button.
+// followed by an All|Tracking filter pill and a single swipe-mode toggle.
 
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -21,28 +21,24 @@ interface SeasonHeaderProps {
   filterMode: FilterMode;
   onFilterChange: (mode: FilterMode) => void;
   viewMode: ViewMode;
-  onSetViewMode: (mode: ViewMode) => void;
+  /** Toggle in/out of the swipe (cards) view. The parent restores the previous
+   *  base view (calendar | list) when the user exits. */
+  onToggleSwipe: () => void;
   totalCount?: number;
   onLabelTap?: () => void;
   onOpenSettings?: () => void;
 }
 
-const VIEW_MODES: { mode: ViewMode; icon: React.ComponentProps<typeof MaterialIcons>['name']; label: string }[] = [
-  { mode: 'calendar', icon: 'calendar-today', label: 'Calendar view' },
-  { mode: 'list', icon: 'view-list', label: 'List view' },
-  { mode: 'cards', icon: 'view-carousel', label: 'Card deck view' },
-];
-
 const FILTER_SEGMENT_WIDTH = 84;
 
-export function SeasonHeader({
+function SeasonHeaderImpl({
   seasonDisplayName,
   onPrevSeason,
   onNextSeason,
   filterMode,
   onFilterChange,
   viewMode,
-  onSetViewMode,
+  onToggleSwipe,
   totalCount,
   onLabelTap,
   onOpenSettings,
@@ -50,6 +46,11 @@ export function SeasonHeader({
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const filterActiveFg = useMemo(() => readableTextOn(theme.accent), [theme.accent]);
+  const swipeActive = viewMode === 'cards';
+  const swipeFg = useMemo(
+    () => (swipeActive ? readableTextOn(theme.accent) : theme.text.primary),
+    [swipeActive, theme.accent, theme.text.primary]
+  );
   const indicatorX = useSharedValue(filterMode === 'all' ? 0 : FILTER_SEGMENT_WIDTH);
   indicatorX.value = withSpring(filterMode === 'all' ? 0 : FILTER_SEGMENT_WIDTH, {
     damping: 18,
@@ -114,30 +115,29 @@ export function SeasonHeader({
               <MaterialIcons name="tune" size={20} color={theme.text.primary} />
             </Pressable>
           ) : null}
-          <View style={styles.viewModeStrip}>
-            {VIEW_MODES.map(({ mode, icon, label }) => {
-              const active = viewMode === mode;
-              return (
-                <Pressable
-                  key={mode}
-                  onPress={() => onSetViewMode(mode)}
-                  accessibilityRole="button"
-                  accessibilityLabel={label}
-                  style={[styles.viewModeSegment, active && styles.viewModeSegmentActive]}>
-                  <MaterialIcons
-                    name={icon}
-                    size={18}
-                    color={active ? theme.accent : theme.text.secondary}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
+          <Pressable
+            onPress={onToggleSwipe}
+            accessibilityRole="button"
+            accessibilityState={{ selected: swipeActive }}
+            accessibilityLabel={swipeActive ? 'Exit swipe mode' : 'Enter swipe mode'}
+            style={({ pressed }) => [
+              styles.swipeToggle,
+              swipeActive && { backgroundColor: theme.accent, borderColor: theme.accent },
+              pressed && { opacity: 0.85 },
+            ]}>
+            <MaterialIcons
+              name={swipeActive ? 'close' : 'view-carousel'}
+              size={20}
+              color={swipeFg}
+            />
+          </Pressable>
         </View>
       </View>
     </View>
   );
 }
+
+export const SeasonHeader = memo(SeasonHeaderImpl);
 
 const makeStyles = (theme: ThemePalette) =>
   StyleSheet.create({
@@ -238,27 +238,18 @@ const makeStyles = (theme: ThemePalette) =>
         android: { elevation: 1 },
       }),
     },
-    viewModeStrip: {
-      flexDirection: 'row',
-      backgroundColor: theme.background.secondary,
+    swipeToggle: {
+      width: 40,
+      height: 40,
       borderRadius: Radius.full,
+      backgroundColor: theme.background.secondary,
       borderWidth: 1,
       borderColor: theme.glassBorder,
-      padding: 3,
-      gap: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
       ...Platform.select({
         android: { elevation: 1 },
       }),
-    },
-    viewModeSegment: {
-      width: 34,
-      height: 34,
-      borderRadius: Radius.full,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    viewModeSegmentActive: {
-      backgroundColor: `${theme.accent}26`,
     },
     actionGroup: {
       flexDirection: 'row',
