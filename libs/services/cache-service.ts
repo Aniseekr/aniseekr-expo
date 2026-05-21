@@ -6,6 +6,36 @@ const DB_NAME = 'aniseekr_cache.db';
 // See libs/db.ts for the same fix and the Android NullPointerException it avoids.
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+// Synchronous in-memory mirror so cache hits don't block the first paint.
+// Set() writes both layers; get()/getSync() check memory first. Bounded LRU.
+// See CLAUDE.md Rule 10.
+type MemEntry = { value: unknown; timestamp: number; ttl: number };
+const MEM_MAX = 256;
+const mem = new Map<string, MemEntry>();
+
+function memTouch(key: string, entry: MemEntry) {
+  if (mem.has(key)) mem.delete(key);
+  mem.set(key, entry);
+  if (mem.size > MEM_MAX) {
+    const oldest = mem.keys().next().value as string | undefined;
+    if (oldest !== undefined) mem.delete(oldest);
+  }
+}
+
+function memReadFresh(key: string, graceMs = 0): { entry: MemEntry; age: number; isStale: boolean } | null {
+  const entry = mem.get(key);
+  if (!entry) return null;
+  const age = Date.now() - entry.timestamp;
+  if (age > entry.ttl + graceMs) {
+    mem.delete(key);
+    return null;
+  }
+  // Move-to-end for LRU recency.
+  mem.delete(key);
+  mem.set(key, entry);
+  return { entry, age, isStale: age > entry.ttl };
+}
+
 function openDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = (async () => {
@@ -61,7 +91,29 @@ export class CacheService {
     await openDb();
   }
 
+  /**
+   * Synchronous read against the in-memory mirror only. Returns `null` on miss
+   * (memory cold, expired, or never written this session). Designed for the
+   * first-paint path of detail screens — see CLAUDE.md Rule 10. Use inside a
+   * lazy `useState` initializer to seed initial state without an `await`.
+   */
+  static getSync<T>(key: string): T | null {
+    const hit = memReadFresh(key);
+    return hit && !hit.isStale ? (hit.entry.value as T) : null;
+  }
+
+  /** Sync variant of getWithMeta — memory mirror only. Returns null on miss. */
+  static getSyncWithMeta<T>(key: string, graceMs = 0): CachedMeta<T> | null {
+    const hit = memReadFresh(key, graceMs);
+    if (!hit) return null;
+    return { value: hit.entry.value as T, age: hit.age, isStale: hit.isStale };
+  }
+
   static async get<T>(key: string): Promise<T | null> {
+    // Fast path: memory hit, no SQLite round-trip needed.
+    const memHit = memReadFresh(key);
+    if (memHit && !memHit.isStale) return memHit.entry.value as T;
+
     try {
       const db = await openDb();
       const result = await db.getFirstAsync<{
@@ -78,7 +130,9 @@ export class CacheService {
         return null;
       }
 
-      return JSON.parse(result.value) as T;
+      const parsed = JSON.parse(result.value) as T;
+      memTouch(key, { value: parsed, timestamp: result.timestamp, ttl: result.ttl });
+      return parsed;
     } catch (error) {
       console.warn('CacheService.get error:', error);
       return null;
@@ -92,6 +146,11 @@ export class CacheService {
    * refresh. Past `ttl + graceMs` the row is deleted and `null` is returned.
    */
   static async getWithMeta<T>(key: string, graceMs: number = 0): Promise<CachedMeta<T> | null> {
+    const memHit = memReadFresh(key, graceMs);
+    if (memHit) {
+      return { value: memHit.entry.value as T, age: memHit.age, isStale: memHit.isStale };
+    }
+
     try {
       const db = await openDb();
       const result = await db.getFirstAsync<{
@@ -108,11 +167,9 @@ export class CacheService {
         return null;
       }
 
-      return {
-        value: JSON.parse(result.value) as T,
-        age,
-        isStale: age > result.ttl,
-      };
+      const parsed = JSON.parse(result.value) as T;
+      memTouch(key, { value: parsed, timestamp: result.timestamp, ttl: result.ttl });
+      return { value: parsed, age, isStale: age > result.ttl };
     } catch (error) {
       console.warn('CacheService.getWithMeta error:', error);
       return null;
@@ -120,10 +177,11 @@ export class CacheService {
   }
 
   static async set(key: string, value: any, ttlMs: number = 3600000) {
+    const timestamp = Date.now();
+    memTouch(key, { value, timestamp, ttl: ttlMs });
     try {
       const db = await openDb();
       const stringValue = JSON.stringify(value);
-      const timestamp = Date.now();
       await db.runAsync(
         'INSERT OR REPLACE INTO cache (key, value, timestamp, ttl) VALUES (?, ?, ?, ?)',
         key,
@@ -137,6 +195,7 @@ export class CacheService {
   }
 
   static async delete(key: string) {
+    mem.delete(key);
     try {
       const db = await openDb();
       await db.runAsync('DELETE FROM cache WHERE key = ?', key);
@@ -146,6 +205,7 @@ export class CacheService {
   }
 
   static async clear() {
+    mem.clear();
     try {
       const db = await openDb();
       await db.runAsync('DELETE FROM cache');
@@ -262,6 +322,7 @@ export class CacheService {
   /** Delete every row whose key begins with `prefix`. Returns the row count removed. */
   static async clearByPrefix(prefix: string): Promise<number> {
     if (!prefix) return 0;
+    for (const k of Array.from(mem.keys())) if (k.startsWith(prefix)) mem.delete(k);
     try {
       const db = await openDb();
       // SQLite LIKE wildcard: escape `_` / `%` so prefixes that contain them
@@ -280,6 +341,8 @@ export class CacheService {
 
   /** Remove every row whose `timestamp + ttl < now`. Returns the row count removed. */
   static async prune(): Promise<number> {
+    const now = Date.now();
+    for (const [k, e] of mem) if (e.timestamp + e.ttl < now) mem.delete(k);
     try {
       const db = await openDb();
       const result = await db.runAsync(

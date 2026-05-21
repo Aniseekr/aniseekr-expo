@@ -1079,6 +1079,16 @@ export class AnimeRepository {
     return genresWithImages;
   }
 
+  /**
+   * Sync read against the in-memory cache mirror. Returns `null` on miss so the
+   * caller can seed `useState` without an `await` — see CLAUDE.md Rule 10.
+   */
+  static getAnimeDetailsSync(id: string): Anime | null {
+    const cacheKey = `anime_detail_${id}_r${r18CacheFlag()}`;
+    const cached = CacheService.getSync<AniListAnime>(cacheKey);
+    return cached ? mapAniListDetailToAnime(cached) : null;
+  }
+
   static async getAnimeDetails(id: string): Promise<Anime> {
     const cacheKey = `anime_detail_${id}_r${r18CacheFlag()}`;
     const cached = await CacheService.get<AniListAnime>(cacheKey);
