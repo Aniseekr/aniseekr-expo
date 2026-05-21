@@ -125,12 +125,14 @@ const styles = StyleSheet.create({
     zIndex: 90,
   },
   // Near-opaque card so the live camera + anime overlay can't bleed through
-  // behind the controls (matches the old tool popover surface).
+  // behind the controls (matches the old tool popover surface). Alpha 0.95
+  // gives a touch more opacity than the previous 0.9 — readable against the
+  // brighter anime overlays without going full black.
   panelCard: {
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.95)',
     overflow: 'hidden',
     paddingTop: 8,
     shadowColor: '#000',

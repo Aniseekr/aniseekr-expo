@@ -8,6 +8,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Logger } from '../../utils/logger';
 import { isObject, safeJsonParse } from '../../utils/safe-json';
+import type { OverlayMode } from '../../../components/pilgrimage/camera/types';
+import type { EdgeIntensity } from './edge-overlay';
+import type { SubjectFocus } from './subject-overlay';
 
 // v4 reshapes the settings around VisionCamera's capture model: `skipProcessing`
 // is gone (VisionCamera has no equivalent), and `quality` now maps to a
@@ -76,6 +79,28 @@ export interface CameraSettings {
    * stacks with `countdownSeconds`.
    */
   autoCapture: boolean;
+  /**
+   * Persisted overlay mode (anime / edge / sketch / subject). Restored on the
+   * next camera launch so the user's pick survives across sessions. The hud
+   * reducer keeps its own copy (`useCameraHud.overlayMode`) which gets seeded
+   * from this value on mount and mirrors back on every change.
+   */
+  overlayMode: OverlayMode;
+  /**
+   * Edge-overlay intensity preset (low / mid / high). Persists alongside
+   * `overlayMode` so users who tuned a specific edge style don't have to
+   * re-pick it.
+   */
+  edgeIntensity: EdgeIntensity;
+  /**
+   * Subject-overlay focus radius preset (tight / normal / wide). Same
+   * persistence rationale as `edgeIntensity`.
+   */
+  subjectFocus: SubjectFocus;
+  /**
+   * Subject-overlay combine toggle (overlap-and-blend vs replace).
+   */
+  subjectCombine: boolean;
 }
 
 export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
@@ -87,6 +112,13 @@ export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
   countdownSeconds: 0,
   captureMode: 'single',
   autoCapture: false,
+  // Default to 'edge' — the anime bitmap fully covers the live preview at
+  // typical overlay opacities, which surprises first-time users. Edge sketch
+  // shows both reference geometry and the live scene at the same alpha.
+  overlayMode: 'edge',
+  edgeIntensity: 'low',
+  subjectFocus: 'normal',
+  subjectCombine: false,
 };
 
 /**
@@ -136,6 +168,18 @@ function isResolutionTier(value: unknown): value is ResolutionTier {
   return value === '4k' || value === '2k';
 }
 
+function isOverlayMode(value: unknown): value is OverlayMode {
+  return value === 'anime' || value === 'edge' || value === 'sketch' || value === 'subject';
+}
+
+function isEdgeIntensity(value: unknown): value is EdgeIntensity {
+  return value === 'low' || value === 'mid' || value === 'high';
+}
+
+function isSubjectFocus(value: unknown): value is SubjectFocus {
+  return value === 'tight' || value === 'normal' || value === 'wide';
+}
+
 function pickValidSettings(value: Record<string, unknown>): Partial<CameraSettings> {
   const out: Partial<CameraSettings> = {};
   if (typeof value.mute === 'boolean') out.mute = value.mute;
@@ -156,6 +200,10 @@ function pickValidSettings(value: Record<string, unknown>): Partial<CameraSettin
     out.captureMode = 'auto';
   }
   if (typeof value.autoCapture === 'boolean') out.autoCapture = value.autoCapture;
+  if (isOverlayMode(value.overlayMode)) out.overlayMode = value.overlayMode;
+  if (isEdgeIntensity(value.edgeIntensity)) out.edgeIntensity = value.edgeIntensity;
+  if (isSubjectFocus(value.subjectFocus)) out.subjectFocus = value.subjectFocus;
+  if (typeof value.subjectCombine === 'boolean') out.subjectCombine = value.subjectCombine;
   return out;
 }
 

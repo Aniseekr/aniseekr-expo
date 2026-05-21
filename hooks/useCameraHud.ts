@@ -64,7 +64,12 @@ export const INITIAL_CAMERA_HUD: CameraHudState = {
   evValue: 0,
   orientationMode: 'auto',
 
-  overlayMode: 'anime',
+  // Default to 'edge': the anime bitmap overlay covers the live preview
+  // too aggressively for first-time framing, while edge sketch lets the
+  // user see both reference geometry and the live scene at the same
+  // opacity. Persisted in `CameraSettings.overlayMode` so subsequent
+  // launches restore the user's pick.
+  overlayMode: 'edge',
   overlayVisible: true,
   overlayOpacity: 0.35,
   editMode: false,

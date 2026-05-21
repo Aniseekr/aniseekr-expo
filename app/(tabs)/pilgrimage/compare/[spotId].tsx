@@ -237,7 +237,42 @@ export default function CompareCaptureScreen() {
     sceneSwitcherOpen
   );
 
-  const { settings, setSettings } = useCameraSettings();
+  const { settings, setSettings, hydrated: settingsHydrated } = useCameraSettings();
+
+  // Persistence wiring for overlay-mode + its sub-knobs (edge intensity,
+  // subject focus / combine). The hud reducer is the source of truth at
+  // runtime; `CameraSettings` is the write-through cache. We sync ONCE
+  // after AsyncStorage hydrates (seed hud with the persisted pick) and
+  // then mirror every subsequent hud change back into settings so a
+  // mode/intensity/focus picked this session restores on the next launch.
+  //
+  // The ref-gated one-shot seed prevents the post-hydration sync from
+  // clobbering a brand-new in-session pick during the brief window
+  // between user interaction and the next render commit.
+  const overlaySettingsSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!settingsHydrated || overlaySettingsSyncedRef.current) return;
+    overlaySettingsSyncedRef.current = true;
+    setHud({
+      overlayMode: settings.overlayMode,
+      edgeIntensity: settings.edgeIntensity,
+      subjectFocus: settings.subjectFocus,
+      subjectCombine: settings.subjectCombine,
+    });
+  }, [settingsHydrated, settings.overlayMode, settings.edgeIntensity, settings.subjectFocus, settings.subjectCombine, setHud]);
+  // Mirror hud → settings on every change after the one-shot seed has run.
+  // Guarding on the ref keeps the mirror dormant during the pre-hydration
+  // window where hud holds its INITIAL_CAMERA_HUD defaults (not the user's
+  // persisted choices yet).
+  useEffect(() => {
+    if (!overlaySettingsSyncedRef.current) return;
+    setSettings({
+      overlayMode: hud.overlayMode,
+      edgeIntensity: hud.edgeIntensity,
+      subjectFocus: hud.subjectFocus,
+      subjectCombine: hud.subjectCombine,
+    });
+  }, [hud.overlayMode, hud.edgeIntensity, hud.subjectFocus, hud.subjectCombine, setSettings]);
   const lifecycle = useCameraLifecycle(true);
   const {
     active: cameraActive,

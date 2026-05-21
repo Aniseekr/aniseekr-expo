@@ -375,6 +375,12 @@ export default function ZoomDial({
     <View style={styles.container}>
       <View style={styles.row}>
         {island ? (
+          // Chip is positioned ABSOLUTELY to the LEFT of the centered strip
+          // (not as a flex sibling), so the strip's center anchor stays at
+          // the dial's geometric center. Otherwise on portrait with the chip
+          // present the strip+chip group would render ~80px wider, push the
+          // strip off-center, and the rightmost portion would collide with
+          // the OverlayDock toggle square at the same bottom inset.
           <Pressable
             disabled={islandPending}
             onPress={() => {
@@ -387,6 +393,7 @@ export default function ZoomDial({
             accessibilityState={{ disabled: islandPending }}
             style={({ pressed }) => [
               styles.islandChip,
+              styles.islandChipFloat,
               islandPending && { opacity: 0.5 },
               pressed && { opacity: 0.6 },
             ]}>
@@ -648,6 +655,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Floats the chip outside the strip's flex flow so the strip stays centered
+  // in its parent. left = -(chipWidth + visualGap) puts it just outside the
+  // strip's left edge. top centers vertically against DIAL_HEIGHT (56).
+  islandChipFloat: {
+    position: 'absolute',
+    left: -(44 + 10),
+    top: (DIAL_HEIGHT - 44) / 2,
   },
   islandLabel: {
     color: '#fff',

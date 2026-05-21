@@ -8,7 +8,11 @@ import {
 describe('cameraHudReducer', () => {
   it('seeds sensible HUD defaults', () => {
     expect(INITIAL_CAMERA_HUD.facing).toBe('back');
-    expect(INITIAL_CAMERA_HUD.overlayMode).toBe('anime');
+    // Default flipped to 'edge' because the anime bitmap overlay fully
+    // covers the live preview at the default opacity — newcomers couldn't
+    // see the camera. Persisted overlayMode (in CameraSettings) restores
+    // the user's actual pick on subsequent launches.
+    expect(INITIAL_CAMERA_HUD.overlayMode).toBe('edge');
     expect(INITIAL_CAMERA_HUD.overlayVisible).toBe(true);
     expect(INITIAL_CAMERA_HUD.quickControlsOpen).toBe(true);
     expect(INITIAL_CAMERA_HUD.captureModeToast).toBeNull();
