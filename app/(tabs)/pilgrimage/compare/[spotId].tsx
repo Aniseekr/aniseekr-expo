@@ -414,6 +414,10 @@ export default function CompareCaptureScreen() {
     stops: availableStops,
     onPinchBelowMin: canPinchToUltraWide ? handlePinchBelowMin : undefined,
     onPinchAboveMax: canPinchBackToWide ? handlePinchAboveMax : undefined,
+    // Lets the dial's active-stop highlight track the user's mental model:
+    // on the ultra-wide session the dial highlights "0.5", not "1" (which is
+    // the camera's native zoom there).
+    activeLens: strategic.activeLens,
   });
 
   const tapFocus = useTapToFocus({
@@ -1170,11 +1174,16 @@ export default function CompareCaptureScreen() {
       availableStops={availableStops}
       isFrontFacing={facing === 'front'}
       stopZoom={STOP_TO_ZOOM}
+      minZoom={minZoom}
       maxZoom={maxZoom}
       onPickFocalStop={zoom.setStop}
       island={dialIsland}
       onPickIsland={handleRequestSwitch}
       islandPending={strategic.isSwitching}
+      // Reuse the pinch handlers — dial drag past the wall and pinch past
+      // the wall share semantics (request the corresponding lens swap).
+      onDragBelowMin={canPinchToUltraWide ? handlePinchBelowMin : undefined}
+      onDragAboveMax={canPinchBackToWide ? handlePinchAboveMax : undefined}
     />
   );
   const overlayControls = (

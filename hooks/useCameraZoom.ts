@@ -64,15 +64,33 @@ export interface UseCameraZoomInput {
   onPinchBelowMin?: () => void;
   /**
    * Mirror of {@link onPinchBelowMin} for the reverse direction. Fired once
-   * per pinch gesture when the user pinches OUT past 115% of `maxZoom` —
+   * per pinch gesture when the user pinches OUT past 105% of `maxZoom` —
    * used on the ultra-wide session (`maxZoom ≈ 1.0`) to swap back to the
-   * wide session when the user pinches out past ~1.15×. Callers should only
+   * wide session when the user pinches out past ~1.05×. Callers should only
    * supply this on lenses where a swap target exists; otherwise leave
    * undefined so a normal wide-session zoom-in past `maxZoom` is just
    * clamped, not interpreted as a swap intent.
    */
   onPinchAboveMax?: () => void;
+  /**
+   * Hint to the dial-snap calculation. Ultra-wide sessions report `minZoom`
+   * = `maxZoom` = 1.0 in the camera's own units; the user thinks of that
+   * frame as "0.5x" (wide-equivalent). Without this hint the dial would
+   * highlight the "1" pillar while the ultra-wide preview is up. When set
+   * to `'ultra-wide'` we treat the live zoom as `native × ULTRA_WIDE_INTRINSIC_RATIO`
+   * (currently 0.5 — close enough to the empirical 0.46–0.67 range across
+   * shipped phones for the snap to land on the right pillar).
+   */
+  activeLens?: 'wide' | 'ultra-wide';
 }
+
+/** Approximation of the ultra-wide lens's field-of-view ratio relative to
+ *  the main wide lens. Empirical: 0.46–0.67 across S20FE/Pixel/Xiaomi. The
+ *  dial's pillar label is the user's mental model ("0.5x"), so we pick a
+ *  number that maps native 1.0 to the label "0.5" — exact device intrinsics
+ *  are not exposed by VisionCamera and would only marginally shift the
+ *  snap calculation. */
+const ULTRA_WIDE_INTRINSIC_RATIO = 0.5;
 
 export interface UseCameraZoomOutput {
   /** Throttled (120ms) JS mirror of `zoomShared`. Safe to render. */
@@ -121,6 +139,7 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
   const stopZoom = input?.stopZoom ?? STOP_TO_ZOOM;
   const onPinchBelowMin = input?.onPinchBelowMin;
   const onPinchAboveMax = input?.onPinchAboveMax;
+  const activeLens = input?.activeLens ?? 'wide';
 
   const initialFactor = clamp(stopZoom[initial], minZoom, maxZoom);
   const zoomShared = useSharedValue<number>(initialFactor);
@@ -194,7 +213,7 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
           if (
             onPinchAboveMax !== undefined &&
             !aboveMaxTriggered.value &&
-            next > maxZoom * 1.15
+            next > maxZoom * 1.05
           ) {
             aboveMaxTriggered.value = true;
             runOnJS(onPinchAboveMax)();
@@ -253,10 +272,14 @@ export function useCameraZoom(input?: UseCameraZoomInput): UseCameraZoomOutput {
     [zoomShared, stopZoom, minZoom, maxZoom]
   );
 
-  const activeStop = useMemo<FocalStop | null>(
-    () => nearestStopJS(zoom, stops, stopZoom),
-    [zoom, stops, stopZoom]
-  );
+  const activeStop = useMemo<FocalStop | null>(() => {
+    // The camera's native zoom is 1.0 on the ultra-wide session — but in the
+    // user's mental model that frame is "0.5x" (wide-equivalent). Translate
+    // before snapping so the dial highlights the "0.5" pillar instead of "1"
+    // while ultra-wide is up. On wide / unknown, this is a no-op.
+    const widthEquiv = activeLens === 'ultra-wide' ? zoom * ULTRA_WIDE_INTRINSIC_RATIO : zoom;
+    return nearestStopJS(widthEquiv, stops, stopZoom);
+  }, [zoom, stops, stopZoom, activeLens]);
 
   return { zoom, activeStop, setZoom, setStop, pinchGesture, zoomShared };
 }

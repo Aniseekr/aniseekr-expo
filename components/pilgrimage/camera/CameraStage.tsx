@@ -21,6 +21,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withDelay,
   withRepeat,
@@ -412,8 +413,24 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
     if (device?.id !== lastDeviceIdRef.current) {
       lastDeviceIdRef.current = device?.id;
       setSessionStarted(false);
+      // Clamp `zoomShared` to the NEW device's range BEFORE the next CameraX
+      // setZoom fires. Without this, a wide-session zoomShared of 2.0 would
+      // be passed to the freshly-mounted ultra-wide controller (maxZoom ≈ 1.0)
+      // and CameraX throws `CameraControl$OperationCanceledException: zoom
+      // out of range ...`. Clamping to `1.0` (= ultra-wide's native widest /
+      // wide's native widest) also lands the dial indicator on the new
+      // device's neutral position so it doesn't visually flicker.
+      if (zoomShared && device) {
+        const safeMin = Number.isFinite(device.minZoom) && device.minZoom > 0 ? device.minZoom : 1;
+        const safeMax = Number.isFinite(device.maxZoom) && device.maxZoom > 0 ? device.maxZoom : 1;
+        const current = zoomShared.value;
+        const clamped = current < safeMin ? safeMin : current > safeMax ? safeMax : current;
+        if (clamped !== current) {
+          zoomShared.value = clamped;
+        }
+      }
     }
-  }, [device]);
+  }, [device, zoomShared]);
   const sessionReady = active && sessionStarted;
   const resolvedTorchMode: TorchMode | undefined = sessionReady
     ? enableTorch
@@ -421,7 +438,32 @@ export const CameraStage = forwardRef<CameraEngineHandle, CameraStageProps>(func
       : 'off'
     : undefined;
   const resolvedExposure = sessionReady ? exposureShared : undefined;
-  const resolvedZoom = sessionReady ? zoomShared : undefined;
+  // `safeZoom` is `zoomShared` clamped to the active device's [minZoom, maxZoom]
+  // window on the UI thread. The dial strip on standalone-switch cohorts can
+  // legitimately write `zoomShared = 0.5` (the wide-equivalent value the user
+  // is dragging toward) BEFORE the FSM has swapped to the ultra-wide session
+  // — passing 0.5 straight to a wide-active CameraX controller would throw
+  // `setZoom out of range`. The dial keeps its visual position via zoomShared;
+  // the camera only ever sees the in-range clamp. Once the swap fires and
+  // the new device's minZoom drops to 1.0 native (= 0.5 wide-equiv), the
+  // clamp opens up and the camera follows naturally.
+  const deviceMinZoom = device?.minZoom;
+  const deviceMaxZoom = device?.maxZoom;
+  const safeZoom = useDerivedValue(() => {
+    const min =
+      typeof deviceMinZoom === 'number' && deviceMinZoom > 0 && Number.isFinite(deviceMinZoom)
+        ? deviceMinZoom
+        : 1;
+    const max =
+      typeof deviceMaxZoom === 'number' && deviceMaxZoom > 0 && Number.isFinite(deviceMaxZoom)
+        ? deviceMaxZoom
+        : 1;
+    const v = zoomShared.value;
+    if (v < min) return min;
+    if (v > max) return max;
+    return v;
+  }, [deviceMinZoom, deviceMaxZoom]);
+  const resolvedZoom = sessionReady ? safeZoom : undefined;
 
   const handleStarted = useCallback(() => {
     setSessionStarted(true);

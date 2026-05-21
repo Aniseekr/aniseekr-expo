@@ -110,6 +110,22 @@ interface ZoomDialProps {
   onPickIsland?: (target: ActiveLens) => void;
   /** Dim the chip while a session swap is in flight to communicate progress. */
   islandPending?: boolean;
+  /** Real native minimum zoom factor from VisionCamera's active device. Used
+   *  alongside `maxZoom` as the threshold reference for the drag-driven
+   *  lens-swap callbacks below. */
+  minZoom?: number;
+  /** One-shot callback fired from the pan gesture when the drag would write
+   *  a zoom value BELOW `minZoom * 0.85` — a clear "I want wider than this
+   *  lens can give me" intent. Mirrors `useCameraZoom.onPinchBelowMin` for
+   *  the dial path so the user can drag the strip past the 1× floor to
+   *  trigger the swap to the standalone ultra-wide. Only supply on cohorts
+   *  where the swap target exists; the latch resets per gesture. */
+  onDragBelowMin?: () => void;
+  /** Mirror of {@link onDragBelowMin} for the reverse direction — fired when
+   *  the drag would write a zoom value ABOVE `maxZoom * 1.05`. Used on the
+   *  ultra-wide session to swap back to wide when the user drags the strip
+   *  past the 0.5× region toward 1×. */
+  onDragAboveMax?: () => void;
 }
 
 function formatStop(stop: FocalStop): string {
@@ -154,6 +170,9 @@ export default function ZoomDial({
   island,
   onPickIsland,
   islandPending = false,
+  minZoom,
+  onDragBelowMin,
+  onDragAboveMax,
 }: ZoomDialProps) {
   const stops = useMemo<FocalStop[]>(
     () => availableStops ?? (isFrontFacing ? FRONT_FACING_DETENT_STOPS : DEFAULT_DETENT_STOPS),
@@ -177,6 +196,12 @@ export default function ZoomDial({
   const dragPx = useSharedValue(0);
   const startPx = useSharedValue(0);
   const dragging = useSharedValue(false);
+  // Per-gesture latches so onDragBelowMin / onDragAboveMax each fire at most
+  // ONCE per pan — same pattern as useCameraZoom's pinch latches. Without
+  // these, holding the drag past the threshold would spam the FSM with
+  // TAP_ISLAND events on every onUpdate frame.
+  const dragBelowMinTriggered = useSharedValue<boolean>(false);
+  const dragAboveMaxTriggered = useSharedValue<boolean>(false);
   // The detent whose label is highlighted — the only per-drag React state, and
   // it changes only on a detent cross (a few times per drag, not per frame).
   const [highlightStop, setHighlightStop] = useState<FocalStop | null>(activeStop);
@@ -236,6 +261,11 @@ export default function ZoomDial({
           'worklet';
           startPx.value = dragPx.value;
           dragging.value = true;
+          // Reset swap-intent latches so a fresh gesture can fire the
+          // callback again. Without reset only the first pan of the
+          // session could trigger a lens swap.
+          dragBelowMinTriggered.value = false;
+          dragAboveMaxTriggered.value = false;
           const startStop = nearestDetent(dragPx.value, detents, SNAP_TOLERANCE_PX);
           runOnJS(syncDetentHighlight)(startStop);
         })
@@ -245,9 +275,34 @@ export default function ZoomDial({
           'worklet';
           const next = dragPositionForTranslation(startPx.value, e.translationX, spanPx);
           dragPx.value = next;
-          zoomShared.value = zoomForPosition(next, detents, undefined, maxZoom);
+          const computed = zoomForPosition(next, detents, undefined, maxZoom);
+          zoomShared.value = computed;
           const stop = nearestDetent(next, detents, SNAP_TOLERANCE_PX);
           runOnJS(syncDetentHighlight)(stop);
+          // Lens-swap intent: drag past 85% of minZoom (toward 0.5 on a
+          // wide-active strip) → request swap to the standalone ultra-wide.
+          // Mirror: drag past 105% of maxZoom (toward 1 on the ultra-wide
+          // strip) → request swap back to wide. Same thresholds and same
+          // one-shot latching as `useCameraZoom`'s pinch path, so dial drag
+          // and pinch behave identically when both cross the wall.
+          if (
+            onDragBelowMin !== undefined &&
+            !dragBelowMinTriggered.value &&
+            typeof minZoom === 'number' &&
+            computed < minZoom * 0.85
+          ) {
+            dragBelowMinTriggered.value = true;
+            runOnJS(onDragBelowMin)();
+          }
+          if (
+            onDragAboveMax !== undefined &&
+            !dragAboveMaxTriggered.value &&
+            typeof maxZoom === 'number' &&
+            computed > maxZoom * 1.05
+          ) {
+            dragAboveMaxTriggered.value = true;
+            runOnJS(onDragAboveMax)();
+          }
         })
         .onEnd(() => {
           'worklet';
@@ -276,9 +331,14 @@ export default function ZoomDial({
       startPx,
       dragging,
       zoomShared,
+      minZoom,
       maxZoom,
       commitRelease,
       syncDetentHighlight,
+      onDragBelowMin,
+      onDragAboveMax,
+      dragBelowMinTriggered,
+      dragAboveMaxTriggered,
     ]
   );
 
