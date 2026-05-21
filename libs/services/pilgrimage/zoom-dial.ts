@@ -53,6 +53,15 @@ export const SNAP_TOLERANCE_PX = 22;
 // 'worklet' directive or they throw on the UI thread — same reason
 // useCameraZoom's `clamp` is marked. A 'worklet' function still runs fine on
 // the JS thread, so marking them is safe for the JS-side callers too.
+//
+// IMPORTANT: default parameter values on `'worklet'` functions CANNOT reference
+// module-level consts. The Reanimated babel plugin captures free identifiers
+// inside worklet BODIES, but default values are evaluated lazily at call time
+// on the UI runtime where module imports don't exist — referencing SEGMENT_PX
+// in `segPx = SEGMENT_PX` throws `Property 'SEGMENT_PX' doesn't exist` the
+// moment a worklet caller passes `undefined`. The defaults below are written
+// as literal numbers; the exported consts above stay as the canonical JS-side
+// values so non-worklet callers / future refactors keep one source of truth.
 function clampNumber(v: number, lo: number, hi: number): number {
   'worklet';
   if (v < lo) return lo;
@@ -93,7 +102,7 @@ function tailMaxZoom(detents: readonly Detent[], maxZoom?: number): number {
 export function buildDetents(
   stops: readonly FocalStop[],
   stopZoom: StopZoomMap,
-  segPx: number = SEGMENT_PX
+  segPx: number = 96
 ): Detent[] {
   const sorted = [...new Set(stops)].sort((a, b) => a - b);
   return sorted.map((stop, index) => {
@@ -110,7 +119,7 @@ export function buildDetents(
  * Total draggable pixel span of the strip: from the first detent (px 0) to the
  * end of the neutral tail one segment past the last detent.
  */
-export function dialSpanPx(detents: readonly Detent[], segPx: number = SEGMENT_PX): number {
+export function dialSpanPx(detents: readonly Detent[], segPx: number = 96): number {
   'worklet';
   if (detents.length === 0) return 0;
   return detents[detents.length - 1].px + segPx;
@@ -145,7 +154,7 @@ export function dragPositionForTranslation(
 export function zoomForPosition(
   px: number,
   detents: readonly Detent[],
-  segPx: number = SEGMENT_PX,
+  segPx: number = 96,
   maxZoom?: number
 ): number {
   'worklet';
@@ -184,7 +193,7 @@ export function zoomForPosition(
 export function positionForZoom(
   zoom: number,
   detents: readonly Detent[],
-  segPx: number = SEGMENT_PX,
+  segPx: number = 96,
   maxZoom?: number
 ): number {
   'worklet';
@@ -225,7 +234,7 @@ export function positionForZoom(
 export function nearestDetent(
   px: number,
   detents: readonly Detent[],
-  tolerancePx: number = SNAP_TOLERANCE_PX
+  tolerancePx: number = 22
 ): FocalStop | null {
   'worklet';
   let best: FocalStop | null = null;

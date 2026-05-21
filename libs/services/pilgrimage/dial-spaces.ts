@@ -165,7 +165,10 @@ export function clampToContinuous(zoom: number, layout: DialLayout): number {
  */
 export function rubberBandResistance(
   overflowPx: number,
-  factor: number = RUBBER_BAND_FACTOR
+  // Default literal: worklet default params can't reference module-level
+  // consts (Reanimated plugin captures body identifiers only). RUBBER_BAND_FACTOR
+  // stays exported above for JS-side callers; this default mirrors its value.
+  factor: number = 0.18
 ): number {
   'worklet';
   if (!Number.isFinite(overflowPx)) return 0;
@@ -180,7 +183,9 @@ export function rubberBandResistance(
 export function isIslandTap(
   touchPx: number,
   layout: DialLayout,
-  tolerancePx: number = SNAP_TOLERANCE_PX
+  // Default literal: see comment on rubberBandResistance — worklet defaults
+  // can't reach module consts. Mirrors SNAP_TOLERANCE_PX from zoom-dial.ts.
+  tolerancePx: number = 22
 ): boolean {
   'worklet';
   if (!layout.islandChip) return false;
