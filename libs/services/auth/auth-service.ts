@@ -46,6 +46,18 @@ const USER_KEY = 'aniseekr_user';
 const TOKEN_PREFIX = 'aniseekr_token_';
 const CREDENTIALS_KEY = 'aniseekr_credentials';
 
+// Mirror the redirect paths the iOS app registered with each OAuth provider
+// (scheme `aniseeker://`, see Info.plist). The OAuth servers reject anything
+// else with invalid_client because the client_id is bound to these callbacks.
+const REDIRECT_PATHS: Partial<Record<PlatformType, string>> = {
+  anilist: 'anilist-auth',
+  myanimelist: 'mal-auth',
+  bangumi: 'bangumi-auth',
+  shikimori: 'shikimori-auth',
+  simkl: 'simkl-auth',
+  annict: 'annict-auth',
+};
+
 export class AuthService {
   private static instance: AuthService;
   private currentUser: User | null = null;
@@ -322,8 +334,8 @@ export class AuthService {
 
     const clientId = config.oauth.clientId;
     const redirectUri = AuthSession.makeRedirectUri({
-      scheme: 'aniseekr',
-      path: `oauth/${platform}`,
+      scheme: 'aniseeker',
+      path: REDIRECT_PATHS[platform] ?? `${platform}-auth`,
     });
 
     const request = new AuthSession.AuthRequest({

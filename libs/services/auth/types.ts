@@ -79,7 +79,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#02A9FF',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_ANILIST_CLIENT_ID || '',
-      redirectUri: 'aniseekr://oauth/anilist',
+      redirectUri: 'aniseeker://anilist-auth',
       authorizationEndpoint: 'https://anilist.co/api/v2/oauth/authorize',
       tokenEndpoint: 'https://anilist.co/api/v2/oauth/token',
       scopes: [],
@@ -95,7 +95,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#2E51A2',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_MAL_CLIENT_ID || '',
-      redirectUri: 'aniseekr://oauth/mal',
+      redirectUri: 'aniseeker://mal-auth',
       authorizationEndpoint: 'https://myanimelist.net/v1/oauth2/authorize',
       tokenEndpoint: 'https://myanimelist.net/v1/oauth2/token',
       scopes: [],
@@ -114,7 +114,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
       clientId: process.env.EXPO_PUBLIC_BGM_CLIENT_ID || '',
       // clientSecret must NOT live in the mobile bundle - exchange the code
       // through a backend proxy that holds BGM_CLIENT_SECRET server-side.
-      redirectUri: 'aniseekr://oauth/bangumi',
+      redirectUri: 'aniseeker://bangumi-auth',
       authorizationEndpoint: 'https://bgm.tv/oauth/authorize',
       tokenEndpoint: 'https://bgm.tv/oauth/access_token',
       scopes: [],
@@ -152,7 +152,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
       clientId: process.env.EXPO_PUBLIC_SHIKIMORI_CLIENT_ID || '',
       // clientSecret must NOT live in the mobile bundle - proxy the token
       // exchange through a backend that holds SHIKIMORI_CLIENT_SECRET.
-      redirectUri: 'aniseekr://oauth/shikimori',
+      redirectUri: 'aniseeker://shikimori-auth',
       authorizationEndpoint: 'https://shikimori.one/oauth/authorize',
       tokenEndpoint: 'https://shikimori.one/oauth/token',
       scopes: ['user_rates'],
@@ -168,7 +168,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#0B0F1A',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_SIMKL_CLIENT_ID || '',
-      redirectUri: 'aniseekr://oauth/simkl',
+      redirectUri: 'aniseeker://simkl-auth',
       authorizationEndpoint: 'https://simkl.com/oauth/authorize',
       tokenEndpoint: 'https://api.simkl.com/oauth/token',
       scopes: [],
@@ -186,7 +186,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
       clientId: process.env.EXPO_PUBLIC_ANNICT_CLIENT_ID || '',
       // clientSecret must NOT live in the mobile bundle - proxy the token
       // exchange through a backend that holds ANNICT_CLIENT_SECRET.
-      redirectUri: 'aniseekr://oauth/annict',
+      redirectUri: 'aniseeker://annict-auth',
       authorizationEndpoint: 'https://annict.com/oauth/authorize',
       tokenEndpoint: 'https://annict.com/oauth/token',
       scopes: ['read', 'write'],
