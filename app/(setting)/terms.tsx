@@ -17,6 +17,22 @@ const SECTIONS: { title: string; body: string }[] = [
     body: 'Anime metadata, screenshots, and scoring information remain the property of their respective platforms. Aniseekr displays this content for personal reference only.',
   },
   {
+    title: 'Subscriptions and in-app purchases',
+    body:
+      'Aniseekr Pro offers the following in-app purchases through Apple:\n\n' +
+      '• Aniseekr Pro Monthly — auto-renewing subscription, billed every month.\n' +
+      '• Aniseekr Pro Annual — auto-renewing subscription, billed every year.\n' +
+      '• Aniseekr Pro Lifetime — one-time purchase, never renews.\n\n' +
+      'Payment and billing: Payment is charged to your Apple ID at confirmation of purchase. Auto-renewing subscriptions automatically renew at the same price unless cancelled at least 24 hours before the end of the current period. Your Apple ID will be charged for the next period within 24 hours of the period end. The current price is shown in the paywall before you confirm.\n\n' +
+      'Managing and cancelling: You can review, manage, or cancel any subscription at any time in your Apple ID account settings (Settings → [your name] → Subscriptions on iOS). Cancellation takes effect at the end of the current period; you keep Pro features until then.\n\n' +
+      'Refunds: Purchases are handled by Apple and are subject to Apple’s standard refund policy. We cannot issue refunds directly; please contact Apple Support to request one.\n\n' +
+      'Restoring purchases: Tap “Restore purchases” on the paywall to restore an existing entitlement on a new device or after reinstalling.',
+  },
+  {
+    title: 'Advertisements',
+    body: 'Some surfaces may display ads from third-party networks. We are not responsible for ad content; your interactions with ads are subject to the advertiser’s terms.',
+  },
+  {
     title: 'No warranty',
     body: 'The app is provided “as is”. While we strive for accuracy, third-party data sources may be unavailable or out of date.',
   },
@@ -49,7 +65,7 @@ export default function TermsScreen() {
         </View>
       ))}
       <Text style={[styles.updated, { color: theme.text.tertiary }]}>
-        Effective date: January 2026
+        Effective date: May 2026
       </Text>
     </SettingsScreenLayout>
   );
