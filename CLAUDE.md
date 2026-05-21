@@ -186,6 +186,30 @@ For camera and map screens specifically:
 - Avoid effects whose only job is to reconcile state that could have been derived. If reconciliation is necessary, keep it close to the state it fixes and guard against redundant setter calls.
 - Before optimizing, profile or at least count render-triggering state changes. Fix the state with the largest render fan-out, not the state that is merely visually nearby.
 
+### 10. Navigation feel → never `await` on the first-paint path
+
+Skeletons are for **cold** loads only. If a skeleton flashes when the data is already local, that's a bug. Background: detail screens used `setLoading(true)` + `await CacheService.get()` on mount, so even 5-second-old cache hits showed a skeleton for ~200ms. Discord's "Supercharging Discord Mobile" is the reference.
+
+**Budget**: tap → first frame must do <16ms of JS and show real chrome (header, poster, title), not a skeleton.
+
+**Rules**:
+
+1. **Sync cache on the render path.** `CacheService.getSync<T>(key)` returns the in-memory mirror or `null` — call it inside `useState(() => …)` so initial state is non-null on warm hits. `await CacheService.get()` belongs only in background revalidation. Render shape: `data ?? <Skeleton/>`, not `loading ? <Skeleton/> : data`.
+2. **Route params carry chrome.** List → detail must pass `{ id, title, poster, format?, year? }` via `router.push({ pathname, params })`. The detail screen reads them from `useLocalSearchParams()` and paints the hero on frame 1, before any I/O resolves.
+3. **`useFocusEffect` is a refresh trigger, not a load trigger.** Guard with `lastLoadedKey === currentKey` and skip; if you must revalidate, do it silently — never clear state and re-show a skeleton.
+4. **Don't wrap I/O in `InteractionManager.runAfterInteractions`.** That defers the network call itself, so cache hits also wait for the push animation. Defer the *expensive child state setter* via `requestAnimationFrame`, never the fetch.
+5. **Stale-while-revalidate via `getWithMeta(key, graceMs)`** — render stale, refresh silently. Only surface a "refreshing…" affordance after ~500ms.
+6. **Prefetch on press-in or onViewableItemsChanged**, not on mount of the next screen. Kick off `AnimeRepository.getAnimeDetails(id)` + `Image.prefetch(poster)` from the list.
+7. **Don't add `unmountOnBlur` / new top-level Context providers.** Tabs staying mounted is the feature, not the bug. New cross-screen state goes in a feature store with selector subscription.
+
+**Checklist for any new/touched screen**:
+
+- [ ] Cache hit → frame 1 shows real chrome, not skeleton
+- [ ] Tab re-focus with snapshot → no visible reload
+- [ ] Zero `await`s between mount and first paint
+- [ ] `loading` initial value derives from sync cache miss, not `true`
+- [ ] List that links here calls prefetch on press-in
+
 ## Anti-patterns I've seen — don't repeat these
 
 - **`color: '#FFFFFF'` on `backgroundColor: theme.accent`** → invisible on light accents. Use `ThemedButton` or `readableTextOn()`.
@@ -199,6 +223,11 @@ For camera and map screens specifically:
 - **Top-level screen as a state dumping ground** (`20+ useState` plus many effects in one route file) → every small UI change risks re-rendering the whole screen. Split feature hooks/components or use a reducer/store.
 - **Mirroring derived data into state** (`filtered`, `selected`, `ready` values that can be computed from existing inputs) → extra effects, stale closures, and redundant renders. Derive it unless an async boundary truly owns it.
 - **Sensor/gesture/WebView updates through React state at live frequency** → JS-thread churn and jank. Use `SharedValue`, refs, throttling, or bridge commands.
+- **`setLoading(true)` + `await CacheService.get()` on mount** → skeleton flashes on warm hits. Use `CacheService.getSync()` to seed `useState`. See Rule 10.
+- **`useFocusEffect` that unconditionally refetches** → tab switch feels cold. Guard with `lastLoadedKey`. See Rule 10.
+- **`InteractionManager.runAfterInteractions` around a fetch** → cache hits wait for the push animation. Defer the state setter, not the I/O. See Rule 10.
+- **Detail screen that ignores route params** → list already has `title`/`poster`; pass them via params so frame 1 isn't blank. See Rule 10.
+- **New top-level Context for two-screen state** → re-renders the whole tree. Use a feature store + selector. See Rule 10.
 
 ## Workflow
 
@@ -222,6 +251,9 @@ When changing `components/themed/*`, add or update tests under `__tests__/unit/t
 | Theme mode toggle doesn't change a screen | `resolvedTheme` in `ThemeContext.tsx` currently doesn't switch surface palette for light mode — that work is open. Don't fake light mode with hardcoded hex; extend `resolvedTheme` instead. |
 | Screen feels janky after a small control changes | Count top-level `useState` / `useEffect`; move hot state into a child hook, reducer, ref, or `SharedValue` |
 | Camera/map gestures feel delayed | Check that zoom, tilt, heading, pan, and marker updates are not flowing through root React state every tick |
+| Skeleton flashes on a warm screen | Seed `useState` with `CacheService.getSync()`. See Rule 10. |
+| ~200ms blank between list tap and detail | Pass `{ id, title, poster }` via route params; prefetch on press-in. See Rule 10. |
+| Tab switch re-runs the skeleton dance | `useFocusEffect` needs a `lastLoadedKey` guard. See Rule 10. |
 
 ## When in doubt
 
