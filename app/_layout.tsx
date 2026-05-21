@@ -3,7 +3,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import '../global.css';
 import { useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
-import { Platform } from 'react-native';
+import { InteractionManager, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -28,24 +28,21 @@ export default function RootLayout() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   useEffect(() => {
-    initClarity();
-    void authService.initialize();
-    void notificationService.initialize();
-    // Hydrate the data-source config (browseSource + allowR18Content) before
-    // any list fetch runs. `loadUserPrefs` then mirrors the user's adult-
-    // content choice into dataSourceConfig so the read pipeline filters
-    // even when the toggle was last touched on a previous launch.
+    // Critical-path: data fetches anywhere in the tree depend on this resolving,
+    // so we kick it off immediately (still async — doesn't block the first paint).
     void dataSourceConfig.init().then(() => loadUserPrefs());
-    // Refresh long-lived data on a tick after the first render. Each service
-    // short-circuits when its local copy is still fresh (mappings: 14d,
-    // anitabi data: 7d) so this is cheap on warm launches. Errors are
-    // swallowed (the next launch retries) so a flaky network can never block
-    // boot — the bundled fallbacks keep both features working offline.
-    const refreshTimer = setTimeout(() => {
+
+    // Rule 10: everything below is non-critical for the first frame. Defer it
+    // past the initial interaction so analytics / auth / notification setup
+    // doesn't compete with the JS thread while the launch screen crossfades
+    // into the first route. Each service short-circuits when its local copy
+    // is still fresh, so deferral is cheap on warm launches.
+    const handle = InteractionManager.runAfterInteractions(() => {
+      initClarity();
+      void authService.initialize();
+      void notificationService.initialize();
       void idMappingService.updateMappings().catch((e) => console.warn('[updateMappings]', e));
       void hydrateAllPilgrimageData().catch((e) => console.warn('[hydratePilgrimage]', e));
-      // Drop expired cache rows once per cold launch. Bucket failures are
-      // logged inside pruneAll, so a broken bucket can never block boot.
       void CacheManager.getInstance()
         .pruneAll()
         .then(({ totalRemoved }) => {
@@ -54,8 +51,8 @@ export default function RootLayout() {
           }
         })
         .catch((e) => console.warn('[CacheManager.pruneAll]', e));
-    }, 0);
-    return () => clearTimeout(refreshTimer);
+    });
+    return () => handle.cancel();
   }, []);
 
   // Re-lock portrait only on initial mount or when leaving a camera-capture
