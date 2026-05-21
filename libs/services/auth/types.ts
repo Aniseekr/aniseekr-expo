@@ -79,6 +79,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#02A9FF',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_ANILIST_CLIENT_ID || '',
+      clientSecret: process.env.EXPO_PUBLIC_ANILIST_CLIENT_SECRET || '',
       redirectUri: 'aniseeker://anilist-auth',
       authorizationEndpoint: 'https://anilist.co/api/v2/oauth/authorize',
       tokenEndpoint: 'https://anilist.co/api/v2/oauth/token',
@@ -112,8 +113,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#F09199',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_BGM_CLIENT_ID || '',
-      // clientSecret must NOT live in the mobile bundle - exchange the code
-      // through a backend proxy that holds BGM_CLIENT_SECRET server-side.
+      clientSecret: process.env.EXPO_PUBLIC_BGM_CLIENT_SECRET || '',
       redirectUri: 'aniseeker://bangumi-auth',
       authorizationEndpoint: 'https://bgm.tv/oauth/authorize',
       tokenEndpoint: 'https://bgm.tv/oauth/access_token',
@@ -130,10 +130,10 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#F75239',
     oauth: {
       // Kitsu has not implemented per-app registration; their docs publish a
-      // shared placeholder client_id/secret that every client uses (or empty
-      // strings also work). Read from env so we can swap in real values once
-      // Kitsu ships app registration.
+      // shared placeholder client_id/secret that every client uses. Both are
+      // required for the password grant — Kitsu rejects requests without them.
       clientId: process.env.EXPO_PUBLIC_KITSU_CLIENT_ID || '',
+      clientSecret: process.env.EXPO_PUBLIC_KITSU_CLIENT_SECRET || '',
       redirectUri: '',
       authorizationEndpoint: '',
       tokenEndpoint: 'https://kitsu.io/api/oauth/token',
@@ -150,14 +150,13 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#343434',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_SHIKIMORI_CLIENT_ID || '',
-      // clientSecret must NOT live in the mobile bundle - proxy the token
-      // exchange through a backend that holds SHIKIMORI_CLIENT_SECRET.
+      clientSecret: process.env.EXPO_PUBLIC_SHIKIMORI_CLIENT_SECRET || '',
       redirectUri: 'aniseeker://shikimori-auth',
-      authorizationEndpoint: 'https://shikimori.one/oauth/authorize',
-      tokenEndpoint: 'https://shikimori.one/oauth/token',
+      authorizationEndpoint: 'https://shikimori.io/oauth/authorize',
+      tokenEndpoint: 'https://shikimori.io/oauth/token',
       scopes: ['user_rates'],
     },
-    apiBaseUrl: 'https://shikimori.one/api',
+    apiBaseUrl: 'https://shikimori.io/api',
     supportsWrite: true,
     authType: 'oauth2',
   },
@@ -168,6 +167,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#0B0F1A',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_SIMKL_CLIENT_ID || '',
+      clientSecret: process.env.EXPO_PUBLIC_SIMKL_CLIENT_SECRET || '',
       redirectUri: 'aniseeker://simkl-auth',
       authorizationEndpoint: 'https://simkl.com/oauth/authorize',
       tokenEndpoint: 'https://api.simkl.com/oauth/token',
@@ -184,8 +184,7 @@ export const PLATFORM_CONFIGS: Record<PlatformType, PlatformAuthConfig> = {
     color: '#F85B73',
     oauth: {
       clientId: process.env.EXPO_PUBLIC_ANNICT_CLIENT_ID || '',
-      // clientSecret must NOT live in the mobile bundle - proxy the token
-      // exchange through a backend that holds ANNICT_CLIENT_SECRET.
+      clientSecret: process.env.EXPO_PUBLIC_ANNICT_CLIENT_SECRET || '',
       redirectUri: 'aniseeker://annict-auth',
       authorizationEndpoint: 'https://annict.com/oauth/authorize',
       tokenEndpoint: 'https://annict.com/oauth/token',

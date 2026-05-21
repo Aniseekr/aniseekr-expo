@@ -58,6 +58,21 @@ const REDIRECT_PATHS: Partial<Record<PlatformType, string>> = {
   annict: 'annict-auth',
 };
 
+// MAL is the only provider that demands PKCE with `code_challenge_method=plain`
+// (S256 returns 400). expo-auth-session's AuthRequest hard-rejects Plain via
+// an invariant, so we bypass its PKCE generator and hand-roll the verifier.
+const PKCE_VERIFIER_CHARSET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+function generatePlainPkceVerifier(length = 64): string {
+  const bytes = Crypto.getRandomValues(new Uint8Array(length));
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += PKCE_VERIFIER_CHARSET[bytes[i] % PKCE_VERIFIER_CHARSET.length];
+  }
+  return out;
+}
+
 export class AuthService {
   private static instance: AuthService;
   private currentUser: User | null = null;
@@ -128,33 +143,65 @@ export class AuthService {
     username: string,
     password: string
   ): Promise<PlatformCredentials | null> {
+    const tag = `[sync-hub:${platform}]`;
     const config = PLATFORM_CONFIGS[platform];
     if (config.authType !== 'password') {
       throw new Error(`Platform ${platform} does not support password auth`);
     }
 
-    const params = new URLSearchParams({
+    const bodyObject: Record<string, string> = {
       grant_type: 'password',
       username,
       password,
-    });
+    };
+    // Kitsu (Doorkeeper) treats password grant as a public-client flow; if we
+    // pass the docs-published placeholder client_id it rejects with the
+    // "issued to another client" boilerplate (the app row no longer exists in
+    // Kitsu's DB). Tachiyomi proves the bare-minimum body works. iOS sent the
+    // placeholder but was likely never actually tested end-to-end.
+    const includeClientCreds = platform !== 'kitsu';
+    if (includeClientCreds && config.oauth.clientId) {
+      bodyObject.client_id = config.oauth.clientId;
+    }
+    if (includeClientCreds && config.oauth.clientSecret) {
+      bodyObject.client_secret = config.oauth.clientSecret;
+    }
 
-    if (config.oauth.clientId) {
-      params.append('client_id', config.oauth.clientId);
-    }
-    if (config.oauth.clientSecret) {
-      params.append('client_secret', config.oauth.clientSecret);
-    }
+    const body = new URLSearchParams(bodyObject).toString();
+
+    console.log(`${tag} password grant`, {
+      tokenEndpoint: config.oauth.tokenEndpoint,
+      includeClientCreds,
+      hasClientId: !!bodyObject.client_id,
+      hasClientSecret: !!bodyObject.client_secret,
+      usernameLen: username.length,
+      usernameLooksLikeEmail: username.includes('@'),
+    });
 
     const response = await fetch(config.oauth.tokenEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body,
     });
 
-    if (!response.ok) throw new Error('Authentication failed');
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      console.error(`${tag} password grant failed`, {
+        status: response.status,
+        body: body.slice(0, 500),
+      });
+      throw new Error(`Authentication failed (${response.status}): ${body.slice(0, 200) || 'no body'}`);
+    }
 
     const data = await response.json();
+    console.log(`${tag} password grant success`, {
+      hasAccessToken: !!data.access_token,
+      tokenType: data.token_type,
+      expiresIn: data.expires_in,
+    });
     const tokenData: TokenData = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -325,6 +372,7 @@ export class AuthService {
   }
 
   private async performOAuth(platform: PlatformType, usePKCE: boolean): Promise<TokenData | null> {
+    const tag = `[sync-hub:${platform}]`;
     const config = PLATFORM_CONFIGS[platform];
 
     const discovery = {
@@ -338,28 +386,112 @@ export class AuthService {
       path: REDIRECT_PATHS[platform] ?? `${platform}-auth`,
     });
 
+    const usePlainPkce = platform === 'myanimelist' && usePKCE;
+    const plainVerifier = usePlainPkce ? generatePlainPkceVerifier() : undefined;
+
+    console.log(`${tag} start`, {
+      authType: config.authType,
+      usePKCE,
+      usePlainPkce,
+      clientIdLen: clientId.length,
+      clientIdTail: clientId ? clientId.slice(-6) : '(empty)',
+      redirectUri,
+      scopes: config.oauth.scopes,
+      authorizationEndpoint: discovery.authorizationEndpoint,
+      tokenEndpoint: discovery.tokenEndpoint,
+    });
+
+    if (!clientId) {
+      console.error(`${tag} clientId is EMPTY — env var EXPO_PUBLIC_${platform.toUpperCase()}_CLIENT_ID not set or not bundled`);
+    }
+
     const request = new AuthSession.AuthRequest({
       clientId,
       redirectUri,
       scopes: config.oauth.scopes,
-      usePKCE,
+      usePKCE: usePlainPkce ? false : usePKCE,
+      extraParams: usePlainPkce
+        ? { code_challenge: plainVerifier!, code_challenge_method: 'plain' }
+        : undefined,
     });
 
+    try {
+      const authUrl = await request.makeAuthUrlAsync(discovery);
+      console.log(`${tag} authorize URL`, authUrl);
+    } catch (e) {
+      console.error(`${tag} failed to build authorize URL`, e);
+    }
+
+    const promptStart = Date.now();
+    console.log(`${tag} opening browser (ASWebAuthenticationSession)...`);
     const result = await request.promptAsync(discovery);
+    const promptMs = Date.now() - promptStart;
+    console.log(`${tag} promptAsync result (after ${promptMs}ms)`, {
+      type: result.type,
+      params:
+        result.type === 'success' ? result.params : undefined,
+      error:
+        result.type === 'error'
+          ? { msg: result.error?.message, code: result.errorCode, desc: result.error?.description }
+          : undefined,
+      url: 'url' in result ? result.url : undefined,
+    });
+    if (result.type === 'dismiss' && promptMs < 1500) {
+      console.warn(
+        `${tag} dismissed in <1.5s — likely scheme not registered or no Activity/Intent handles redirectUri. Check AndroidManifest.xml intent-filter or iOS Info.plist CFBundleURLSchemes for: ${redirectUri.split('://')[0]}.`
+      );
+    }
 
     if (result.type !== 'success' || !result.params.code) {
+      if (result.type === 'success') {
+        console.warn(`${tag} success but no code in params`, result.params);
+      }
       return null;
     }
 
-    const tokenResult = await AuthSession.exchangeCodeAsync(
-      {
-        clientId,
-        code: result.params.code,
-        redirectUri,
-        extraParams: usePKCE ? { code_verifier: request.codeVerifier! } : {},
-      },
-      discovery
-    );
+    const tokenExtraParams: Record<string, string> = {};
+    if (usePlainPkce) {
+      tokenExtraParams.code_verifier = plainVerifier!;
+    } else if (usePKCE && request.codeVerifier) {
+      tokenExtraParams.code_verifier = request.codeVerifier;
+    }
+
+    console.log(`${tag} exchanging code`, {
+      codeLen: result.params.code.length,
+      hasVerifier: !!tokenExtraParams.code_verifier,
+      verifierLen: tokenExtraParams.code_verifier?.length,
+    });
+
+    let tokenResult;
+    try {
+      tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId,
+          clientSecret: config.oauth.clientSecret || undefined,
+          code: result.params.code,
+          redirectUri,
+          extraParams: tokenExtraParams,
+        },
+        discovery
+      );
+    } catch (e) {
+      const err = e as { message?: string; code?: string; description?: string };
+      console.error(`${tag} token exchange failed`, {
+        message: err?.message,
+        code: err?.code,
+        description: err?.description,
+      });
+      throw e;
+    }
+
+    console.log(`${tag} token exchange success`, {
+      hasAccessToken: !!tokenResult.accessToken,
+      accessTokenLen: tokenResult.accessToken?.length,
+      hasRefreshToken: !!tokenResult.refreshToken,
+      tokenType: tokenResult.tokenType,
+      expiresIn: tokenResult.expiresIn,
+      scope: tokenResult.scope,
+    });
 
     return {
       accessToken: tokenResult.accessToken,

@@ -74,12 +74,16 @@ export default function AccountScreen() {
   };
 
   const handleConnect = async (platform: PlatformDef) => {
+    const tag = `[sync-hub:${platform.id}]`;
+    console.log(`${tag} connect button pressed`);
     setLoading(true);
     try {
-      await authService.signIn(platform.id);
+      const creds = await authService.signIn(platform.id);
+      console.log(`${tag} signIn returned`, { connected: !!creds });
       hapticsBridge.success();
     } catch (e) {
       if (isAuthRequiresFormError(e)) {
+        console.log(`${tag} auth requires form`, { kind: e.kind, requiresServerUrl: e.requiresServerUrl });
         setSheet({
           visible: true,
           platform,
@@ -88,6 +92,14 @@ export default function AccountScreen() {
         });
         return;
       }
+      const errObj = e as { message?: string; code?: string; description?: string; name?: string };
+      console.error(`${tag} connect failed`, {
+        name: errObj?.name,
+        message: errObj?.message,
+        code: errObj?.code,
+        description: errObj?.description,
+        raw: e,
+      });
       hapticsBridge.error();
       Alert.alert(
         `Couldn't connect to ${platform.name}`,
