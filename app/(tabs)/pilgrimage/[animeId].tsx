@@ -23,7 +23,6 @@ import {
   InteractionManager,
   Linking,
   Pressable,
-  ScrollView,
   Share,
   StyleSheet,
   TextInput,
@@ -66,12 +65,12 @@ import { usePilgrimageInteractions } from '../../../hooks/usePilgrimageInteracti
 import { usePilgrimageDerivedSpots } from '../../../hooks/usePilgrimageDerivedSpots';
 import { usePilgrimageSpotSheet } from '../../../hooks/usePilgrimageSpotSheet';
 import {
-  FilterPill,
+  FilterCyclePill,
   LayoutModeButton,
   PilgrimageDetailLoadingShell,
   PilgrimageDetailSheet,
   RoundHeaderButton,
-  SeriesSwitchRow,
+  SeriesDropdownPill,
   SpotClusterPicker,
   SpotMapView,
   SpotSheet,
@@ -81,6 +80,7 @@ import {
   getPointSourceBangumiId,
   hasValidGeo,
   makePilgrimageDetailStyles,
+  type FilterCyclePillState,
 } from '../../../components/pilgrimage/detail';
 
 // Sheet snap heights as fractions of the screen — kept in lockstep with the
@@ -402,6 +402,51 @@ export default function PilgrimageDetailScreen() {
     ? 'No spots match this search.'
     : 'No scenes match this filter.';
 
+  // Build the ordered list of filter states the cycle pill walks through.
+  // Always include all / unvisited / visited; conditionally extend with
+  // planned / saved / photos when they have data (or when the current
+  // selection is one of them, so the cycle can return through it).
+  const filterCycleStates = useMemo<readonly FilterCyclePillState[]>(() => {
+    const states: FilterCyclePillState[] = [
+      { filter: 'all', label: 'All', badge: groupedCounts.all },
+      { filter: 'unvisited', label: 'Unvisited', badge: groupedCounts.unvisited },
+      { filter: 'visited', label: 'Visited', badge: groupedCounts.visited },
+    ];
+    if (groupedCounts.planned > 0 || spotFilter === 'planned') {
+      states.push({
+        filter: 'planned',
+        label: 'Planned',
+        badge: groupedCounts.planned,
+        icon: 'flag',
+      });
+    }
+    if (groupedCounts.saved > 0 || spotFilter === 'saved') {
+      states.push({
+        filter: 'saved',
+        label: 'Saved',
+        badge: groupedCounts.saved,
+        icon: 'bookmark',
+      });
+    }
+    if (groupedCounts.photos > 0 || spotFilter === 'photos') {
+      states.push({
+        filter: 'photos',
+        label: 'Photos',
+        badge: groupedCounts.photos,
+        icon: 'camera',
+      });
+    }
+    return states;
+  }, [
+    groupedCounts.all,
+    groupedCounts.unvisited,
+    groupedCounts.visited,
+    groupedCounts.planned,
+    groupedCounts.saved,
+    groupedCounts.photos,
+    spotFilter,
+  ]);
+
   // The bottom sheet writes its top-edge Y (from the top of the screen) into
   // this shared value every frame. The floating filter strip + view-mode
   // toggle anchor to it via `useAnimatedStyle` so they hug the sheet's edge
@@ -504,16 +549,31 @@ export default function PilgrimageDetailScreen() {
               <View style={styles.mapScrim} pointerEvents="none" />
             </View>
 
-            {/* Layer 2 — top-floating chrome (header / search / series). */}
+            {/* Layer 2 — top-floating chrome (header / search). Series picker
+                lives inline next to the back button now (compact dropdown
+                pill instead of a horizontal scroll row). */}
             <View style={styles.topOverlay} pointerEvents="box-none">
               <View style={styles.headerActions}>
-                <RoundHeaderButton
-                  icon="chevron-back"
-                  onPress={handleBack}
-                  accessibilityLabel="Back"
-                  tint={theme.text.primary}
-                  theme={theme}
-                />
+                <View style={styles.headerLeftGroup}>
+                  <RoundHeaderButton
+                    icon="chevron-back"
+                    onPress={handleBack}
+                    accessibilityLabel="Back"
+                    tint={theme.text.primary}
+                    theme={theme}
+                  />
+                  {anime && hasSeriesSwitcher ? (
+                    <SeriesDropdownPill
+                      entries={seriesEntries}
+                      availableCount={availableSeriesEntries.length}
+                      selection={effectiveSeriesSelection}
+                      themeColor={themeColor}
+                      themeColorFg={themeColorFg}
+                      theme={theme}
+                      onSelect={handleSeriesSelect}
+                    />
+                  ) : null}
+                </View>
                 <View style={styles.headerRightGroup}>
                   <RoundHeaderButton
                     icon="images-outline"
@@ -563,18 +623,6 @@ export default function PilgrimageDetailScreen() {
                   ) : null}
                 </View>
               ) : null}
-
-              {anime && hasSeriesSwitcher ? (
-                <SeriesSwitchRow
-                  entries={seriesEntries}
-                  availableCount={availableSeriesEntries.length}
-                  selection={effectiveSeriesSelection}
-                  themeColor={themeColor}
-                  themeColorFg={themeColorFg}
-                  theme={theme}
-                  onSelect={handleSeriesSelect}
-                />
-              ) : null}
             </View>
 
             {/* Layer 3 — map-side dock for marker / offline toggles. Only in
@@ -606,82 +654,24 @@ export default function PilgrimageDetailScreen() {
               </View>
             ) : null}
 
-            {/* Layer 4+5 — floating chrome (filter chips + view-mode toggle),
-                anchored to the bottom sheet's top edge so it slides with the
-                sheet rather than getting buried at mid snap. Hidden at full
-                snap so it doesn't float over the scene grid. */}
+            {/* Layer 4+5 — floating chrome (filter cycle pill + view-mode
+                toggle), anchored to the bottom sheet's top edge so it slides
+                with the sheet rather than getting buried at mid snap. Hidden
+                at full snap so it doesn't float over the scene grid. */}
             {anime ? (
               <Animated.View
                 style={[styles.bottomChromeWrap, chromeAnimatedStyle]}
                 pointerEvents="box-none">
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipRow}>
-                  <FilterPill
-                    label="All"
-                    active={spotFilter === 'all'}
-                    badge={groupedCounts.all}
+                <View style={styles.filterCycleRow}>
+                  <FilterCyclePill
+                    states={filterCycleStates}
+                    current={spotFilter}
                     themeColor={themeColor}
                     themeColorFg={themeColorFg}
                     theme={theme}
-                    onPress={() => handleSpotFilterChange('all')}
+                    onCycle={handleSpotFilterChange}
                   />
-                  <FilterPill
-                    label="Unvisited"
-                    active={spotFilter === 'unvisited'}
-                    badge={groupedCounts.unvisited}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    onPress={() => handleSpotFilterChange('unvisited')}
-                  />
-                  <FilterPill
-                    label="Visited"
-                    active={spotFilter === 'visited'}
-                    badge={groupedCounts.visited}
-                    themeColor={themeColor}
-                    themeColorFg={themeColorFg}
-                    theme={theme}
-                    onPress={() => handleSpotFilterChange('visited')}
-                  />
-                  {groupedCounts.planned > 0 || spotFilter === 'planned' ? (
-                    <FilterPill
-                      label="Planned"
-                      active={spotFilter === 'planned'}
-                      badge={groupedCounts.planned}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      theme={theme}
-                      icon="flag"
-                      onPress={() => handleSpotFilterChange('planned')}
-                    />
-                  ) : null}
-                  {groupedCounts.saved > 0 || spotFilter === 'saved' ? (
-                    <FilterPill
-                      label="Saved"
-                      active={spotFilter === 'saved'}
-                      badge={groupedCounts.saved}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      theme={theme}
-                      icon="bookmark"
-                      onPress={() => handleSpotFilterChange('saved')}
-                    />
-                  ) : null}
-                  {groupedCounts.photos > 0 || spotFilter === 'photos' ? (
-                    <FilterPill
-                      label="Photos"
-                      active={spotFilter === 'photos'}
-                      badge={groupedCounts.photos}
-                      themeColor={themeColor}
-                      themeColorFg={themeColorFg}
-                      theme={theme}
-                      icon="camera"
-                      onPress={() => handleSpotFilterChange('photos')}
-                    />
-                  ) : null}
-                </ScrollView>
+                </View>
                 <View style={styles.viewModeWrapInner}>
                   <View style={styles.viewModeBar}>
                     <ViewModeSegment

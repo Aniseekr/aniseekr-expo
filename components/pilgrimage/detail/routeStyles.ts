@@ -68,6 +68,13 @@ export function makePilgrimageDetailStyles(theme: ThemePalette, topInset: number
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    headerLeftGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      flexShrink: 1,
+      minWidth: 0,
+    },
     headerRightGroup: {
       flexDirection: 'row',
       gap: Spacing.sm,
@@ -103,9 +110,18 @@ export function makePilgrimageDetailStyles(theme: ThemePalette, topInset: number
 
     // Series + filter chip rows. Horizontal scrollable; first chip aligned
     // to the screen padding so it reads as an extension of the overlay.
+    // Retained for any caller that still uses the old chip row.
     chipRow: {
       gap: Spacing.xs,
       paddingRight: Spacing.xs,
+    },
+
+    // Compact row used by the cycle pill — single pill centered above the
+    // view-mode toggle. Replaces the multi-pill horizontal strip.
+    filterCycleRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
 
     // Bottom chrome — wraps the filter strip + view-mode toggle in one
