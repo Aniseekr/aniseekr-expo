@@ -15,6 +15,12 @@
       "./plugins/with-clarity-proguard.js",
       "./plugins/with-storekit-config.js",
       [
+        "react-native-cloud-storage",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
@@ -61,7 +67,7 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "androidAppId": "ca-app-pub-5295818339973289~1871402327",
           "iosAppId": "ca-app-pub-5295818339973289~8692467132",
           "delayAppMeasurementInit": true,
           "skAdNetworkItems": [
