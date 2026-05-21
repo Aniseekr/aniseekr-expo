@@ -189,6 +189,13 @@ export default function SyncHubScreen() {
         />
         <Divider />
         <SettingsRow
+          icon="cloud"
+          label="Cloud backup"
+          description="iCloud · Google Drive — full library snapshot"
+          onPress={() => router.push('/(setting)/backup')}
+        />
+        <Divider />
+        <SettingsRow
           icon="restore"
           label="Force resync from remote"
           description="Wipes local cache and re-pulls everything"
