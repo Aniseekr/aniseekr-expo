@@ -24,6 +24,7 @@ import { ShareImageRenderer } from '../../../components/collection/ShareImageRen
 import { ShareListEditor } from '../../../components/collection/ShareListEditor';
 import { CollectionFolder } from '../../../types';
 import { collectionService } from '../../../libs/services/collection/collection-service';
+import { pushAnimeDetail } from '../../../libs/utils/navigate-to-anime';
 import { CreateFolderModal } from '../../../components/collection/CreateFolderModal';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import {
@@ -729,7 +730,13 @@ export default function CollectionScreen() {
             {animeCards.length > 0 ? (
               <CollectionAnimeGrid
                 items={animeCards.slice(0, ANIME_PREVIEW_LIMIT)}
-                onPressItem={(item) => router.push(`/anime/${item.id}`)}
+                onPressItem={(item) =>
+                  pushAnimeDetail(router, {
+                    id: item.id,
+                    title: item.title,
+                    image: item.imageUrl ?? undefined,
+                  })
+                }
               />
             ) : (
               <View style={styles.emptyAnimeState}>
@@ -748,7 +755,13 @@ export default function CollectionScreen() {
           <View style={styles.section}>
             <CollectionRecentRail
               items={recents}
-              onPressItem={(item) => router.push(`/anime/${item.id}`)}
+              onPressItem={(item) =>
+                pushAnimeDetail(router, {
+                  id: item.id,
+                  title: item.title,
+                  image: item.imageUrl,
+                })
+              }
               onPressSeeAll={() => router.push('/(rate)')}
             />
           </View>

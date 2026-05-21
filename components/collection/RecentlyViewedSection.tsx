@@ -6,6 +6,7 @@ import { Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { ProgressiveImage } from '../common/ProgressiveImage';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { pushAnimeDetail } from '../../libs/utils/navigate-to-anime';
 
 export interface RecentItem {
   id: string;
@@ -61,7 +62,7 @@ function RecentlyViewedSectionComponent({
   const handlePress = (item: RecentItem) => {
     hapticsBridge.tap();
     if (onItemPress) onItemPress(item);
-    else router.push(`/anime/${item.id}`);
+    else pushAnimeDetail(router, { id: item.id, title: item.title, image: item.imageUrl });
   };
 
   return (

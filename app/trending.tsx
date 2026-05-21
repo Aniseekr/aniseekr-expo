@@ -19,6 +19,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { readableTextOn, Skeleton } from '../components/themed';
 import { AnimeRepository } from '../libs/repositories/anime-repository';
+import { pushAnimeDetail } from '../libs/utils/navigate-to-anime';
 import { Anime } from '../components/rate/types';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 import { FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
@@ -99,7 +100,7 @@ export default function TrendingScreen() {
   const handleAnimePress = useCallback(
     (anime: Anime) => {
       hapticsBridge.tap();
-      router.push({ pathname: `/anime/${anime.id}` });
+      pushAnimeDetail(router, anime);
     },
     [router]
   );

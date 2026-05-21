@@ -6,6 +6,7 @@ import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail, prefetchAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 
 interface WeeklyCalendarProps {
@@ -48,7 +49,8 @@ export function WeeklyCalendar({
             <View style={{ gap: Spacing.sm }}>
               {dayData.anime.map((anime) => (
                 <Pressable
-                  onPress={() => router.push(`/anime/${anime.id}`)}
+                  onPress={() => pushAnimeDetail(router, anime)}
+                  onPressIn={() => prefetchAnimeDetail(anime)}
                   key={anime.id}
                   style={styles.animeCard}>
                   <Image

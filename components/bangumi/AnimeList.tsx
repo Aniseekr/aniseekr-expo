@@ -12,6 +12,7 @@ import Animated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail, prefetchAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import {
   animeNotificationService,
   useIsAnimeScheduled,
@@ -142,7 +143,8 @@ export function AnimeRowCard({
       onSwipeableOpen={handleSwipeOpen}
       containerStyle={styles.cardPressable}>
       <Pressable
-        onPress={() => router.push(`/anime/${anime.id}`)}
+        onPress={() => pushAnimeDetail(router, anime)}
+        onPressIn={() => prefetchAnimeDetail(anime)}
         onLongPress={
           onAddTracking
             ? () => {

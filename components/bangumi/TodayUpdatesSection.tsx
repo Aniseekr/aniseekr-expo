@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail, prefetchAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
@@ -73,7 +74,8 @@ function TodayUpdatesSectionComponent({
             return (
               <Pressable
                 key={anime.id}
-                onPress={() => router.push(`/anime/${anime.id}`)}
+                onPress={() => pushAnimeDetail(router, anime)}
+                onPressIn={() => prefetchAnimeDetail(anime)}
                 onLongPress={
                   onLongPressAnime
                     ? () => {

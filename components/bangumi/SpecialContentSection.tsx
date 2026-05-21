@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import { Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { ProgressiveImage } from '../common/ProgressiveImage';
@@ -30,7 +31,7 @@ function SpecialContentSectionComponent({
 
   const handlePress = (item: Anime) => {
     hapticsBridge.tap();
-    router.push(`/anime/${item.id}`);
+    pushAnimeDetail(router, item);
   };
 
   return (

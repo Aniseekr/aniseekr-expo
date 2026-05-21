@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Skeleton, readableTextOn } from '../../../components/themed';
+import { pushAnimeDetail } from '../../../libs/utils/navigate-to-anime';
 import { GenreCarousel, GenreCarouselSkeleton } from '../../../components/rate/GenreCarousel';
 import { SeasonalView } from '../../../components/rate/seasonal/SeasonalView';
 import { PersonalizedPickSheet } from '../../../components/rate/PersonalizedPickSheet';
@@ -145,7 +146,7 @@ export default function HomeRateScreen() {
 
   const handleAnimeSelect = useCallback(
     (anime: Anime) => {
-      router.push({ pathname: `/anime/${anime.id}` });
+      pushAnimeDetail(router, anime);
     },
     [router]
   );
@@ -167,7 +168,7 @@ export default function HomeRateScreen() {
     const picked = state.personalizedPick.anime;
     setShowAI(false);
     if (picked) {
-      router.push({ pathname: `/anime/${picked.id}` });
+      pushAnimeDetail(router, picked);
     }
   }, [router, state.personalizedPick.anime]);
 

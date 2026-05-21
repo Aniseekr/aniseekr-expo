@@ -20,6 +20,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { CollectionFolder } from '../../types';
 import { LocalDB } from '../../libs/db';
+import { pushAnimeDetail } from '../../libs/utils/navigate-to-anime';
 
 interface AsyncStorageLike {
   getItem(key: string): Promise<string | null>;
@@ -284,7 +285,7 @@ export function CollectionSearchModal({ visible, onClose, folders }: CollectionS
       recordRecent(entry.title);
       Keyboard.dismiss();
       onClose();
-      router.push(`/anime/${entry.id}`);
+      pushAnimeDetail(router, { id: entry.id, title: entry.title });
     },
     [onClose, recordRecent, router]
   );

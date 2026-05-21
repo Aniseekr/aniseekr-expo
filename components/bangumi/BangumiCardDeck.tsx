@@ -19,6 +19,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
@@ -104,7 +105,7 @@ export function BangumiCardDeck({
           onSwipe={(dir) => advance(dir, current)}
           onOpenDetail={() => {
             hapticsBridge.tap();
-            router.push(`/anime/${current.id}`);
+            pushAnimeDetail(router, current);
           }}
         />
       </View>

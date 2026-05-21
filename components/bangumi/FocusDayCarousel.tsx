@@ -26,6 +26,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../rate/types';
+import { pushAnimeDetail, prefetchAnimeDetail } from '../../libs/utils/navigate-to-anime';
 import { NearbyPilgrimageBadge } from '../pilgrimage/NearbyPilgrimageBadge';
 import { useIsAnimeScheduled } from '../../modules/notifications/animeNotificationService';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
@@ -343,7 +344,8 @@ const FocusDayRow = memo(function FocusDayRow({
 
   return (
     <Pressable
-      onPress={() => router.push(`/anime/${anime.id}`)}
+      onPress={() => pushAnimeDetail(router, anime)}
+      onPressIn={() => prefetchAnimeDetail(anime)}
       onLongPress={
         onLongPressAnime
           ? () => {

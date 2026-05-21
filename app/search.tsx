@@ -18,6 +18,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Anime } from '../components/rate/types';
 import { AnimeRepository } from '../libs/repositories/anime-repository';
+import { pushAnimeDetail } from '../libs/utils/navigate-to-anime';
 import { ShimmerEffect } from '../components/common/ShimmerEffect';
 import { EmptyStateView } from '../components/common/EmptyStateView';
 import { ErrorStateView } from '../components/common/ErrorStateView';
@@ -295,7 +296,7 @@ export default function SearchScreen() {
         return;
       }
 
-      router.push(`/anime/${anime.id}`);
+      pushAnimeDetail(router, anime);
     },
     [recent, persistRecent, router, isPilgrimageMode, query]
   );

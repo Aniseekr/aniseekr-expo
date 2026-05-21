@@ -11,6 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Photo, DeckItem } from '../../../components/rate/types';
 import { AnimeRepository } from '../../../libs/repositories/anime-repository';
+import { pushAnimeDetail } from '../../../libs/utils/navigate-to-anime';
 import { isAdSlotEnabled } from '../../../libs/services/ads/ad-config';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ModePill } from '../../../components/rate/ModePill';
@@ -486,7 +487,11 @@ export default function RatingScreen() {
   const handlePressTopCard = useCallback(
     (item: DeckItem) => {
       if (item.kind !== 'photo') return;
-      router.push(`/anime/${item.photo.id}`);
+      pushAnimeDetail(router, {
+        id: item.photo.id,
+        title: item.photo.title ?? item.photo.enTitle ?? item.photo.jpTitle,
+        image: item.photo.url,
+      });
     },
     [router]
   );
