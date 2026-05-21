@@ -22,11 +22,21 @@ export const MAP_BASE_URL = 'https://aniseekr.local/';
  * in-WebView Cache API path works without auth. Voyager (light) and Dark
  * Matter (dark) are the closest free analogues to Google Maps Light / Dark.
  */
+// Required by OpenStreetMap Tile Usage Policy and CARTO Basemaps terms:
+// the attribution must name "OpenStreetMap contributors" and link to the
+// copyright page, and CARTO basemaps must credit CARTO with a link to its
+// attribution page. Leaflet renders the anchors in the bottom-right control.
+const OSM_CARTO_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+
+const OSM_ONLY_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
+
 export const TILE_STYLES = {
   voyager: {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
     subdomains: 'abcd',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    attribution: OSM_CARTO_ATTRIBUTION,
     maxZoom: 19,
     /** Body background to match the tile while loading — picked from the
      * tile's dominant land color so the WebView doesn't flash a different
@@ -36,14 +46,14 @@ export const TILE_STYLES = {
   positron: {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png',
     subdomains: 'abcd',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    attribution: OSM_CARTO_ATTRIBUTION,
     maxZoom: 19,
     bodyBg: '#F2F2F2',
   },
   darkMatter: {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png',
     subdomains: 'abcd',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    attribution: OSM_CARTO_ATTRIBUTION,
     maxZoom: 19,
     // Dark Matter ships near-black (#0E0E0E land); we lift via --tile-filter
     // at runtime to approach Google Maps Dark's slate (#262A35). Body bg
@@ -53,7 +63,7 @@ export const TILE_STYLES = {
   osmStandard: {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     subdomains: 'abc',
-    attribution: '&copy; OpenStreetMap',
+    attribution: OSM_ONLY_ATTRIBUTION,
     maxZoom: 18,
     bodyBg: '#E8E4DA',
   },

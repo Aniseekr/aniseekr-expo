@@ -60,6 +60,21 @@ const DATA_SOURCES: Source[] = [
   },
 ];
 
+const MAP_SOURCES: Source[] = [
+  {
+    name: 'OpenStreetMap',
+    url: 'https://www.openstreetmap.org/copyright',
+    description: 'Map data © OpenStreetMap contributors, available under the ODbL',
+    icon: 'place',
+  },
+  {
+    name: 'CARTO Basemaps',
+    url: 'https://carto.com/attributions',
+    description: 'Voyager / Positron / Dark Matter raster tiles for the pilgrimage map',
+    icon: 'place',
+  },
+];
+
 const LIBRARIES = [
   'Expo Router',
   'React Native Reanimated',
@@ -96,6 +111,22 @@ export default function AttributionScreen() {
               onPress={() => open(src.url)}
             />
             {idx < DATA_SOURCES.length - 1 ? (
+              <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
+            ) : null}
+          </View>
+        ))}
+      </SettingsSection>
+
+      <SettingsSection title="Maps & geodata">
+        {MAP_SOURCES.map((src, idx) => (
+          <View key={src.name}>
+            <SettingsRow
+              icon={src.icon}
+              label={src.name}
+              description={src.description}
+              onPress={() => open(src.url)}
+            />
+            {idx < MAP_SOURCES.length - 1 ? (
               <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
             ) : null}
           </View>
