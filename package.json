@@ -66,6 +66,7 @@
     "react-native-gesture-handler": "^2.29.1",
     "react-native-gifted-charts": "^1.4.76",
     "react-native-google-mobile-ads": "^16.3.3",
+    "react-native-keyboard-controller": "1.18.5",
     "react-native-maps": "1.20.1",
     "react-native-purchases": "^10.0.1",
     "react-native-reanimated": "~4.1.1",

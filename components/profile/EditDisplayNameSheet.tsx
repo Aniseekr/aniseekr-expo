@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Spacing, Typography } from '../../constants/DesignSystem';
@@ -49,66 +50,68 @@ export function EditDisplayNameSheet({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Animated.View
-        entering={FadeIn.duration(160)}
-        exiting={FadeOut.duration(160)}
-        style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Animated.View
-          entering={FadeInUp.duration(220)}
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.background.secondary,
-              borderColor: theme.glassBorder,
-            },
-          ]}>
-          <SafeAreaView edges={['bottom']}>
-            <View style={styles.handle} />
-            <View style={styles.headerRow}>
-              <Text style={[styles.title, { color: theme.text.primary }]}>Edit display name</Text>
-              <Pressable onPress={onClose} hitSlop={12}>
-                <MaterialIcons name="close" size={22} color={theme.text.secondary} />
+          entering={FadeIn.duration(160)}
+          exiting={FadeOut.duration(160)}
+          style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          <Animated.View
+            entering={FadeInUp.duration(220)}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.background.secondary,
+                borderColor: theme.glassBorder,
+              },
+            ]}>
+            <SafeAreaView edges={['bottom']}>
+              <View style={styles.handle} />
+              <View style={styles.headerRow}>
+                <Text style={[styles.title, { color: theme.text.primary }]}>Edit display name</Text>
+                <Pressable onPress={onClose} hitSlop={12}>
+                  <MaterialIcons name="close" size={22} color={theme.text.secondary} />
+                </Pressable>
+              </View>
+
+              <Text style={[styles.helperText, { color: theme.text.secondary }]}>
+                Stored on this device only. No account needed.
+              </Text>
+
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.background.tertiary,
+                    borderColor: theme.glassBorder,
+                    color: theme.text.primary,
+                  },
+                ]}
+                value={name}
+                onChangeText={setName}
+                placeholder="Anime fan"
+                placeholderTextColor={theme.text.tertiary}
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!saving}
+                maxLength={40}
+                returnKeyType="done"
+                onSubmitEditing={handleSave}
+              />
+
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  { backgroundColor: theme.accent, opacity: saving ? 0.5 : pressed ? 0.85 : 1 },
+                ]}>
+                <Text style={styles.saveLabel}>{saving ? 'Saving…' : 'Save'}</Text>
               </Pressable>
-            </View>
-
-            <Text style={[styles.helperText, { color: theme.text.secondary }]}>
-              Stored on this device only. No account needed.
-            </Text>
-
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.background.tertiary,
-                  borderColor: theme.glassBorder,
-                  color: theme.text.primary,
-                },
-              ]}
-              value={name}
-              onChangeText={setName}
-              placeholder="Anime fan"
-              placeholderTextColor={theme.text.tertiary}
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!saving}
-              maxLength={40}
-              returnKeyType="done"
-              onSubmitEditing={handleSave}
-            />
-
-            <Pressable
-              onPress={handleSave}
-              disabled={saving}
-              style={({ pressed }) => [
-                styles.saveButton,
-                { backgroundColor: theme.accent, opacity: saving ? 0.5 : pressed ? 0.85 : 1 },
-              ]}>
-              <Text style={styles.saveLabel}>{saving ? 'Saving…' : 'Save'}</Text>
-            </Pressable>
-          </SafeAreaView>
+            </SafeAreaView>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

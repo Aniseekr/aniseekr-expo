@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { collectionService } from '../../libs/services/collection/collection-service';
 import { AnimatedPressable } from '../common/AnimatedPressable';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,72 +121,80 @@ export function CreateFolderModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title}>{isEditMode ? 'Edit folder' : 'Create Folder'}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={theme.text.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.form}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Folder Name"
-              placeholderTextColor={theme.text.tertiary}
-            />
-
-            <Text style={styles.label}>Icon</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.iconScroll}>
-              {ICONS.map((i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.iconButton, icon === i ? styles.iconButtonSelected : null]}
-                  onPress={() => setIcon(i)}>
-                  <Ionicons
-                    name={i}
-                    size={24}
-                    color={icon === i ? readableTextOn(theme.accent) : theme.text.secondary}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Share with friends</Text>
-              <Switch
-                value={isShared}
-                onValueChange={setIsShared}
-                trackColor={{ false: theme.background.tertiary, true: theme.status.info }}
-                thumbColor={theme.text.primary}
-              />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <View style={styles.overlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.header}>
+              <Text style={styles.title}>{isEditMode ? 'Edit folder' : 'Create Folder'}</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color={theme.text.primary} />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Contains R18 content</Text>
-              <Switch
-                value={isR18}
-                onValueChange={setIsR18}
-                trackColor={{ false: theme.background.tertiary, true: theme.status.error }}
-                thumbColor={theme.text.primary}
+            <View style={styles.form}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Folder Name"
+                placeholderTextColor={theme.text.tertiary}
               />
-            </View>
 
-            <AnimatedPressable
-              style={[styles.createButton, !name.trim() ? styles.createButtonDisabled : undefined]}
-              onPress={handleSubmit}
-              disabled={!name.trim() || loading}>
-              <Text style={styles.createButtonText}>
-                {isEditMode ? 'Save changes' : 'Create Folder'}
-              </Text>
-            </AnimatedPressable>
+              <Text style={styles.label}>Icon</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.iconScroll}>
+                {ICONS.map((i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.iconButton, icon === i ? styles.iconButtonSelected : null]}
+                    onPress={() => setIcon(i)}>
+                    <Ionicons
+                      name={i}
+                      size={24}
+                      color={icon === i ? readableTextOn(theme.accent) : theme.text.secondary}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.switchRow}>
+                <Text style={styles.label}>Share with friends</Text>
+                <Switch
+                  value={isShared}
+                  onValueChange={setIsShared}
+                  trackColor={{ false: theme.background.tertiary, true: theme.status.info }}
+                  thumbColor={theme.text.primary}
+                />
+              </View>
+
+              <View style={styles.switchRow}>
+                <Text style={styles.label}>Contains R18 content</Text>
+                <Switch
+                  value={isR18}
+                  onValueChange={setIsR18}
+                  trackColor={{ false: theme.background.tertiary, true: theme.status.error }}
+                  thumbColor={theme.text.primary}
+                />
+              </View>
+
+              <AnimatedPressable
+                style={[
+                  styles.createButton,
+                  !name.trim() ? styles.createButtonDisabled : undefined,
+                ]}
+                onPress={handleSubmit}
+                disabled={!name.trim() || loading}>
+                <Text style={styles.createButtonText}>
+                  {isEditMode ? 'Save changes' : 'Create Folder'}
+                </Text>
+              </AnimatedPressable>
+            </View>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

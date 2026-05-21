@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -614,10 +615,12 @@ export default function ComparePreviewScreen() {
           </Pressable>
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          bottomOffset={20}
+          keyboardShouldPersistTaps="handled">
           <Filmstrip
             shots={shots}
             focusedShotId={focusedShot?.id ?? null}
@@ -1014,7 +1017,7 @@ export default function ComparePreviewScreen() {
             heading={focusedHeading}
             userLocation={focusedShot?.userLocation ?? null}
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={[styles.footer, { paddingBottom: bottomPad(insets) }]}>
           <Pressable

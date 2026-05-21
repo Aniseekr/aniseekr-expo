@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Spacing, Typography, Radius } from '../../constants/DesignSystem';
@@ -265,93 +266,95 @@ function ShareListEditorComponent({
           animationType="slide"
           transparent
           onRequestClose={() => setPickerVisible(false)}>
-          <View style={styles.overlay}>
-            <View
-              style={[
-                styles.sheet,
-                {
-                  backgroundColor: theme.background.secondary,
-                  borderColor: theme.glassBorder,
-                },
-              ]}>
-              <View style={styles.header}>
-                <Text style={[styles.title, { color: theme.text.primary }]}>Pick anime</Text>
-                <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={8}>
-                  <MaterialIcons name="close" size={24} color={theme.text.primary} />
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search your collection"
-                placeholderTextColor={theme.text.tertiary}
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <View style={styles.overlay}>
+              <View
                 style={[
-                  styles.search,
+                  styles.sheet,
                   {
-                    backgroundColor: theme.background.tertiary,
+                    backgroundColor: theme.background.secondary,
                     borderColor: theme.glassBorder,
-                    color: theme.text.primary,
                   },
-                ]}
-              />
-              <FlatList
-                data={filteredSource}
-                keyExtractor={(it) => it.id}
-                style={styles.list}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => addEntry(item)}
-                    style={({ pressed }) => [
-                      styles.row,
-                      {
-                        backgroundColor: theme.background.tertiary,
-                        borderColor: theme.glassBorder,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}>
-                    {item.coverUrl ? (
-                      <Image
-                        source={{ uri: item.coverUrl }}
-                        style={styles.cover}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={[styles.cover, styles.coverFallback]}>
-                        <MaterialIcons name="image" size={20} color={theme.text.tertiary} />
+                ]}>
+                <View style={styles.header}>
+                  <Text style={[styles.title, { color: theme.text.primary }]}>Pick anime</Text>
+                  <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={8}>
+                    <MaterialIcons name="close" size={24} color={theme.text.primary} />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search your collection"
+                  placeholderTextColor={theme.text.tertiary}
+                  style={[
+                    styles.search,
+                    {
+                      backgroundColor: theme.background.tertiary,
+                      borderColor: theme.glassBorder,
+                      color: theme.text.primary,
+                    },
+                  ]}
+                />
+                <FlatList
+                  data={filteredSource}
+                  keyExtractor={(it) => it.id}
+                  style={styles.list}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => addEntry(item)}
+                      style={({ pressed }) => [
+                        styles.row,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}>
+                      {item.coverUrl ? (
+                        <Image
+                          source={{ uri: item.coverUrl }}
+                          style={styles.cover}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={[styles.cover, styles.coverFallback]}>
+                          <MaterialIcons name="image" size={20} color={theme.text.tertiary} />
+                        </View>
+                      )}
+                      <View style={styles.meta}>
+                        <Text
+                          style={[styles.metaTitle, { color: theme.text.primary }]}
+                          numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                        <View style={styles.metaSubRow}>
+                          {item.year ? (
+                            <Text style={[styles.metaSub, { color: theme.text.secondary }]}>
+                              {item.year}
+                            </Text>
+                          ) : null}
+                          {typeof item.score === 'number' ? (
+                            <Text style={[styles.metaSub, { color: theme.text.secondary }]}>
+                              ★ {(item.score / 10).toFixed(1)}
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
-                    )}
-                    <View style={styles.meta}>
-                      <Text
-                        style={[styles.metaTitle, { color: theme.text.primary }]}
-                        numberOfLines={2}>
-                        {item.title}
-                      </Text>
-                      <View style={styles.metaSubRow}>
-                        {item.year ? (
-                          <Text style={[styles.metaSub, { color: theme.text.secondary }]}>
-                            {item.year}
-                          </Text>
-                        ) : null}
-                        {typeof item.score === 'number' ? (
-                          <Text style={[styles.metaSub, { color: theme.text.secondary }]}>
-                            ★ {(item.score / 10).toFixed(1)}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                    <MaterialIcons name="add" size={22} color={theme.accent} />
-                  </Pressable>
-                )}
-                ItemSeparatorComponent={() => <View style={{ height: Spacing.xs }} />}
-                ListEmptyComponent={
-                  <Text style={[styles.empty, { color: theme.text.secondary }]}>
-                    No matching anime in your collection.
-                  </Text>
-                }
-                contentContainerStyle={{ paddingBottom: Spacing.md }}
-              />
+                      <MaterialIcons name="add" size={22} color={theme.accent} />
+                    </Pressable>
+                  )}
+                  ItemSeparatorComponent={() => <View style={{ height: Spacing.xs }} />}
+                  ListEmptyComponent={
+                    <Text style={[styles.empty, { color: theme.text.secondary }]}>
+                      No matching anime in your collection.
+                    </Text>
+                  }
+                  contentContainerStyle={{ paddingBottom: Spacing.md }}
+                />
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </Modal>

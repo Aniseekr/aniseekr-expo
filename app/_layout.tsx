@@ -1,4 +1,5 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import '../global.css';
 import { useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
@@ -136,22 +137,24 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <SubscriptionProvider>
-            <StatusBar style="light" translucent={Platform.OS === 'android'} />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="(setting)" />
-              <Stack.Screen name="anime/[id]" />
-              <Stack.Screen name="search" />
-              <Stack.Screen name="trending" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="index" />
-            </Stack>
-          </SubscriptionProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <SubscriptionProvider>
+              <StatusBar style="light" translucent={Platform.OS === 'android'} />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="(setting)" />
+                <Stack.Screen name="anime/[id]" />
+                <Stack.Screen name="search" />
+                <Stack.Screen name="trending" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="index" />
+              </Stack>
+            </SubscriptionProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

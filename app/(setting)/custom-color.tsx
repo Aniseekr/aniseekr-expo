@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Stack, useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -54,7 +55,9 @@ function hslToRgb({ h, s, l }: HSL): RGB {
 
 function rgbToHex({ r, g, b }: RGB): string {
   const h = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
   return `#${h(r)}${h(g)}${h(b)}`.toUpperCase();
 }
 
@@ -155,9 +158,11 @@ export default function CustomColorScreen() {
           </Pressable>
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          bottomOffset={20}
+          keyboardShouldPersistTaps="handled">
           <View style={styles.previewWrap}>
             <View style={[styles.previewRing, { borderColor: hex }]}>
               <View style={[styles.previewInner, { backgroundColor: hex }]}>
@@ -226,7 +231,11 @@ export default function CustomColorScreen() {
             onChange={(v) => setHsl({ ...hsl, l: Math.round(v) })}
           />
 
-          <ThemedText variant="captionSmall" tone="secondary" weight="600" style={styles.sectionHeader}>
+          <ThemedText
+            variant="captionSmall"
+            tone="secondary"
+            weight="600"
+            style={styles.sectionHeader}>
             VALUES
           </ThemedText>
           <View style={styles.valuesCard}>
@@ -286,7 +295,11 @@ export default function CustomColorScreen() {
             </View>
           </View>
 
-          <ThemedText variant="captionSmall" tone="secondary" weight="600" style={styles.sectionHeader}>
+          <ThemedText
+            variant="captionSmall"
+            tone="secondary"
+            weight="600"
+            style={styles.sectionHeader}>
             RECENTLY USED
           </ThemedText>
           <View style={styles.recentRow}>
@@ -309,8 +322,7 @@ export default function CustomColorScreen() {
                     styles.recentDot,
                     {
                       backgroundColor: c,
-                      borderColor:
-                        c.toUpperCase() === hex ? theme.text.primary : theme.glassBorder,
+                      borderColor: c.toUpperCase() === hex ? theme.text.primary : theme.glassBorder,
                       borderWidth: c.toUpperCase() === hex ? 2 : 1,
                     },
                     pressed && { opacity: 0.7 },
@@ -329,7 +341,7 @@ export default function CustomColorScreen() {
             haptic="success"
             icon={<Ionicons name="checkmark" size={18} color={readableTextOn(hex)} />}
           />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </SafeAreaView>
     </View>
   );

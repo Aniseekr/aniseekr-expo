@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
 import { Spacing, Typography } from '../../constants/DesignSystem';
@@ -50,132 +51,134 @@ function YearPickerSheetComponent({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Animated.View
-        entering={FadeIn.duration(160)}
-        exiting={FadeOut.duration(160)}
-        style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <Animated.View
-          entering={FadeInUp.duration(220)}
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.background.secondary,
-              borderColor: theme.glassBorder,
-            },
-          ]}>
-          <SafeAreaView edges={['bottom']}>
-            <View style={styles.handle} />
-            <View style={styles.headerRow}>
-              <Text style={[styles.title, { color: theme.text.primary }]}>Pick a year</Text>
-              <Pressable onPress={onClose} hitSlop={12}>
-                <MaterialIcons name="close" size={22} color={theme.text.secondary} />
-              </Pressable>
-            </View>
+          entering={FadeIn.duration(160)}
+          exiting={FadeOut.duration(160)}
+          style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          <Animated.View
+            entering={FadeInUp.duration(220)}
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.background.secondary,
+                borderColor: theme.glassBorder,
+              },
+            ]}>
+            <SafeAreaView edges={['bottom']}>
+              <View style={styles.handle} />
+              <View style={styles.headerRow}>
+                <Text style={[styles.title, { color: theme.text.primary }]}>Pick a year</Text>
+                <Pressable onPress={onClose} hitSlop={12}>
+                  <MaterialIcons name="close" size={22} color={theme.text.secondary} />
+                </Pressable>
+              </View>
 
-            <View
-              style={[
-                styles.searchBar,
-                {
-                  backgroundColor: theme.background.tertiary,
-                  borderColor: theme.glassBorder,
-                },
-              ]}>
-              <MaterialIcons name="search" size={18} color={theme.text.tertiary} />
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Filter by year..."
-                placeholderTextColor={theme.text.tertiary}
-                keyboardType="number-pad"
-                style={[styles.searchInput, { color: theme.text.primary }]}
-              />
-            </View>
+              <View
+                style={[
+                  styles.searchBar,
+                  {
+                    backgroundColor: theme.background.tertiary,
+                    borderColor: theme.glassBorder,
+                  },
+                ]}>
+                <MaterialIcons name="search" size={18} color={theme.text.tertiary} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Filter by year..."
+                  placeholderTextColor={theme.text.tertiary}
+                  keyboardType="number-pad"
+                  style={[styles.searchInput, { color: theme.text.primary }]}
+                />
+              </View>
 
-            <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
-              {filteredYears.map((y) => {
-                const isSelected = y === selectedYear;
-                return (
-                  <Pressable
-                    key={y}
-                    onPress={() => handleSelect(y)}
-                    style={({ pressed }) => [
-                      styles.yearRow,
-                      {
-                        backgroundColor: isSelected ? theme.accent + '20' : 'transparent',
-                        opacity: pressed ? 0.7 : 1,
-                      },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.yearText,
+              <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+                {filteredYears.map((y) => {
+                  const isSelected = y === selectedYear;
+                  return (
+                    <Pressable
+                      key={y}
+                      onPress={() => handleSelect(y)}
+                      style={({ pressed }) => [
+                        styles.yearRow,
                         {
-                          color: isSelected ? theme.accent : theme.text.primary,
-                          fontWeight: isSelected ? '700' : '500',
+                          backgroundColor: isSelected ? theme.accent + '20' : 'transparent',
+                          opacity: pressed ? 0.7 : 1,
                         },
                       ]}>
-                      {y}
-                    </Text>
-                    {isSelected ? (
-                      <MaterialIcons name="check-circle" size={20} color={theme.accent} />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-              {filteredYears.length === 0 ? (
-                <Text style={[styles.empty, { color: theme.text.tertiary }]}>No matches.</Text>
-              ) : null}
-            </ScrollView>
+                      <Text
+                        style={[
+                          styles.yearText,
+                          {
+                            color: isSelected ? theme.accent : theme.text.primary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}>
+                        {y}
+                      </Text>
+                      {isSelected ? (
+                        <MaterialIcons name="check-circle" size={20} color={theme.accent} />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+                {filteredYears.length === 0 ? (
+                  <Text style={[styles.empty, { color: theme.text.tertiary }]}>No matches.</Text>
+                ) : null}
+              </ScrollView>
 
-            {onPrevYear || onNextYear ? (
-              <View style={styles.quickRow}>
-                {onPrevYear ? (
-                  <Pressable
-                    onPress={() => {
-                      hapticsBridge.selection();
-                      onPrevYear();
-                      onClose();
-                    }}
-                    style={({ pressed }) => [
-                      styles.quickButton,
-                      {
-                        borderColor: theme.glassBorder,
-                        backgroundColor: theme.background.tertiary,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}>
-                    <MaterialIcons name="arrow-back" size={18} color={theme.text.primary} />
-                    <Text style={[styles.quickLabel, { color: theme.text.primary }]}>
-                      Previous year
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {onNextYear ? (
-                  <Pressable
-                    onPress={() => {
-                      hapticsBridge.selection();
-                      onNextYear();
-                      onClose();
-                    }}
-                    style={({ pressed }) => [
-                      styles.quickButton,
-                      {
-                        borderColor: theme.glassBorder,
-                        backgroundColor: theme.background.tertiary,
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}>
-                    <Text style={[styles.quickLabel, { color: theme.text.primary }]}>
-                      Next year
-                    </Text>
-                    <MaterialIcons name="arrow-forward" size={18} color={theme.text.primary} />
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-          </SafeAreaView>
+              {onPrevYear || onNextYear ? (
+                <View style={styles.quickRow}>
+                  {onPrevYear ? (
+                    <Pressable
+                      onPress={() => {
+                        hapticsBridge.selection();
+                        onPrevYear();
+                        onClose();
+                      }}
+                      style={({ pressed }) => [
+                        styles.quickButton,
+                        {
+                          borderColor: theme.glassBorder,
+                          backgroundColor: theme.background.tertiary,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}>
+                      <MaterialIcons name="arrow-back" size={18} color={theme.text.primary} />
+                      <Text style={[styles.quickLabel, { color: theme.text.primary }]}>
+                        Previous year
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onNextYear ? (
+                    <Pressable
+                      onPress={() => {
+                        hapticsBridge.selection();
+                        onNextYear();
+                        onClose();
+                      }}
+                      style={({ pressed }) => [
+                        styles.quickButton,
+                        {
+                          borderColor: theme.glassBorder,
+                          backgroundColor: theme.background.tertiary,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}>
+                      <Text style={[styles.quickLabel, { color: theme.text.primary }]}>
+                        Next year
+                      </Text>
+                      <MaterialIcons name="arrow-forward" size={18} color={theme.text.primary} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </SafeAreaView>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
