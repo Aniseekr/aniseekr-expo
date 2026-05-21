@@ -1,6 +1,15 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import '../global.css';
+import { installPromiseRejectionFilter } from '../libs/services/setup/promise-rejection-filter';
+
+// Re-enable RN's promise rejection tracker with a benign-pattern filter.
+// Currently swallows the CameraX zoom-supersession cancellation that
+// VisionCamera's high-frequency zoom updater triggers on every gesture
+// frame. See `promise-rejection-filter.ts` for the rationale and the
+// strict list of allowed patterns. Top-level call so it runs before any
+// component renders and emits its first setZoom.
+installPromiseRejectionFilter();
 import { useEffect, useRef, useState } from 'react';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { InteractionManager, Platform } from 'react-native';
