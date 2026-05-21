@@ -1124,7 +1124,7 @@ export default function CompareCaptureScreen() {
       maxZoom={maxZoom}
       onPickFocalStop={zoom.setStop}
       island={dialIsland}
-      onPickIsland={strategic.requestSwitch}
+      onPickIsland={handleRequestSwitch}
       islandPending={strategic.isSwitching}
     />
   );
@@ -1184,6 +1184,7 @@ export default function CompareCaptureScreen() {
             onMountError={handleMountError}
             onDeviceInfo={setDeviceInfo}
             showWarmup={!cameraIsReady || strategic.isSwitching}
+            freezeFrameUri={freezeFrameUri}
             frameOutput={sceneAnalyzer.frameOutput}
           />
         </CameraErrorBoundary>
