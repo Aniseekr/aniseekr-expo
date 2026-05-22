@@ -32,6 +32,17 @@ variable "sa_account_id" {
   }
 }
 
+variable "revenuecat_sa_account_id" {
+  type        = string
+  description = "account_id for the RevenueCat purchase-validation SA (the part before @). 6-30 chars."
+  default     = "revenuecat"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.revenuecat_sa_account_id))
+    error_message = "revenuecat_sa_account_id must be 6-30 chars, lowercase letters/digits/hyphens, starting with a letter."
+  }
+}
+
 variable "labels" {
   type        = map(string)
   description = "Labels applied to the project."

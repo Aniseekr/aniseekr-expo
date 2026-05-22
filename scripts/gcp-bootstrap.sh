@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 #
-# One-shot bootstrap: terraform apply + generate SA key out-of-band.
-# Idempotent — safe to re-run; key is regenerated only if --rotate-key is passed.
+# One-shot bootstrap: terraform apply + generate SA keys out-of-band.
+# Idempotent — safe to re-run. Existing keys are kept; pass --rotate-key
+# to regenerate both keys.
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TF_DIR="${ROOT}/infra/terraform"
-KEY_PATH="${ROOT}/secrets/play-sa-key.json"
+PUBLISHER_KEY_PATH="${ROOT}/secrets/play-sa-key.json"
+REVENUECAT_KEY_PATH="${ROOT}/secrets/revenuecat-sa-key.json"
 ROTATE=0
 
 for arg in "$@"; do
@@ -28,26 +30,34 @@ cd "${TF_DIR}"
 terraform init -upgrade >/dev/null
 terraform apply -auto-approve
 
-SA_EMAIL="$(terraform output -raw service_account_email)"
 PROJECT_ID="$(terraform output -raw project_id)"
+PUBLISHER_SA="$(terraform output -raw service_account_email)"
+REVENUECAT_SA="$(terraform output -raw revenuecat_service_account_email)"
 
 mkdir -p "${ROOT}/secrets"
 chmod 700 "${ROOT}/secrets"
 
-if [[ -f "${KEY_PATH}" && "${ROTATE}" -eq 0 ]]; then
-  echo "==> Key already exists at ${KEY_PATH#${ROOT}/} (skip; pass --rotate-key to regenerate)"
-else
-  if [[ -f "${KEY_PATH}" ]]; then
-    echo "==> Rotating key (old file will be overwritten)"
-  else
-    echo "==> Generating SA key"
+# gen_key <label> <sa-email> <key-path>
+gen_key() {
+  local label="$1" sa_email="$2" key_path="$3"
+  if [[ -f "${key_path}" && "${ROTATE}" -eq 0 ]]; then
+    echo "==> ${label} key already exists at ${key_path#${ROOT}/} (skip; pass --rotate-key to regenerate)"
+    return
   fi
-  gcloud iam service-accounts keys create "${KEY_PATH}" \
-    --iam-account="${SA_EMAIL}" \
+  if [[ -f "${key_path}" ]]; then
+    echo "==> Rotating ${label} key (old file will be overwritten)"
+  else
+    echo "==> Generating ${label} key"
+  fi
+  gcloud iam service-accounts keys create "${key_path}" \
+    --iam-account="${sa_email}" \
     --project="${PROJECT_ID}"
-  chmod 600 "${KEY_PATH}"
-  echo "==> Key written to ${KEY_PATH#${ROOT}/}"
-fi
+  chmod 600 "${key_path}"
+  echo "==> ${label} key written to ${key_path#${ROOT}/}"
+}
+
+gen_key "Play publisher" "${PUBLISHER_SA}" "${PUBLISHER_KEY_PATH}"
+gen_key "RevenueCat" "${REVENUECAT_SA}" "${REVENUECAT_KEY_PATH}"
 
 echo
 terraform output -raw next_steps

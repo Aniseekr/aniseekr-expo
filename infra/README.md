@@ -1,12 +1,12 @@
 # Play Console Publishing Infrastructure
 
 Local CLI release flow for the AniSeekr Android app, backed by a Terraform-managed
-GCP project and a service account whose key is generated **out of band** so it
-never lands in `terraform.tfstate` ("clean mode").
+GCP project and two service accounts whose keys are generated **out of band** so
+they never land in `terraform.tfstate` ("clean mode").
 
 ```
-infra/terraform/  -> GCP project + APIs + SA (no key in state)
-secrets/          -> SA JSON key (gitignored, mode 0600)
+infra/terraform/  -> GCP project + APIs + 2 SAs (no keys in state)
+secrets/          -> SA JSON keys (gitignored, mode 0600)
 scripts/          -> bootstrap / rotate / submit helpers
 eas.json          -> submit profile points at ./secrets/play-sa-key.json
 ```
@@ -32,10 +32,13 @@ bun run gcp:bootstrap
 
 This:
 1. Runs `terraform apply` in `infra/terraform/` — creates the GCP project
-   `aniseekr-android-release`, enables `androidpublisher.googleapis.com`,
-   creates SA `play-publisher@aniseekr-android-release.iam.gserviceaccount.com`.
+   `aniseekr-android-release`, enables `androidpublisher.googleapis.com`, and
+   creates two service accounts in that project:
+   - `play-publisher@…` — uploads AABs to Google Play.
+   - `revenuecat@…` — lets RevenueCat validate Google Play purchases.
 2. Calls `gcloud iam service-accounts keys create` to write
-   `secrets/play-sa-key.json` (chmod 600). The key never touches tfstate.
+   `secrets/play-sa-key.json` and `secrets/revenuecat-sa-key.json`
+   (chmod 600). The keys never touch tfstate.
 
 Re-running is idempotent. Pass `--rotate-key` to overwrite the local key.
 
@@ -59,6 +62,20 @@ Open <https://play.google.com/console> as the developer account owner.
 5. **Upload the very first AAB by hand** via Play Console UI. Google requires the
    initial release to be made by a human; only after that can the SA upload
    subsequent builds.
+
+#### RevenueCat validator SA
+
+Invite `revenuecat@…` the same way (Users and permissions → Invite new users),
+but grant **read-only, least-privilege** access — **not** Release manager:
+
+- **View app information** (read-only)
+- **View financial data, orders, and cancellation survey responses**
+- **Manage orders and subscriptions**
+
+Then upload `secrets/revenuecat-sa-key.json` into the RevenueCat dashboard
+(Project → Google Play app credentials). That JSON goes to RevenueCat only — it
+is never bundled into the app or EAS. Allow a few hours for Google to propagate
+the new permissions before RevenueCat's credential check passes.
 
 ### 3. Verify
 
