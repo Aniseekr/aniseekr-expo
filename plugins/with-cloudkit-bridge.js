@@ -114,7 +114,12 @@ function ensureGroupUnderParent(project, parentName, childName) {
     }
   }
 
-  const newGroup = project.addPbxGroup([], childName, childName);
+  // path must carry the parent prefix (e.g. "AniSeekr/CloudKitBridge"): the
+  // "AniSeekr" group is a name-only logical group with no path of its own, so
+  // a bare "CloudKitBridge" path resolves to ios/CloudKitBridge/ instead of
+  // ios/AniSeekr/CloudKitBridge/ where withDangerousMod actually writes the
+  // files. Mirrors the sibling "Supporting" group (path = AniSeekr/Supporting).
+  const newGroup = project.addPbxGroup([], childName, `${parentName}/${childName}`);
   project.addToPbxGroup(newGroup.uuid, parentKey);
   return newGroup.uuid;
 }
