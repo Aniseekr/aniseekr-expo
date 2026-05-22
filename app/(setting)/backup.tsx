@@ -11,12 +11,11 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
-
-// Required for the OAuth redirect to dismiss the in-app browser and hand the
-// result back to expo-auth-session. Safe to call at module scope.
-WebBrowser.maybeCompleteAuthSession();
+import {
+  GoogleSignin,
+  isNoSavedCredentialFoundResponse,
+  isSuccessResponse,
+} from '@react-native-google-signin/google-signin';
 
 import {
   SettingsRow,
@@ -34,7 +33,6 @@ import {
   CloudBackup,
   CloudKitLiveSync,
   GOOGLE_DRIVE_APP_DATA_SCOPE,
-  GoogleCredentialStore,
   createDefaultBackupService,
   generateBackupKey,
   importLegacyAniseekerExport,
@@ -99,22 +97,10 @@ const ENCRYPTION_TOGGLE_KEY = 'aniseekr.cloud.encryption.enabled.v1';
 
 type Phase = 'idle' | 'checking' | 'uploading' | 'downloading' | 'restoring' | 'syncing';
 
-interface GoogleClientIds {
-  androidClientId?: string;
-  iosClientId?: string;
-  webClientId?: string;
-}
-
-// EXPO_PUBLIC_* env vars are inlined into the JS bundle at build time. OAuth
-// client IDs are public by design (only client *secrets* are sensitive, and
-// the mobile flow has none), so shipping them in the bundle is expected.
-function readGoogleClientIds(): GoogleClientIds {
-  return {
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_DRIVE_ANDROID_CLIENT_ID || undefined,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_DRIVE_IOS_CLIENT_ID || undefined,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_DRIVE_WEB_CLIENT_ID || undefined,
-  };
-}
+// The Web OAuth client ID configures the native Google Sign-In SDK. EXPO_PUBLIC_*
+// is inlined into the JS bundle at build time; OAuth client IDs are public by
+// design, so shipping them in the bundle is expected.
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_DRIVE_WEB_CLIENT_ID || undefined;
 
 export default function BackupScreen() {
   const { theme } = useTheme();
@@ -134,7 +120,6 @@ export default function BackupScreen() {
   const cloud = useMemo(() => safeMakeCloudBackup(), []);
   const backupService = useMemo(() => createDefaultBackupService(), []);
   const keyStore = useMemo(() => new BackupKeyStore({ storage: SecureStore }), []);
-  const googleStore = useMemo(() => new GoogleCredentialStore({ storage: SecureStore }), []);
   const autoBackup = useMemo(
     () =>
       new AutoBackupScheduler({
@@ -150,11 +135,7 @@ export default function BackupScreen() {
     [backupService, cloud]
   );
 
-  // Google OAuth is wired in the <GoogleDriveAuth> child component so the
-  // useAuthRequest hook is never invoked on iOS, nor when client IDs are
-  // unset (it throws an invariant in that case).
-  const googleClientIds = readGoogleClientIds();
-  const googleConfigured = !!googleClientIds.androidClientId || !!googleClientIds.webClientId;
+  const googleConfigured = !!GOOGLE_WEB_CLIENT_ID;
 
   // Hydrate persisted state once.
   useEffect(() => {
@@ -171,12 +152,6 @@ export default function BackupScreen() {
           cloud.setEncryptionKey(key);
           setEncryptionEnabled(true);
         }
-      }
-    });
-    void googleStore.load().then((creds) => {
-      if (creds && !googleStore.isExpired(creds)) {
-        if (cloud) cloud.setGoogleAccessToken(creds.accessToken);
-        setHasGoogleToken(true);
       }
     });
     void autoBackup.loadPrefs().then((prefs) => {
@@ -204,28 +179,19 @@ export default function BackupScreen() {
         setAvailable(false);
         setPhase('idle');
       });
-  }, [cloud, keyStore, googleStore, autoBackup]);
+  }, [cloud, keyStore, autoBackup]);
 
-  // Called by <GoogleDriveAuth> when an OAuth sign-in succeeds.
+  // Called by <GoogleDriveAuth> when a Google sign-in (or silent restore) yields
+  // a fresh Drive access token. The native SDK owns session persistence.
   const onGoogleAuthenticated = useCallback(
-    async (auth: { accessToken: string; refreshToken: string | null; expiresIn?: number; scope?: string; tokenType?: string }) => {
-      const expiresAt = auth.expiresIn
-        ? Date.now() + auth.expiresIn * 1000
-        : Date.now() + 3600_000;
-      await googleStore.save({
-        accessToken: auth.accessToken,
-        refreshToken: auth.refreshToken,
-        expiresAt,
-        scope: auth.scope,
-        tokenType: auth.tokenType ?? 'Bearer',
-      });
+    async (accessToken: string) => {
       if (cloud) {
-        cloud.setGoogleAccessToken(auth.accessToken);
+        cloud.setGoogleAccessToken(accessToken);
         setAvailable(await cloud.isAvailable());
       }
       setHasGoogleToken(true);
     },
-    [cloud, googleStore]
+    [cloud]
   );
 
   // AppState fallback for auto-backup: every time the app goes background +
@@ -416,12 +382,11 @@ export default function BackupScreen() {
     }
   }, [backupService]);
 
-  const onSignOutGoogle = useCallback(async () => {
-    await googleStore.clear();
+  const onGoogleSignedOut = useCallback(() => {
     if (cloud) cloud.setGoogleAccessToken(null);
     setHasGoogleToken(false);
     setAvailable(false);
-  }, [cloud, googleStore]);
+  }, [cloud]);
 
   const busy = phase !== 'idle' && phase !== 'checking';
 
@@ -563,17 +528,17 @@ export default function BackupScreen() {
         <SettingsSection title="Google Drive">
           {googleConfigured ? (
             <GoogleDriveAuth
-              clientIds={googleClientIds}
+              webClientId={GOOGLE_WEB_CLIENT_ID}
               hasToken={hasGoogleToken}
               busy={busy}
               onAuthenticated={onGoogleAuthenticated}
-              onSignOut={onSignOutGoogle}
+              onSignedOut={onGoogleSignedOut}
             />
           ) : (
             <View style={{ padding: Spacing.sm + 2 }}>
               <ThemedText variant="bodySmall" tone="secondary">
-                Set googleClientIds in app.json → expo.extra to enable Google
-                sign-in for Drive backup.
+                Set EXPO_PUBLIC_GOOGLE_DRIVE_WEB_CLIENT_ID in .env to enable
+                Google Drive backup.
               </ThemedText>
             </View>
           )}
@@ -583,47 +548,82 @@ export default function BackupScreen() {
   );
 }
 
-// Owns the Google OAuth hook. Only ever mounted on Android with configured
-// client IDs — useAuthRequest throws an invariant otherwise, so it must not
-// run in the parent unconditionally.
+// Google Drive sign-in via the native Google Sign-In SDK. Only mounted on
+// Android (the Google Drive section is Android-only). Replaces the old
+// expo-auth-session browser flow, which Google rejects (400 invalid_request)
+// for native Android OAuth clients — those clients authenticate via the
+// package name + SHA-1, which is exactly what this SDK uses.
 function GoogleDriveAuth({
-  clientIds,
+  webClientId,
   hasToken,
   busy,
   onAuthenticated,
-  onSignOut,
+  onSignedOut,
 }: {
-  clientIds: GoogleClientIds;
+  webClientId?: string;
   hasToken: boolean;
   busy: boolean;
-  onAuthenticated: (auth: {
-    accessToken: string;
-    refreshToken: string | null;
-    expiresIn?: number;
-    scope?: string;
-    tokenType?: string;
-  }) => void | Promise<void>;
-  onSignOut: () => void;
+  onAuthenticated: (accessToken: string) => void | Promise<void>;
+  onSignedOut: () => void;
 }) {
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: clientIds.androidClientId,
-    iosClientId: clientIds.iosClientId,
-    webClientId: clientIds.webClientId,
-    scopes: [GOOGLE_DRIVE_APP_DATA_SCOPE],
-  });
+  const [working, setWorking] = useState(false);
 
+  // Configure the SDK once, then restore any prior session without UI.
   useEffect(() => {
-    if (response?.type !== 'success') return;
-    const auth = response.authentication;
-    if (!auth?.accessToken) return;
-    void onAuthenticated({
-      accessToken: auth.accessToken,
-      refreshToken: auth.refreshToken ?? null,
-      expiresIn: auth.expiresIn,
-      scope: auth.scope,
-      tokenType: auth.tokenType ?? 'Bearer',
-    });
-  }, [response, onAuthenticated]);
+    let active = true;
+    try {
+      GoogleSignin.configure({
+        webClientId,
+        scopes: [GOOGLE_DRIVE_APP_DATA_SCOPE],
+      });
+    } catch (err) {
+      Logger.warn('[Backup] GoogleSignin.configure failed', err);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await GoogleSignin.signInSilently();
+        if (!active || isNoSavedCredentialFoundResponse(res)) return;
+        const { accessToken } = await GoogleSignin.getTokens();
+        if (active && accessToken) await onAuthenticated(accessToken);
+      } catch (err) {
+        Logger.warn('[Backup] Google silent restore failed', err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [webClientId, onAuthenticated]);
+
+  const signIn = useCallback(async () => {
+    try {
+      setWorking(true);
+      hapticsBridge.tap();
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const res = await GoogleSignin.signIn();
+      if (!isSuccessResponse(res)) return; // user cancelled the picker
+      const { accessToken } = await GoogleSignin.getTokens();
+      await onAuthenticated(accessToken);
+      hapticsBridge.success();
+    } catch (err) {
+      Logger.error('[Backup] Google sign-in failed', err);
+      Alert.alert('Google sign-in failed', errorMessage(err));
+    } finally {
+      setWorking(false);
+    }
+  }, [onAuthenticated]);
+
+  const signOut = useCallback(async () => {
+    try {
+      setWorking(true);
+      await GoogleSignin.signOut();
+    } catch (err) {
+      Logger.warn('[Backup] Google sign-out failed', err);
+    } finally {
+      setWorking(false);
+      onSignedOut();
+    }
+  }, [onSignedOut]);
 
   return (
     <View style={{ padding: Spacing.sm + 2, gap: Spacing.sm }}>
@@ -635,19 +635,19 @@ function GoogleDriveAuth({
       {hasToken ? (
         <ThemedButton
           label="Sign out of Google"
-          onPress={onSignOut}
+          onPress={signOut}
           size="md"
           variant="secondary"
           fullWidth
-          disabled={busy}
+          disabled={busy || working}
         />
       ) : (
         <ThemedButton
-          label="Sign in with Google"
-          onPress={() => void promptAsync()}
+          label={working ? 'Signing in…' : 'Sign in with Google'}
+          onPress={signIn}
           size="md"
           fullWidth
-          disabled={!request || busy}
+          disabled={busy || working}
         />
       )}
     </View>

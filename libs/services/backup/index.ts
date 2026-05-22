@@ -55,16 +55,7 @@ export {
   type ICloudDocumentsMode,
 } from './cloud-backup';
 
-export {
-  GOOGLE_DRIVE_APP_DATA_SCOPE,
-  GOOGLE_DRIVE_FILE_SCOPE,
-  GoogleCredentialStore,
-  createGoogleCredentialStore,
-  refreshAccessToken,
-  type GoogleCredentials,
-  type RefreshOptions,
-  type RefreshTokenInput,
-} from './google-auth';
+export { GOOGLE_DRIVE_APP_DATA_SCOPE } from './google-auth';
 
 export {
   BackupEncryption,

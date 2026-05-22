@@ -123,6 +123,12 @@
             "3qcr597p9d.skadnetwork"
           ]
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.175505448786-mljrulreo2389r513krj23a09qsiaiii"
+        }
       ]
     ],
     "orientation": "default",
