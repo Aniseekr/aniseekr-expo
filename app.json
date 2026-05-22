@@ -20,6 +20,7 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
+      "./plugins/with-cloudkit-bridge.js",
       [
         "expo-notifications",
         {
