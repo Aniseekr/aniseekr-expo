@@ -601,6 +601,12 @@ export default function SettingsScreen() {
               label="Cache"
               onPress={() => router.push('/(setting)/cache')}
             />
+            <SettingsRow
+              icon="cloud-upload-outline"
+              label="Backup & Restore"
+              description="iCloud · Google Drive · import old aniseeker data"
+              onPress={() => router.push('/(setting)/backup')}
+            />
           </SettingsSection>
 
           <SettingsSection title="APPEARANCE">
