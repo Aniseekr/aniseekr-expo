@@ -68,6 +68,8 @@ export interface CloudStorageLike {
   ): Promise<{ size: number; mtimeMs: number; mtime: Date }>;
   getProvider(): CloudProviderId | string;
   setProviderOptions(options: Record<string, unknown>): void;
+  /** Switch the active provider. Optional — not every backend supports it. */
+  setProvider?(provider: CloudProviderId): void;
 }
 
 export interface CloudBackupOptions {
@@ -95,6 +97,7 @@ export class CloudBackup {
   private readonly config: CloudBackupConfig;
   private readonly encryption: BackupEncryption;
   private encryptionKey: Uint8Array | null;
+  private googleAccessToken: string | null = null;
 
   constructor(opts: CloudBackupOptions) {
     this.storage = opts.storage;
@@ -155,10 +158,31 @@ export class CloudBackup {
    * call regardless — the underlying provider ignores irrelevant options.
    */
   setGoogleAccessToken(token: string | null): void {
+    this.googleAccessToken = token;
     try {
       this.storage.setProviderOptions({ accessToken: token });
     } catch (err) {
       Logger.warn('[CloudBackup] setProviderOptions threw', err);
+    }
+  }
+
+  /**
+   * Switch the active cloud provider at runtime (e.g. iCloud → Google Drive).
+   * The underlying library resets provider options on switch, so re-apply the
+   * per-provider scope and any Google access token set earlier.
+   */
+  setProvider(provider: CloudProviderId): void {
+    if (typeof this.storage.setProvider !== 'function') {
+      throw new Error('The active cloud storage backend cannot switch providers');
+    }
+    this.storage.setProvider(provider);
+    this.applyProviderOptions();
+    if (this.googleAccessToken !== null) {
+      try {
+        this.storage.setProviderOptions({ accessToken: this.googleAccessToken });
+      } catch (err) {
+        Logger.warn('[CloudBackup] re-applying Google token after switch failed', err);
+      }
     }
   }
 

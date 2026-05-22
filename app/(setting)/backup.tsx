@@ -11,11 +11,6 @@ import {
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import {
-  GoogleSignin,
-  isNoSavedCredentialFoundResponse,
-  isSuccessResponse,
-} from '@react-native-google-signin/google-signin';
 
 import {
   SettingsRow,
@@ -39,6 +34,7 @@ import {
   isLegacyAniseekerExport,
   parseBackupEnvelope,
   type BackupEnvelopeV1,
+  type CloudProviderId,
   type CloudScope,
   type RestoreDiff,
   type RestoreSummary,
@@ -92,15 +88,31 @@ try {
   };
 }
 
+// @react-native-google-signin/google-signin runs TurboModuleRegistry
+// .getEnforcing('RNGoogleSignin') at module-eval time, which throws on a build
+// that doesn't link the native module. A static import would let that throw
+// crash the Backup screen the moment Expo Router loads this route — so load it
+// lazily in a try/catch. A build missing the module just disables Drive backup.
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
+let GoogleSigninLib: GoogleSigninModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  GoogleSigninLib = require('@react-native-google-signin/google-signin');
+} catch (err) {
+  Logger.warn('[Backup] @react-native-google-signin/google-signin unavailable', err);
+}
+
 const LAST_BACKUP_KEY = 'aniseekr.cloud.lastBackup.v1';
 const ENCRYPTION_TOGGLE_KEY = 'aniseekr.cloud.encryption.enabled.v1';
+const PROVIDER_KEY = 'aniseekr.cloud.provider.v1';
 
 type Phase = 'idle' | 'checking' | 'uploading' | 'downloading' | 'restoring' | 'syncing';
 
-// The Web OAuth client ID configures the native Google Sign-In SDK. EXPO_PUBLIC_*
-// is inlined into the JS bundle at build time; OAuth client IDs are public by
-// design, so shipping them in the bundle is expected.
+// The Web OAuth client ID configures the native Google Sign-In SDK; iOS also
+// needs its own iOS client ID. EXPO_PUBLIC_* is inlined into the JS bundle at
+// build time; OAuth client IDs are public by design, so shipping them is fine.
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_DRIVE_WEB_CLIENT_ID || undefined;
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_DRIVE_IOS_CLIENT_ID || undefined;
 
 export default function BackupScreen() {
   const { theme } = useTheme();
@@ -167,18 +179,25 @@ export default function BackupScreen() {
       return;
     }
     setPhase('checking');
-    setProvider(cloud.getProvider());
-    setScope(cloud.getActiveScope());
-    cloud
-      .isAvailable()
-      .then((ok) => {
-        setAvailable(ok);
-        setPhase('idle');
-      })
-      .catch(() => {
+    void (async () => {
+      const saved = await AsyncStorage.getItem(PROVIDER_KEY);
+      if ((saved === 'icloud' || saved === 'googledrive') && saved !== cloud.getProvider()) {
+        try {
+          cloud.setProvider(saved);
+        } catch (err) {
+          Logger.warn('[Backup] could not restore saved provider', err);
+        }
+      }
+      setProvider(cloud.getProvider());
+      setScope(cloud.getActiveScope());
+      try {
+        setAvailable(await cloud.isAvailable());
+      } catch {
         setAvailable(false);
+      } finally {
         setPhase('idle');
-      });
+      }
+    })();
   }, [cloud, keyStore, autoBackup]);
 
   // Called by <GoogleDriveAuth> when a Google sign-in (or silent restore) yields
@@ -192,6 +211,33 @@ export default function BackupScreen() {
       setHasGoogleToken(true);
     },
     [cloud]
+  );
+
+  // iOS lets the user choose iCloud or Google Drive; Android is always Drive.
+  const selectProvider = useCallback(
+    async (next: CloudProviderId) => {
+      if (!cloud || next === provider) return;
+      try {
+        cloud.setProvider(next);
+      } catch (err) {
+        Logger.warn('[Backup] setProvider failed', err);
+        Alert.alert('Unavailable', `${providerLabel(next)} is not available on this device.`);
+        return;
+      }
+      setProvider(next);
+      setScope(cloud.getActiveScope());
+      void AsyncStorage.setItem(PROVIDER_KEY, next);
+      setHasGoogleToken(false);
+      setPhase('checking');
+      try {
+        setAvailable(await cloud.isAvailable());
+      } catch {
+        setAvailable(false);
+      } finally {
+        setPhase('idle');
+      }
+    },
+    [cloud, provider]
   );
 
   // AppState fallback for auto-backup: every time the app goes background +
@@ -423,6 +469,34 @@ export default function BackupScreen() {
         {phase === 'checking' ? <ActivityIndicator color={theme.text.secondary} /> : null}
       </View>
 
+      {Platform.OS === 'ios' ? (
+        <SettingsSection title="Backup destination">
+          <SettingsRow
+            icon="cloud"
+            label="iCloud Drive"
+            description="Native to iPhone — no sign-in needed"
+            onPress={busy ? undefined : () => selectProvider('icloud')}
+            rightSlot={
+              provider === 'icloud' ? (
+                <MaterialIcons name="check-circle" size={20} color={theme.accent} />
+              ) : undefined
+            }
+          />
+          <Divider />
+          <SettingsRow
+            icon="add-to-drive"
+            label="Google Drive"
+            description="Cross-platform — restorable on Android too"
+            onPress={busy ? undefined : () => selectProvider('googledrive')}
+            rightSlot={
+              provider === 'googledrive' ? (
+                <MaterialIcons name="check-circle" size={20} color={theme.accent} />
+              ) : undefined
+            }
+          />
+        </SettingsSection>
+      ) : null}
+
       <SettingsSection title="Backup">
         <View style={{ padding: Spacing.sm + 2, gap: Spacing.sm }}>
           <ThemedButton
@@ -524,11 +598,12 @@ export default function BackupScreen() {
         </SettingsSection>
       ) : null}
 
-      {Platform.OS === 'android' ? (
+      {provider === 'googledrive' ? (
         <SettingsSection title="Google Drive">
           {googleConfigured ? (
             <GoogleDriveAuth
               webClientId={GOOGLE_WEB_CLIENT_ID}
+              iosClientId={GOOGLE_IOS_CLIENT_ID}
               hasToken={hasGoogleToken}
               busy={busy}
               onAuthenticated={onGoogleAuthenticated}
@@ -548,19 +623,21 @@ export default function BackupScreen() {
   );
 }
 
-// Google Drive sign-in via the native Google Sign-In SDK. Only mounted on
-// Android (the Google Drive section is Android-only). Replaces the old
-// expo-auth-session browser flow, which Google rejects (400 invalid_request)
-// for native Android OAuth clients — those clients authenticate via the
-// package name + SHA-1, which is exactly what this SDK uses.
+// Google Drive sign-in via the native Google Sign-In SDK. Mounted whenever
+// Google Drive is the active provider (Android always, iOS opt-in). Replaces
+// the old expo-auth-session browser flow, which Google rejects (400
+// invalid_request) for native OAuth clients — those authenticate via the
+// package name + SHA-1 (Android) or bundle ID (iOS), which this SDK uses.
 function GoogleDriveAuth({
   webClientId,
+  iosClientId,
   hasToken,
   busy,
   onAuthenticated,
   onSignedOut,
 }: {
   webClientId?: string;
+  iosClientId?: string;
   hasToken: boolean;
   busy: boolean;
   onAuthenticated: (accessToken: string) => void | Promise<void>;
@@ -570,10 +647,13 @@ function GoogleDriveAuth({
 
   // Configure the SDK once, then restore any prior session without UI.
   useEffect(() => {
+    const lib = GoogleSigninLib;
+    if (!lib) return;
     let active = true;
     try {
-      GoogleSignin.configure({
+      lib.GoogleSignin.configure({
         webClientId,
+        iosClientId,
         scopes: [GOOGLE_DRIVE_APP_DATA_SCOPE],
       });
     } catch (err) {
@@ -582,9 +662,9 @@ function GoogleDriveAuth({
     }
     void (async () => {
       try {
-        const res = await GoogleSignin.signInSilently();
-        if (!active || isNoSavedCredentialFoundResponse(res)) return;
-        const { accessToken } = await GoogleSignin.getTokens();
+        const res = await lib.GoogleSignin.signInSilently();
+        if (!active || lib.isNoSavedCredentialFoundResponse(res)) return;
+        const { accessToken } = await lib.GoogleSignin.getTokens();
         if (active && accessToken) await onAuthenticated(accessToken);
       } catch (err) {
         Logger.warn('[Backup] Google silent restore failed', err);
@@ -593,16 +673,18 @@ function GoogleDriveAuth({
     return () => {
       active = false;
     };
-  }, [webClientId, onAuthenticated]);
+  }, [webClientId, iosClientId, onAuthenticated]);
 
   const signIn = useCallback(async () => {
+    const lib = GoogleSigninLib;
+    if (!lib) return;
     try {
       setWorking(true);
       hapticsBridge.tap();
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const res = await GoogleSignin.signIn();
-      if (!isSuccessResponse(res)) return; // user cancelled the picker
-      const { accessToken } = await GoogleSignin.getTokens();
+      await lib.GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const res = await lib.GoogleSignin.signIn();
+      if (!lib.isSuccessResponse(res)) return; // user cancelled the picker
+      const { accessToken } = await lib.GoogleSignin.getTokens();
       await onAuthenticated(accessToken);
       hapticsBridge.success();
     } catch (err) {
@@ -616,7 +698,7 @@ function GoogleDriveAuth({
   const signOut = useCallback(async () => {
     try {
       setWorking(true);
-      await GoogleSignin.signOut();
+      await GoogleSigninLib?.GoogleSignin.signOut();
     } catch (err) {
       Logger.warn('[Backup] Google sign-out failed', err);
     } finally {

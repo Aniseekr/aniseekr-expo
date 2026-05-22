@@ -9,12 +9,14 @@ import { createEmptyBackup } from '../../../libs/services/backup/schema';
 interface FakeCloud extends CloudStorageLike {
   _files: Map<string, string>;
   _lastOptions?: { accessToken?: string | null };
+  _provider: 'icloud' | 'googledrive';
 }
 
 function makeFakeCloud(): FakeCloud {
   const files = new Map<string, string>();
   const fake: FakeCloud = {
     _files: files,
+    _provider: 'icloud',
     async exists(path: string) {
       return files.has(path);
     },
@@ -38,10 +40,13 @@ function makeFakeCloud(): FakeCloud {
       return true;
     },
     getProvider() {
-      return 'icloud';
+      return fake._provider;
     },
     setProviderOptions(opts: { accessToken?: string | null }) {
       fake._lastOptions = opts;
+    },
+    setProvider(provider) {
+      fake._provider = provider;
     },
   };
   return fake;
@@ -115,5 +120,15 @@ describe('backup/cloud-backup', () => {
 
     const unkeyedSvc = new CloudBackup({ storage: cipherCloud });
     await expect(unkeyedSvc.download()).rejects.toThrow(/encrypted/);
+  });
+
+  it('CLOUD-008 setProvider switches provider and re-applies scope + Google token', () => {
+    svc.setGoogleAccessToken('tok-1');
+    svc.setProvider('googledrive');
+
+    expect(cloud._provider).toBe('googledrive');
+    expect(svc.getActiveScope()).toBe('app_data');
+    // The library resets provider options on switch — the token must survive.
+    expect(cloud._lastOptions).toEqual({ accessToken: 'tok-1' });
   });
 });
