@@ -112,6 +112,7 @@ export default function CameraSettingsSheet({
           </View>
 
           <ScrollView
+            style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
             <SettingsSection title="Capture mode">
@@ -323,6 +324,14 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.xxl,
     maxHeight: '85%',
+  },
+  // `flexShrink: 1` lets the ScrollView collapse to whatever space remains
+  // inside the sheet's `maxHeight: '85%'` cap so its content actually scrolls
+  // instead of being clipped by the sheet's `overflow: 'hidden'`. Without it
+  // the first SwitchRow ("Silent shutter") fell off the bottom on shorter
+  // screens (and any time the sheet opened in landscape).
+  scroll: {
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',

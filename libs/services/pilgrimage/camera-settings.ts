@@ -105,7 +105,12 @@ export interface CameraSettings {
 }
 
 export const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
-  mute: false,
+  // Silent by default — pilgrimage shooting is mostly in cafés, stations,
+  // shrines, etc. where a loud shutter is socially loud. The OS may still
+  // force the sound (e.g. in JP iOS), but defaulting to muted matches user
+  // expectation. Users who saved an explicit `mute: false` keep their value
+  // through `pickValidSettings`; only first-launch and fresh installs flip.
+  mute: true,
   mirror: false,
   animateShutter: true,
   quality: 'high',
