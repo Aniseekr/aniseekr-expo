@@ -3,7 +3,7 @@
 // SeasonalCarousel for Seasonal (matches "03 — Home Carousel (Seasonal)"
 // in japanwalker.pen), and a hero + ranked-list layout for Trend.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -41,6 +41,7 @@ import {
   type SeasonalLayout,
   type SwipePrefs,
 } from '../../../libs/services/user-prefs';
+import { loadGenreSwipePage } from '../../../libs/services/rate/genre-deck-prefetch';
 
 const MODE_OPTIONS: readonly { value: ViewMode; label: string }[] = [
   { value: 'discovery', label: 'Discovery' },
@@ -75,6 +76,7 @@ export default function HomeRateScreen() {
   const [trendPilgrimages, setTrendPilgrimages] = useState<AnitabiBangumi[]>([]);
   const [loadingTrendPilgrimages, setLoadingTrendPilgrimages] = useState(false);
   const [trendRange, setTrendRange] = useState<TrendRange>('week');
+  const genreWarmupsRef = useRef(new Set<string>());
 
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -123,14 +125,24 @@ export default function HomeRateScreen() {
     };
   }, [state.viewMode, trendPilgrimages.length, loadingTrendPilgrimages]);
 
+  const warmGenreDeck = useCallback((genre: Genre) => {
+    if (genreWarmupsRef.current.has(genre.id)) return;
+    genreWarmupsRef.current.add(genre.id);
+    if (genre.image) void Image.prefetch(genre.image).catch(() => undefined);
+    void loadGenreSwipePage(genre.id, 1).catch(() => {
+      genreWarmupsRef.current.delete(genre.id);
+    });
+  }, []);
+
   const handleGenreSelect = useCallback(
     (genre: Genre) => {
+      warmGenreDeck(genre);
       router.push({
         pathname: '/(rate)/rating',
         params: { genreId: genre.id, genreName: genre.displayName },
       });
     },
-    [router]
+    [router, warmGenreDeck]
   );
 
   const handleAnimeSelect = useCallback(
@@ -295,7 +307,11 @@ export default function HomeRateScreen() {
                 {state.genresLoading && state.availableGenres.length === 0 ? (
                   <GenreCarouselSkeleton />
                 ) : (
-                  <GenreCarousel data={state.availableGenres} onSelect={handleGenreSelect} />
+                  <GenreCarousel
+                    data={state.availableGenres}
+                    onPreview={warmGenreDeck}
+                    onSelect={handleGenreSelect}
+                  />
                 )}
               </View>
             ) : null}

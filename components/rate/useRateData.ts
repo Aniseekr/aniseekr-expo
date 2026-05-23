@@ -140,11 +140,9 @@ export function useRateData() {
       loadWeeklyTrend();
     }
     if (viewMode === 'tracking') {
-      loadRecommendations();
+      loadSeasonal();
     }
-    // Always load seasonal for dashboard
-    loadSeasonal();
-  }, [loadTrend, loadWeeklyTrend, loadRecommendations, loadSeasonal, viewMode]);
+  }, [loadTrend, loadWeeklyTrend, loadSeasonal, viewMode]);
 
   const state = useMemo(
     () => ({

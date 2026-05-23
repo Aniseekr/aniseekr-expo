@@ -20,6 +20,7 @@ import { Genre } from './types';
 type Props = {
   data: Genre[];
   onSelect?: (genre: Genre) => void;
+  onPreview?: (genre: Genre) => void;
 };
 
 // Focused card ≈ 70% of screen width so the previous/next cards peek
@@ -63,7 +64,7 @@ function useGenreCarouselMetrics() {
   };
 }
 
-function GenreCarouselComponent({ data, onSelect }: Props) {
+function GenreCarouselComponent({ data, onSelect, onPreview }: Props) {
   const { cardWidth, cardHeight, itemFullWidth, sidePadding, containerMinHeight } =
     useGenreCarouselMetrics();
 
@@ -89,10 +90,11 @@ function GenreCarouselComponent({ data, onSelect }: Props) {
             cardHeight={cardHeight}
             spacing={SPACING}
             onSelect={onSelect}
+            onPreview={onPreview}
           />
         );
       },
-    [scrollX, itemFullWidth, cardWidth, cardHeight, onSelect]
+    [scrollX, itemFullWidth, cardWidth, cardHeight, onSelect, onPreview]
   );
 
   return (
@@ -124,6 +126,7 @@ interface GenreCarouselItemProps {
   cardHeight: number;
   spacing: number;
   onSelect?: (g: Genre) => void;
+  onPreview?: (g: Genre) => void;
 }
 
 const GenreCarouselItem = memo(function GenreCarouselItem({
@@ -135,6 +138,7 @@ const GenreCarouselItem = memo(function GenreCarouselItem({
   cardHeight,
   spacing,
   onSelect,
+  onPreview,
 }: GenreCarouselItemProps) {
   const inputRange = [
     (index - 1) * itemFullWidth,
@@ -165,6 +169,7 @@ const GenreCarouselItem = memo(function GenreCarouselItem({
           title={genre.displayName}
           image={genre.image}
           genreId={genre.id}
+          onPressIn={() => onPreview?.(genre)}
           onPress={() => onSelect?.(genre)}
           width={cardWidth}
           height={cardHeight}

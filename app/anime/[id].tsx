@@ -1,6 +1,15 @@
 import { useLocalSearchParams, useNavigation, useRouter, Stack } from 'expo-router';
 import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Linking, Share } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  InteractionManager,
+  Linking,
+  Share,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -202,13 +211,16 @@ export default function AnimeDetailScreen() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    void refreshCollectionFlags(id, () => cancelled).then((flags) => {
-      if (cancelled || !flags) return;
-      setFavorite(flags.favorite);
-      setInCollection(flags.inCollection);
+    const task = InteractionManager.runAfterInteractions(() => {
+      void refreshCollectionFlags(id, () => cancelled).then((flags) => {
+        if (cancelled || !flags) return;
+        setFavorite(flags.favorite);
+        setInCollection(flags.inCollection);
+      });
     });
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, [id]);
 
@@ -232,30 +244,32 @@ export default function AnimeDetailScreen() {
     const sourcePlatform = dataSourceConfig.browseSource;
     const directBangumiId = lookupBangumiByPlatformId(sourcePlatform, id);
 
-    pilgrimageRepository
-      .getSpotsForAnime({
-        sourcePlatform,
-        id,
-        bangumiId: directBangumiId,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setPilgrimage(result);
-      })
-      .catch((err: unknown) => {
-        console.warn('[AnimeDetail] pilgrimage fetch failed:', err);
-      });
+    const task = InteractionManager.runAfterInteractions(() => {
+      pilgrimageRepository
+        .getSpotsForAnime({
+          sourcePlatform,
+          id,
+          bangumiId: directBangumiId,
+        })
+        .then((result) => {
+          if (cancelled) return;
+          setPilgrimage(result);
+        })
+        .catch((err: unknown) => {
+          console.warn('[AnimeDetail] pilgrimage fetch failed:', err);
+        });
+    });
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, [id]);
 
   // Cross-platform media: streaming, themes, relations, staff, ratings.
-  // Fired in parallel — the per-channel rate limiter inside each client
-  // (AniList 666ms, Jikan 350ms, Bangumi 333ms) handles spacing, so the
-  // previous hand-scripted `await sleep(600)` cadence was redundant and
-  // just slowed the page down by ~1.2s. Each settle dispatches into its
-  // own slice so the UI fills in progressively as data arrives.
+  // Fired in parallel after the navigation interaction has settled. The
+  // per-channel rate limiter inside each client (AniList 666ms, Jikan 350ms,
+  // Bangumi 333ms) still handles spacing; deferring just keeps these secondary
+  // requests from competing with the detail hero during tap-to-detail.
   useEffect(() => {
     if (!id) return;
     const numericId = Number(id);
@@ -268,45 +282,48 @@ export default function AnimeDetailScreen() {
     let cancelled = false;
     const repo = AnimeRepository.defaultInstance();
 
-    const tasks: Promise<unknown>[] = [
-      repo
-        .fetchAnimeStreaming(numericId, 'anilist')
-        .then((v) => {
-          if (!cancelled) dispatchMedia({ type: 'streaming', value: v });
-        })
-        .catch((e) => console.warn('[AnimeDetail] streaming failed', e)),
-      repo
-        .fetchAnimeThemes(numericId, 'anilist')
-        .then((v) => {
-          if (!cancelled) dispatchMedia({ type: 'themes', value: v });
-        })
-        .catch((e) => console.warn('[AnimeDetail] themes failed', e)),
-      repo
-        .fetchAnimeRelations(numericId, 'anilist')
-        .then((v) => {
-          if (!cancelled) dispatchMedia({ type: 'relations', value: v });
-        })
-        .catch((e) => console.warn('[AnimeDetail] relations failed', e)),
-      repo
-        .fetchAnimeStaff(numericId, 'anilist')
-        .then((v) => {
-          if (!cancelled) dispatchMedia({ type: 'staff', value: v });
-        })
-        .catch((e) => console.warn('[AnimeDetail] staff failed', e)),
-      repo
-        .fetchMultiPlatformRatings(numericId, 'anilist')
-        .then((v) => {
-          if (!cancelled) dispatchMedia({ type: 'ratings', value: v });
-        })
-        .catch((e) => console.warn('[AnimeDetail] ratings failed', e)),
-    ];
+    const task = InteractionManager.runAfterInteractions(() => {
+      const tasks: Promise<unknown>[] = [
+        repo
+          .fetchAnimeStreaming(numericId, 'anilist')
+          .then((v) => {
+            if (!cancelled) dispatchMedia({ type: 'streaming', value: v });
+          })
+          .catch((e) => console.warn('[AnimeDetail] streaming failed', e)),
+        repo
+          .fetchAnimeThemes(numericId, 'anilist')
+          .then((v) => {
+            if (!cancelled) dispatchMedia({ type: 'themes', value: v });
+          })
+          .catch((e) => console.warn('[AnimeDetail] themes failed', e)),
+        repo
+          .fetchAnimeRelations(numericId, 'anilist')
+          .then((v) => {
+            if (!cancelled) dispatchMedia({ type: 'relations', value: v });
+          })
+          .catch((e) => console.warn('[AnimeDetail] relations failed', e)),
+        repo
+          .fetchAnimeStaff(numericId, 'anilist')
+          .then((v) => {
+            if (!cancelled) dispatchMedia({ type: 'staff', value: v });
+          })
+          .catch((e) => console.warn('[AnimeDetail] staff failed', e)),
+        repo
+          .fetchMultiPlatformRatings(numericId, 'anilist')
+          .then((v) => {
+            if (!cancelled) dispatchMedia({ type: 'ratings', value: v });
+          })
+          .catch((e) => console.warn('[AnimeDetail] ratings failed', e)),
+      ];
 
-    void Promise.allSettled(tasks).then(() => {
-      if (!cancelled) dispatchMedia({ type: 'done' });
+      void Promise.allSettled(tasks).then(() => {
+        if (!cancelled) dispatchMedia({ type: 'done' });
+      });
     });
 
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, [id]);
 

@@ -33,6 +33,7 @@ import { useTheme } from '../../../context/ThemeContext';
 import { readableTextOn, Skeleton } from '../../../components/themed';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { getDeck, putDeck, clearDeck } from '../../../libs/services/rate/deck-cache';
+import { loadGenreSwipePage } from '../../../libs/services/rate/genre-deck-prefetch';
 import { restartGenreDeck } from '../../../libs/services/rate/restart-genre-deck';
 import { setOverride as setGenreCoverOverride } from '../../../libs/services/rate/genre-cover-override';
 import { isExhaustedSwipeDeck } from '../../../libs/services/rate/swipe-pagination';
@@ -44,7 +45,12 @@ import {
 } from '../../../libs/services/rate/swipe-persistence';
 
 const AD_INTERVAL = 12;
-const PREFETCH_THRESHOLD = 5;
+// Trigger and refill from remaining-card pressure, not source page length.
+// AniList pages are 20 upstream, but R18/seen/image filters can leave any
+// number of usable cards, including zero.
+const PREFETCH_THRESHOLD = 8;
+const LOAD_MORE_TARGET_PHOTOS = PREFETCH_THRESHOLD + 4;
+const FILTERED_EMPTY_PAGE_SKIP_LIMIT = 2;
 // Card sizing — the top padding stacks on top of the safe-area inset so the
 // card always clears the X + ModePill on notched devices (otherwise the
 // inline Tap-for-info chip sits behind the pill). The bottom only needs to
@@ -304,10 +310,11 @@ export default function RatingScreen() {
           startPage: 1,
           fetchPage: (page) =>
             params.genreId
-              ? AnimeRepository.getAnimeByGenre(params.genreId, page)
+              ? loadGenreSwipePage(params.genreId, page)
               : AnimeRepository.getSeasonalAnime(undefined, undefined, page),
           mapItemToPhoto: AnimeRepository.mapAnimeToPhoto,
           seenIds: seenIdsRef.current,
+          maxEmptyPagesToSkip: FILTERED_EMPTY_PAGE_SKIP_LIMIT,
         });
         validPhotos = pageResult.photos;
         nextCurrentPage = pageResult.currentPage;
@@ -356,11 +363,13 @@ export default function RatingScreen() {
         startPage: nextPage,
         fetchPage: (page) =>
           params.genreId
-            ? AnimeRepository.getAnimeByGenre(params.genreId, page)
+            ? loadGenreSwipePage(params.genreId, page)
             : AnimeRepository.getSeasonalAnime(undefined, undefined, page),
         mapItemToPhoto: AnimeRepository.mapAnimeToPhoto,
         existingIds: new Set(photos.map((p) => p.id)),
         seenIds: seenIdsRef.current,
+        maxEmptyPagesToSkip: FILTERED_EMPTY_PAGE_SKIP_LIMIT,
+        targetPhotoCount: LOAD_MORE_TARGET_PHOTOS,
       });
       const newPhotos = pageResult.photos;
       rememberRestartableSeenIds(pageResult.releasableSeenIds, 'append');
@@ -825,9 +834,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    zIndex: 20,
+    paddingHorizontal: 28,
   },
   loadingText: {
     color: 'rgba(255,255,255,0.6)',
@@ -835,9 +847,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   emptyContainer: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    zIndex: 20,
+    paddingHorizontal: 28,
   },
   emptyText: {
     color: 'rgba(255,255,255,0.6)',

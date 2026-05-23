@@ -15,6 +15,7 @@ type Props = {
   image: string;
   genreId?: string;
   onPress?: () => void;
+  onPressIn?: () => void;
   showButton?: boolean;
   width?: number;
   height?: number;
@@ -25,6 +26,7 @@ function GenreCardComponent({
   image,
   genreId,
   onPress,
+  onPressIn,
   showButton = true,
   width,
   height,
@@ -46,6 +48,7 @@ function GenreCardComponent({
 
   return (
     <Pressable
+      onPressIn={onPressIn}
       onPress={handlePress}
       style={[
         styles.card,
