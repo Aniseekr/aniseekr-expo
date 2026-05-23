@@ -6,6 +6,7 @@
     "ios": "expo run:ios",
     "start": "expo start",
     "postinstall": "node scripts/bundle-leaflet.mjs && node scripts/patch-react-native-worklets.mjs",
+    "eas-build-pre-install": "bash scripts/install-metal-toolchain.sh",
     "bundle:leaflet": "node scripts/bundle-leaflet.mjs",
     "prebuild": "expo prebuild",
     "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
