@@ -69,6 +69,8 @@ export interface PilgrimageHubSheetProps {
   theme: ThemePalette;
   /** Used to render the empty state ("no match for X"). */
   searchQuery: string;
+  /** Initial bottom-sheet snap index: 1 = map-first, 2 = list-first. */
+  initialIndex?: number;
   /** Shared value the sheet writes its top-edge Y to, so parent chrome can anchor to the sheet's edge. */
   animatedPosition?: SharedValue<number>;
   onSheetIndexChange?: (index: number) => void;
@@ -93,6 +95,7 @@ function PilgrimageHubSheetImpl(props: PilgrimageHubSheetProps) {
     themeColorFg,
     theme,
     searchQuery,
+    initialIndex = 1,
     animatedPosition,
     onSheetIndexChange,
     onAnimePress,
@@ -107,8 +110,8 @@ function PilgrimageHubSheetImpl(props: PilgrimageHubSheetProps) {
   // Default to mid snap on mount — gives the user the focused card + stats +
   // first rows of nearby list without burying the map.
   useEffect(() => {
-    sheetRef.current?.snapToIndex(1);
-  }, []);
+    sheetRef.current?.snapToIndex(initialIndex);
+  }, [initialIndex]);
 
   const handleIndexChange = useCallback(
     (index: number) => onSheetIndexChange?.(index),
@@ -242,7 +245,7 @@ function PilgrimageHubSheetImpl(props: PilgrimageHubSheetProps) {
   return (
     <BottomSheet
       ref={sheetRef}
-      index={1}
+      index={initialIndex}
       snapPoints={snapPoints}
       enableDynamicSizing={false}
       enableContentPanningGesture
@@ -277,6 +280,7 @@ function areEqual(prev: PilgrimageHubSheetProps, next: PilgrimageHubSheetProps):
     prev.themeColorFg === next.themeColorFg &&
     prev.theme === next.theme &&
     prev.searchQuery === next.searchQuery &&
+    prev.initialIndex === next.initialIndex &&
     prev.animatedPosition === next.animatedPosition &&
     prev.onSheetIndexChange === next.onSheetIndexChange &&
     prev.onAnimePress === next.onAnimePress &&

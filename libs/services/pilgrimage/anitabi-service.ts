@@ -40,6 +40,8 @@ export class AnitabiService {
 
   private memCache = new Map<number, CacheValue>();
   private detailMemCache = new Map<number, DetailCacheValue>();
+  /** In-flight lite requests deduped by bangumiId. */
+  private pendingLite = new Map<number, Promise<AnitabiBangumi | null>>();
   /** In-flight detail requests deduped by bangumiId. */
   private pendingDetail = new Map<number, Promise<AnitabiPoint[]>>();
   private now: () => number;
@@ -86,65 +88,78 @@ export class AnitabiService {
       return memHit.kind === 'hit' ? memHit.value : null;
     }
 
-    // 2. SQLite cache
-    try {
-      const row = await this.db.getPilgrimage(bangumiId);
-      if (row && row.expires_at > this.now()) {
-        const decoded = this.rowToBangumi(row);
-        this.memCache.set(bangumiId, { kind: 'hit', value: decoded });
-        return decoded;
+    // 2. Concurrent callers share the same SQLite/network path.
+    const pending = this.pendingLite.get(bangumiId);
+    if (pending) return pending;
+
+    const promise = (async (): Promise<AnitabiBangumi | null> => {
+      // 3. SQLite cache
+      try {
+        const row = await this.db.getPilgrimage(bangumiId);
+        if (row && row.expires_at > this.now()) {
+          const decoded = this.rowToBangumi(row);
+          this.memCache.set(bangumiId, { kind: 'hit', value: decoded });
+          return decoded;
+        }
+      } catch (err) {
+        // SQLite read failures are non-fatal — fall through to network.
+
+        console.warn('[AnitabiService] SQLite read failed:', err);
       }
-    } catch (err) {
-      // SQLite read failures are non-fatal — fall through to network.
 
-      console.warn('[AnitabiService] SQLite read failed:', err);
-    }
+      // 4. Network
+      let fresh: AnitabiBangumi | null;
+      try {
+        fresh = await this.client.getLite(bangumiId);
+      } catch (err) {
+        if (err instanceof DataSourceError && err.code === 'NOT_FOUND') {
+          // Defensive — client maps 404→null already, but we double-check.
+          this.memCache.set(bangumiId, { kind: 'miss' });
+          return null;
+        }
+        throw err;
+      }
 
-    // 3. Network
-    let fresh: AnitabiBangumi | null;
-    try {
-      fresh = await this.client.getLite(bangumiId);
-    } catch (err) {
-      if (err instanceof DataSourceError && err.code === 'NOT_FOUND') {
-        // Defensive — client maps 404→null already, but we double-check.
+      if (fresh === null) {
         this.memCache.set(bangumiId, { kind: 'miss' });
         return null;
       }
-      throw err;
-    }
 
-    if (fresh === null) {
-      this.memCache.set(bangumiId, { kind: 'miss' });
-      return null;
-    }
+      this.memCache.set(bangumiId, { kind: 'hit', value: fresh });
 
-    this.memCache.set(bangumiId, { kind: 'hit', value: fresh });
+      // Persist (best effort — log & continue on failure).
+      try {
+        const cachedAt = this.now();
+        const save: PilgrimageSaveInput = {
+          bangumiId: fresh.id,
+          title: fresh.title,
+          titleCn: fresh.cn ?? null,
+          city: fresh.city ?? null,
+          cover: fresh.cover ?? null,
+          color: fresh.color ?? null,
+          centerLat: fresh.geo?.[0] ?? null,
+          centerLng: fresh.geo?.[1] ?? null,
+          zoom: fresh.zoom ?? null,
+          pointsLength: fresh.pointsLength ?? null,
+          imagesLength: fresh.imagesLength ?? null,
+          litePointsJson: JSON.stringify(fresh.litePoints ?? []),
+          cachedAt,
+          expiresAt: cachedAt + this.ttlMs,
+        };
+        await this.db.savePilgrimage(save);
+      } catch (err) {
+        console.warn('[AnitabiService] SQLite write failed:', err);
+      }
 
-    // Persist (best effort — log & continue on failure).
+      return fresh;
+    })();
+
+    this.pendingLite.set(bangumiId, promise);
     try {
-      const cachedAt = this.now();
-      const save: PilgrimageSaveInput = {
-        bangumiId: fresh.id,
-        title: fresh.title,
-        titleCn: fresh.cn ?? null,
-        city: fresh.city ?? null,
-        cover: fresh.cover ?? null,
-        color: fresh.color ?? null,
-        centerLat: fresh.geo?.[0] ?? null,
-        centerLng: fresh.geo?.[1] ?? null,
-        zoom: fresh.zoom ?? null,
-        pointsLength: fresh.pointsLength ?? null,
-        imagesLength: fresh.imagesLength ?? null,
-        litePointsJson: JSON.stringify(fresh.litePoints ?? []),
-        cachedAt,
-        expiresAt: cachedAt + this.ttlMs,
-      };
-      await this.db.savePilgrimage(save);
-    } catch (err) {
-      console.warn('[AnitabiService] SQLite write failed:', err);
+      return await promise;
+    } finally {
+      this.pendingLite.delete(bangumiId);
     }
-
-    return fresh;
   }
 
   /**
@@ -222,6 +237,7 @@ export class AnitabiService {
   invalidate(bangumiId: number): void {
     this.memCache.delete(bangumiId);
     this.detailMemCache.delete(bangumiId);
+    this.pendingLite.delete(bangumiId);
     void this.cache.delete(DETAIL_CACHE_KEY_PREFIX + bangumiId).catch(() => undefined);
   }
 
@@ -229,6 +245,7 @@ export class AnitabiService {
   invalidateAll(): void {
     this.memCache.clear();
     this.detailMemCache.clear();
+    this.pendingLite.clear();
   }
 
   /**

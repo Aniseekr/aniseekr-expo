@@ -50,11 +50,10 @@ import { Tourism88Rail } from '../../../components/pilgrimage/Tourism88Rail';
 import { getUnique88AnimeByPopularity } from '../../../libs/services/pilgrimage/anime88-repository';
 import {
   getAllIndexed,
-  getIndexedById,
   getIndexVersion,
   subscribeAnitabiIndex,
-  type AnitabiIndexEntry,
 } from '../../../libs/services/pilgrimage/anitabi-index';
+import { buildSeededPilgrimageAnimes } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
 import {
   formatPilgrimageSubtitle,
   getPilgrimageAnimeTitles,
@@ -111,38 +110,10 @@ function hasSnapshotSlice<K extends keyof PilgrimageHubSnapshot>(
   return !!snapshot && Object.prototype.hasOwnProperty.call(snapshot, key);
 }
 
-/**
- * Build an `AnitabiBangumi` placeholder from the bundled offline index. We
- * have every field the hub renders (cover, city, color, geo, pointsLength)
- * except `litePoints` — those only land via the per-anime `/lite` HTTP fetch
- * and only the Featured Spots row needs them. Seeding from this lets the
- * Popular Animes rail render on frame 1; the HTTP responses then upgrade
- * each entry with `litePoints` as they arrive.
- */
-function seedFromIndex(entry: AnitabiIndexEntry): AnitabiBangumi {
-  return {
-    id: entry.id,
-    cn: entry.cn,
-    title: entry.title,
-    city: entry.city,
-    cover: entry.cover,
-    color: entry.color,
-    geo: [entry.lat, entry.lng],
-    zoom: entry.zoom,
-    modified: entry.builtAt,
-    litePoints: [],
-    pointsLength: entry.pointsLength,
-    imagesLength: 0,
-  };
-}
-
 function buildSeededFeatured(): AnitabiBangumi[] {
-  const seeded: AnitabiBangumi[] = [];
-  for (const { bangumiId } of FEATURED_PILGRIMAGE_ANIME) {
-    const entry = getIndexedById(bangumiId);
-    if (entry) seeded.push(seedFromIndex(entry));
-  }
-  return seeded.sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
+  return buildSeededPilgrimageAnimes(
+    FEATURED_PILGRIMAGE_ANIME.map(({ bangumiId }) => bangumiId)
+  );
 }
 
 export default function PilgrimageHubScreen() {

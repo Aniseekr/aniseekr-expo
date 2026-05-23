@@ -1,6 +1,35 @@
 import type { LatLng } from './location-service';
-import type { AnitabiIndexEntry } from './anitabi-index';
+import { getIndexedById, type AnitabiIndexEntry } from './anitabi-index';
 import type { AnitabiBangumi, AnitabiPoint } from './types';
+
+export function seedPilgrimageAnimeFromIndex(entry: AnitabiIndexEntry): AnitabiBangumi {
+  return {
+    id: entry.id,
+    cn: entry.cn,
+    title: entry.title,
+    city: entry.city,
+    cover: entry.cover,
+    color: entry.color,
+    geo: [entry.lat, entry.lng],
+    zoom: entry.zoom,
+    modified: entry.builtAt,
+    litePoints: [],
+    pointsLength: entry.pointsLength,
+    imagesLength: 0,
+  };
+}
+
+export function buildSeededPilgrimageAnimes(ids: readonly number[]): AnitabiBangumi[] {
+  const seeded: AnitabiBangumi[] = [];
+  const seen = new Set<number>();
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const entry = getIndexedById(id);
+    if (entry) seeded.push(seedPilgrimageAnimeFromIndex(entry));
+  }
+  return seeded.sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
+}
 
 export function appendIndexedEntries(
   prev: Map<number, AnitabiIndexEntry>,
@@ -14,6 +43,17 @@ export function appendIndexedEntries(
     next.set(entry.id, entry);
   }
   return next ?? prev;
+}
+
+export function appendIndexedEntriesExcludingKnownAnimes(
+  prev: Map<number, AnitabiIndexEntry>,
+  entries: readonly AnitabiIndexEntry[],
+  animes: readonly Pick<AnitabiBangumi, 'id'>[]
+): Map<number, AnitabiIndexEntry> {
+  if (entries.length === 0) return prev;
+  const known = buildKnownAnimeIdSet(animes, prev);
+  const filtered = entries.filter((entry) => !known.has(entry.id));
+  return appendIndexedEntries(prev, filtered);
 }
 
 export function buildKnownAnimeIdSet(

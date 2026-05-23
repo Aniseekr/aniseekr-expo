@@ -104,6 +104,24 @@ describe('AnitabiService', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('PILG-002b dedupes concurrent lite calls — single network request', async () => {
+    let fetchCount = 0;
+    fetchSpy.mockImplementation(async () => {
+      fetchCount += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      return fakeResponse(200, sampleBangumi());
+    });
+    const svc = AnitabiService.resetForTests();
+
+    const [first, second] = await Promise.all([
+      svc.getAnimePilgrimage(SUBJECT_ID),
+      svc.getAnimePilgrimage(SUBJECT_ID),
+    ]);
+
+    expect(first).toBe(second);
+    expect(fetchCount).toBe(1);
+  });
+
   it('PILG-003 persists the lite payload into the SQLite pilgrimage_spots table', async () => {
     fetchSpy.mockResolvedValue(fakeResponse(200, sampleBangumi()));
     const svc = AnitabiService.resetForTests();

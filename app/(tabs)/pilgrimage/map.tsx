@@ -21,7 +21,7 @@
 // Route params:
 //   - focus?: number — bangumi id to focus the map on (initial centre)
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dimensions,
   Platform,
@@ -79,17 +79,23 @@ import {
 import { getNearbyMapEntries, MAP_LOCATE_ZOOM } from '../../../libs/services/pilgrimage/map-nearby';
 import { getPilgrimageAnimeTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
+import { getPilgrimageHubSnapshot } from '../../../libs/services/pilgrimage/pilgrimage-hub-cache';
 import {
   loadVisitedSpotsSync,
   type VisitedMap,
 } from '../../../libs/services/pilgrimage/visited-prefs';
 import { loadCapturesSync } from '../../../libs/services/pilgrimage/captures';
 import {
-  appendIndexedEntries,
+  appendIndexedEntriesExcludingKnownAnimes,
   buildKnownAnimeIdSet,
+  buildSeededPilgrimageAnimes,
   sameLatLng,
+  seedPilgrimageAnimeFromIndex,
 } from '../../../libs/services/pilgrimage/pilgrimage-screen-state';
-import { shouldLoadPilgrimageMapBounds } from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
+import {
+  resolvePilgrimageMapInitialMode,
+  shouldLoadPilgrimageMapBounds,
+} from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
 import {
   PilgrimageHubSheet,
   type HubAnimeEntry,
@@ -537,6 +543,9 @@ ${MAP_BASE_BODY}
 }
 
 const COLLECTION_BACKFILL_TARGET = 16;
+const FEATURED_PILGRIMAGE_IDS = FEATURED_PILGRIMAGE_ANIME.map(
+  ({ bangumiId }) => bangumiId
+);
 
 // Sheet snap peek fraction — kept in lockstep with PilgrimageHubSheet's snap
 // array. Used as a fallback chrome offset if the sheet's animatedPosition
@@ -546,26 +555,77 @@ const VIEW_MODE_TOGGLE_HEIGHT = 52;
 
 type HubFilter = 'all' | 'collection' | 'official88';
 
+function buildInitialMapSeedIds(focusBangumiId: number | null): number[] {
+  if (focusBangumiId === null) return FEATURED_PILGRIMAGE_IDS;
+  return [focusBangumiId, ...FEATURED_PILGRIMAGE_IDS];
+}
+
+function mergeAnimeList(
+  current: readonly AnitabiBangumi[],
+  incoming: readonly AnitabiBangumi[]
+): AnitabiBangumi[] {
+  if (incoming.length === 0) return current as AnitabiBangumi[];
+  const merged = new Map(current.map((anime) => [anime.id, anime] as const));
+  let changed = false;
+  for (const anime of incoming) {
+    if (merged.get(anime.id) === anime) continue;
+    merged.set(anime.id, anime);
+    changed = true;
+  }
+  if (!changed) return current as AnitabiBangumi[];
+  return [...merged.values()].sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
+}
+
 export default function PilgrimageMapScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const initialMode = useMemo(
+    () => resolvePilgrimageMapInitialMode(params.mode),
+    [params.mode]
+  );
   const focusBangumiIdParam = getNumberParam(params, 'focus');
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme, insets.top), [theme, insets.top]);
   const themeColor = theme.accent;
   const themeColorFg = readableTextOn(themeColor);
+  const initialSeedAnimes = useMemo(
+    () => buildSeededPilgrimageAnimes(buildInitialMapSeedIds(focusBangumiIdParam)),
+    [focusBangumiIdParam]
+  );
+  const [initialSnapshot] = useState(() => getPilgrimageHubSnapshot());
+  const hasInitialCollection = Object.prototype.hasOwnProperty.call(
+    initialSnapshot ?? {},
+    'collectionAnimes'
+  );
+  const hasInitialFeatured = Object.prototype.hasOwnProperty.call(
+    initialSnapshot ?? {},
+    'featuredAnimes'
+  );
+  const initialAnimes = useMemo(
+    () =>
+      mergeAnimeList(initialSeedAnimes, [
+        ...(initialSnapshot?.collectionAnimes ?? []),
+        ...(initialSnapshot?.featuredAnimes ?? []),
+      ]),
+    [initialSeedAnimes, initialSnapshot]
+  );
 
   // ─── Data state ─────────────────────────────────────────────────────────
   // Collection + featured-backfilled animes are the canonical "known" set.
   // Bounds-driven lazy loading appends entries from the offline anitabi index
   // as the user pans, so the on-map markers + sheet list grow with the view.
-  const [animes, setAnimes] = useState<AnitabiBangumi[]>([]);
-  const [collectionIds, setCollectionIds] = useState<Set<number>>(() => new Set());
-  const [userLocation, setUserLocation] = useState<LatLng | null>(null);
-  const userLocationRef = useRef<LatLng | null>(null);
+  const [animes, setAnimes] = useState<AnitabiBangumi[]>(() => initialAnimes);
+  const animesRef = useRef<AnitabiBangumi[]>(initialAnimes);
+  const [collectionIds, setCollectionIds] = useState<Set<number>>(
+    () => new Set((initialSnapshot?.collectionAnimes ?? []).map((anime) => anime.id))
+  );
+  const [userLocation, setUserLocation] = useState<LatLng | null>(
+    () => initialSnapshot?.userLocation ?? null
+  );
+  const userLocationRef = useRef<LatLng | null>(initialSnapshot?.userLocation ?? null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialAnimes.length === 0);
   // Seed synchronously from MMKV so visited markers + the capture count are
   // correct on the first frame; the effects below still reconcile after the
   // one-time migration.
@@ -577,11 +637,14 @@ export default function PilgrimageMapScreen() {
   // Lazy-loaded entries from the offline index, keyed by bangumi id and
   // additive only (we never remove — the WebView dedups by id so duplicates
   // are cheap, and pan-back-and-forth wants the markers to stay put).
-  const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(() => new Map());
+  const [extraIndexed, setExtraIndexed] = useState<Map<number, AnitabiIndexEntry>>(
+    () => new Map()
+  );
   const extraIndexedRef = useRef(extraIndexed);
 
   // ─── View state (parent-owned) ──────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [hubFilter, setHubFilter] = useState<HubFilter>('all');
   const [listLayout, setListLayout] = useState<'grid' | 'rows'>('rows');
   const [focusedRegion, setFocusedRegion] = useState<AnimeTourism88Region | null>(null);
@@ -591,51 +654,96 @@ export default function PilgrimageMapScreen() {
   // bangumi id (not the index) so the swap behaviour survives list re-sorts.
   const [focusedAnimeId, setFocusedAnimeId] = useState<number | null>(focusBangumiIdParam);
 
+  animesRef.current = animes;
+
   // ─── Data loading ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const pendingFeatured: AnitabiBangumi[] = [];
+
+    const mergeAnimes = (incoming: readonly AnitabiBangumi[]) => {
+      if (incoming.length === 0) return;
+      setAnimes((current) => mergeAnimeList(current, incoming));
+    };
+
+    const commitFeatured = () => {
+      flushTimer = null;
+      if (cancelled || pendingFeatured.length === 0) return;
+      const batch = pendingFeatured.splice(0);
+      mergeAnimes(batch);
+    };
+
+    const scheduleFeaturedCommit = () => {
+      if (flushTimer !== null) return;
+      flushTimer = setTimeout(commitFeatured, 200);
+    };
+
+    const hydrateFeatured = () => {
+      let remaining = FEATURED_PILGRIMAGE_IDS.length;
+      for (const bangumiId of FEATURED_PILGRIMAGE_IDS) {
+        pilgrimageRepository
+          .getSpotsByBangumiId(bangumiId)
+          .then((anime) => {
+            if (cancelled || !anime) return;
+            pendingFeatured.push(anime);
+            scheduleFeaturedCommit();
+          })
+          .catch((err) => {
+            if (!cancelled) {
+              console.warn('[PilgrimageMap] featured fetch failed:', bangumiId, err);
+            }
+          })
+          .finally(() => {
+            if (cancelled) return;
+            remaining -= 1;
+            if (remaining === 0) {
+              if (flushTimer !== null) {
+                clearTimeout(flushTimer);
+                flushTimer = null;
+              }
+              commitFeatured();
+            }
+          });
+      }
+    };
 
     (async () => {
-      const merged = new Map<number, AnitabiBangumi>();
-      const collected = new Set<number>();
-      try {
-        const entries = await collectionPilgrimageService.getEntries();
-        for (const e of entries) {
-          if (e.anime && !merged.has(e.anime.id)) {
-            merged.set(e.anime.id, e.anime);
-            collected.add(e.anime.id);
+      let collectionCount = initialSnapshot?.collectionAnimes?.length ?? 0;
+      if (!hasInitialCollection) {
+        const collected = new Set<number>();
+        try {
+          const entries = await collectionPilgrimageService.getEntries();
+          if (cancelled) return;
+          const collectionAnimes: AnitabiBangumi[] = [];
+          for (const e of entries) {
+            if (e.anime && !collected.has(e.anime.id)) {
+              collectionAnimes.push(e.anime);
+              collected.add(e.anime.id);
+            }
           }
+          collectionCount = collectionAnimes.length;
+          setCollectionIds(collected);
+          mergeAnimes(collectionAnimes);
+        } catch (err) {
+          console.warn('[PilgrimageMap] collection load failed:', err);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-      } catch (err) {
-        console.warn('[PilgrimageMap] collection load failed:', err);
+      } else {
+        if (!cancelled) setLoading(false);
       }
 
-      if (merged.size < COLLECTION_BACKFILL_TARGET) {
-        const results = await Promise.allSettled(
-          FEATURED_PILGRIMAGE_ANIME.map(({ bangumiId }) =>
-            pilgrimageRepository.getSpotsByBangumiId(bangumiId)
-          )
-        );
-        for (const r of results) {
-          if (r.status !== 'fulfilled' || !r.value) continue;
-          if (!merged.has(r.value.id)) merged.set(r.value.id, r.value);
-        }
+      if (!cancelled && !hasInitialFeatured && collectionCount < COLLECTION_BACKFILL_TARGET) {
+        hydrateFeatured();
       }
-
-      if (cancelled) return;
-      const list = [...merged.values()].sort(
-        (a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0)
-      );
-      setAnimes(list);
-      setCollectionIds(collected);
-      setLoading(false);
     })();
 
     return () => {
       cancelled = true;
+      if (flushTimer !== null) clearTimeout(flushTimer);
     };
-  }, []);
+  }, [hasInitialCollection, hasInitialFeatured, initialSnapshot]);
 
   // `visited` and `captureCount` are seeded synchronously from MMKV in the
   // useState initializers above. The previous async reconcile was a no-op on
@@ -651,7 +759,11 @@ export default function PilgrimageMapScreen() {
 
   const appendExtraIndexed = useCallback((entries: readonly AnitabiIndexEntry[]) => {
     if (entries.length === 0) return;
-    const next = appendIndexedEntries(extraIndexedRef.current, entries);
+    const next = appendIndexedEntriesExcludingKnownAnimes(
+      extraIndexedRef.current,
+      entries,
+      animesRef.current
+    );
     if (next === extraIndexedRef.current) return;
     extraIndexedRef.current = next;
     setExtraIndexed(next);
@@ -659,7 +771,7 @@ export default function PilgrimageMapScreen() {
 
   const mergeNearbyIndexed = useCallback(
     (loc: LatLng) => {
-      const seen = buildKnownAnimeIdSet([], extraIndexedRef.current);
+      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
       appendExtraIndexed(getNearbyMapEntries(loc, { exclude: seen }));
     },
     [appendExtraIndexed]
@@ -698,7 +810,7 @@ export default function PilgrimageMapScreen() {
   const handleBoundsChange = useCallback(
     (bounds: BoundingBox) => {
       if (!shouldLoadPilgrimageMapBounds(bounds)) return;
-      const seen = buildKnownAnimeIdSet([], extraIndexedRef.current);
+      const seen = buildKnownAnimeIdSet(animesRef.current, extraIndexedRef.current);
       appendExtraIndexed(getAnimeInBounds(bounds, { exclude: seen, limit: 40 }));
     },
     [appendExtraIndexed]
@@ -725,28 +837,10 @@ export default function PilgrimageMapScreen() {
     // the map + a placeholder row. We synthesise a minimal AnitabiBangumi.
     for (const entry of extraIndexed.values()) {
       if (merged.has(entry.id)) continue;
-      const titles = getPilgrimageAnimeTitles({
-        id: entry.id,
-        title: entry.title,
-        cn: entry.cn,
-      });
-      merged.set(entry.id, {
-        id: entry.id,
-        cn: entry.cn,
-        title: titles.original ?? entry.title ?? titles.primary,
-        city: entry.city,
-        cover: entry.cover,
-        color: entry.color || theme.accent,
-        geo: [entry.lat, entry.lng],
-        zoom: 12,
-        modified: 0,
-        litePoints: [],
-        pointsLength: entry.pointsLength,
-        imagesLength: 0,
-      });
+      merged.set(entry.id, seedPilgrimageAnimeFromIndex(entry));
     }
     return [...merged.values()];
-  }, [animes, extraIndexed, theme.accent]);
+  }, [animes, extraIndexed]);
 
   // Build hub entries: collection / 88 / distance / visited counts.
   // The list is sorted by:
@@ -793,7 +887,7 @@ export default function PilgrimageMapScreen() {
 
   // Apply hub filter + search query.
   const filteredEntries = useMemo<HubAnimeEntry[]>(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = deferredSearchQuery.trim().toLowerCase();
     return hubEntries.filter((entry) => {
       if (hubFilter === 'collection' && !entry.fromCollection) return false;
       if (hubFilter === 'official88' && !entry.is88) return false;
@@ -814,7 +908,7 @@ export default function PilgrimageMapScreen() {
       }
       return true;
     });
-  }, [hubEntries, hubFilter, searchQuery]);
+  }, [hubEntries, hubFilter, deferredSearchQuery]);
 
   const filterCounts = useMemo(() => {
     let all = 0;
@@ -901,8 +995,8 @@ export default function PilgrimageMapScreen() {
   // clears stale markers instead of additively merging: gold 88 city pins ↔
   // anitabi centroids, and search-filtered subsets.
   const refitNonce = useMemo(
-    () => `${hubFilter}:${focusedRegion ?? 'any'}:${searchQuery.trim().toLowerCase()}`,
-    [hubFilter, focusedRegion, searchQuery]
+    () => `${hubFilter}:${focusedRegion ?? 'any'}:${deferredSearchQuery.trim().toLowerCase()}`,
+    [hubFilter, focusedRegion, deferredSearchQuery]
   );
 
   // Camera-fly request derived from focusedRegion + flyTick. Whole-Japan
@@ -1036,6 +1130,7 @@ export default function PilgrimageMapScreen() {
   }, [insets.bottom, screenHeight]);
 
   const handleSheetIndexChange = useCallback((idx: number) => setSheetIndex(idx), []);
+  const initialSheetIndex = initialMode === 'list' ? 2 : 1;
 
   // Anchor floating bottom chrome to the sheet's top edge so it slides with
   // the sheet rather than getting buried at mid snap. Hidden once the sheet
@@ -1213,6 +1308,7 @@ export default function PilgrimageMapScreen() {
             themeColorFg={themeColorFg}
             theme={theme}
             searchQuery={searchQuery}
+            initialIndex={initialSheetIndex}
             animatedPosition={sheetPosition}
             onSheetIndexChange={handleSheetIndexChange}
             onAnimePress={handleSheetAnimePress}
