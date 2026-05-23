@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { AnimeRepository } from './anime-repository';
 import { platformSyncService } from '../services/platform-sync-service';
+import { multiPlatformSyncService } from '../services/sync/multi-platform-sync-service';
 import { kvGet, kvRemove, kvSet } from '../services/storage/app-storage';
 import {
   USER_AVATAR_URI_KEY,
@@ -72,7 +73,10 @@ export class UserRepository {
   }
 
   static async syncAllPlatforms(): Promise<void> {
-    await platformSyncService.syncAll();
+    const result = await multiPlatformSyncService.syncAll();
+    if (result.errors.length > 0) {
+      console.warn('[sync] partial failure', result.errors);
+    }
   }
 
   /** Get sync status for all platforms */

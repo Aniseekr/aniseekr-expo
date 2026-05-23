@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Radius, Spacing, Size } from '../../constants/DesignSystem';
@@ -110,27 +110,39 @@ export default function SettingsScreen() {
     Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '1.0.0';
 
   useEffect(() => {
-    let mounted = true;
     // Prefs are seeded synchronously above; the subscription below catches
     // any subsequent edits made on other settings screens.
-    UserRepository.getProfile().then((u) => mounted && setUser(u));
-    (async () => {
-      try {
-        await authService.initialize();
-        const creds = authService.getAllCredentials();
-        if (mounted) setConnectedCount(creds.length);
-      } catch {
-        // ignore
-      }
-    })();
-    const unsub = subscribeUserPrefs((p) => {
-      if (mounted) setPrefs(p);
-    });
-    return () => {
-      mounted = false;
-      unsub();
-    };
+    const unsub = subscribeUserPrefs(setPrefs);
+    return unsub;
   }, []);
+
+  // Re-read profile + connected platform count whenever this screen regains
+  // focus (e.g. coming back from /account after connecting/disconnecting).
+  // Per CLAUDE.md Rule 10: silent revalidation — don't clear state, don't
+  // flash a loading skeleton. We just overwrite when the fresh values land.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const next = await UserRepository.getProfile();
+          if (!cancelled) setUser(next);
+        } catch {
+          // ignore — keep showing whatever we last had
+        }
+        try {
+          await authService.initialize();
+          if (cancelled) return;
+          setConnectedCount(authService.getAllCredentials().length);
+        } catch {
+          // ignore
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const updatePref = async <K extends keyof UserPrefs>(
     key: K,
