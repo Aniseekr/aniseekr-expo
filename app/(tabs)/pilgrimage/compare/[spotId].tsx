@@ -840,11 +840,21 @@ export default function CompareCaptureScreen() {
         // VisionCamera writes raw bytes — embed our EXIF (anime title, scene,
         // GPS, heading, tilt) onto the JPEG ourselves. Failure is logged and
         // ignored; the photo survives without metadata rather than disappear.
-        await embedCaptureMetadata(photo.uri, additionalExif);
+        //
+        // Kick the embed off in parallel with the optional Skia composite
+        // instead of awaiting it serially. piexif-ts rewrites the whole JPEG
+        // on the JS thread (~300–500ms for a 4K shot), and that used to sit
+        // squarely on the critical path between shutter and preview push. In
+        // the default edge-overlay mode the composite is a no-op, so the
+        // `await embedPromise` below is what dominates — but in subject-
+        // composite mode this lets the Skia work and the EXIF rewrite
+        // overlap, cutting the worst-case shutter→preview latency.
+        const embedPromise = embedCaptureMetadata(photo.uri, additionalExif);
         const output = await maybeCompositeSubjectShot(
           { uri: photo.uri, width: photo.width, height: photo.height },
           additionalExif
         );
+        await embedPromise;
         tapFocus.releaseLock();
         // Lens-gate banner: when the capture was taken on the standalone
         // ultra-wide (or telephoto) we surface a short toast so the user
@@ -884,15 +894,21 @@ export default function CompareCaptureScreen() {
       if (!result) return null;
       tapFocus.releaseLock();
       const additionalExif = buildExifNow();
-      // Stamp the same EXIF onto each frame. A ~900ms burst window doesn't
-      // meaningfully change heading / GPS, so a single snapshot is honest
-      // enough — and far simpler than per-frame embeds.
-      await Promise.all(result.uris.map((uri) => embedCaptureMetadata(uri, additionalExif)));
       const idx = result.bestIndex;
+      // Only embed EXIF on the best frame — that's the one we surface in the
+      // preview and the only one the user actually keeps. piexif-ts rewrites
+      // the whole JPEG on the JS thread; doing it ×6 in `Promise.all` was
+      // serialising into ~2–3 s of post-capture JS work before the preview
+      // could push, which is what made burst feel slower than the old
+      // expo-camera path (which embedded EXIF natively at capture time).
+      // The other five alternates stay un-tagged in temp; if a later flow
+      // ever surfaces one, it can be re-tagged on demand.
+      const embedPromise = embedCaptureMetadata(result.uris[idx], additionalExif);
       const output = await maybeCompositeSubjectShot(
         { uri: result.uris[idx], width: result.widths[idx], height: result.heights[idx] },
         additionalExif
       );
+      await embedPromise;
       const burstUris = [...result.uris];
       burstUris[idx] = output.uri;
       return recordShot({
@@ -920,11 +936,16 @@ export default function CompareCaptureScreen() {
       if (!result) return null;
       tapFocus.releaseLock();
       const additionalExif = buildExifNow();
-      await embedCaptureMetadata(result.uri, additionalExif);
+      // Same parallel-embed pattern as runSingle — the bracket already
+      // produced exactly one URI (the HDR-composited or fallback frame), so
+      // there is only ever one piexif rewrite to do; run it alongside the
+      // optional subject composite instead of in front of it.
+      const embedPromise = embedCaptureMetadata(result.uri, additionalExif);
       const output = await maybeCompositeSubjectShot(
         { uri: result.uri, width: result.width, height: result.height },
         additionalExif
       );
+      await embedPromise;
       return recordShot({
         uri: output.uri,
         width: output.width,
