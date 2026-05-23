@@ -516,6 +516,86 @@ export class AniListClient {
     const data = await AniListClient.getDefaultInstance().query<GenreCollectionResponse>(query);
     return data.GenreCollection;
   }
+
+  /**
+   * Fetch one representative cover per genre in a **single** GraphQL request,
+   * using aliased `Page` fields so 20 genres = 1 round trip instead of 20.
+   *
+   * Why this matters: the previous shape (`Promise.all(genres.map(getAnimeByGenre))`)
+   * created a 20-request burst that, even with a correctly serialised rate
+   * limiter, took ~13 s and exhausted the per-minute quota for any other code
+   * that wanted to hit AniList at the same time. One alias-bundled query
+   * spends a single rate-limit slot and returns in network-RTT.
+   *
+   * The returned map is keyed by the **original** genre string and carries
+   * `null` for genres whose popular-anime query returned no SFW match (or
+   * whose alias was malformed). Callers fall back to whatever placeholder
+   * they already use for the "no image" state.
+   */
+  static async getGenreCovers(
+    genres: readonly string[],
+    options: AniListLegacyQueryOptions = {}
+  ): Promise<Map<string, { extraLarge: string; large: string } | null>> {
+    const result = new Map<string, { extraLarge: string; large: string } | null>();
+    if (genres.length === 0) return result;
+
+    // Alias names must match `[_A-Za-z][_0-9A-Za-z]*` — derive index-only
+    // aliases so the alphabet of the genre name (spaces, punctuation, CJK)
+    // can't break the query. The reverse map turns `g0` back into `Action`.
+    const aliasToGenre = new Map<string, string>();
+    const variableDecls: string[] = [];
+    const fieldBlocks: string[] = [];
+    const variables: Record<string, unknown> = {
+      ...adultQueryVariables(options),
+    };
+
+    for (let i = 0; i < genres.length; i++) {
+      const genre = genres[i];
+      const alias = `g${i}`;
+      const variableName = `genre${i}`;
+      aliasToGenre.set(alias, genre);
+      variables[variableName] = genre;
+      variableDecls.push(`$${variableName}: String`);
+      fieldBlocks.push(
+        `        ${alias}: Page(page: 1, perPage: 1) {
+          media(genre: $${variableName}, type: ANIME, isAdult: $isAdult, sort: [POPULARITY_DESC]) {
+            coverImage { large extraLarge }
+          }
+        }`
+      );
+    }
+
+    const query = `
+      query ($isAdult: Boolean, ${variableDecls.join(', ')}) {
+${fieldBlocks.join('\n')}
+      }
+    `;
+
+    interface AliasedPageResponse {
+      [alias: string]: {
+        media: { coverImage: { large: string | null; extraLarge: string | null } }[];
+      };
+    }
+
+    const data = await AniListClient.getDefaultInstance().query<AliasedPageResponse>(
+      query,
+      variables
+    );
+
+    for (const [alias, genre] of aliasToGenre) {
+      const block = data[alias];
+      const cover = block?.media?.[0]?.coverImage;
+      if (cover) {
+        result.set(genre, {
+          extraLarge: cover.extraLarge ?? cover.large ?? '',
+          large: cover.large ?? '',
+        });
+      } else {
+        result.set(genre, null);
+      }
+    }
+    return result;
+  }
 }
 
 // MARK: - Helpers

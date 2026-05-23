@@ -28,7 +28,7 @@ import { pushAnimeDetail } from '../../../libs/utils/navigate-to-anime';
 import { CreateFolderModal } from '../../../components/collection/CreateFolderModal';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import {
-  loadCollectionSortMode,
+  loadCollectionSortModeSync,
   saveCollectionSortMode,
   type CollectionSortMode,
 } from '../../../libs/services/collection-prefs';
@@ -165,7 +165,9 @@ export default function CollectionScreen() {
   const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  // Seed from MMKV so the collection grid renders in the user's chosen sort
+  // mode on frame 1 instead of flashing through `newest` first.
+  const [sortMode, setSortMode] = useState<SortMode>(loadCollectionSortModeSync);
   const [collections, setCollections] = useState<CollectionFolder[]>([]);
   const [recents, setRecents] = useState<RecentRailItem[]>([]);
   const [animeCards, setAnimeCards] = useState<CollectionAnimeCardItem[]>([]);
@@ -180,7 +182,6 @@ export default function CollectionScreen() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [username, setUsername] = useState<string | undefined>(undefined);
   const rendererRef = useRef<View>(null);
-  const hydratedRef = useRef(false);
   const collectionLoadRef = useRef(0);
   const animeCardsLoadRef = useRef(0);
   const categoryLoadInitializedRef = useRef(false);
@@ -275,20 +276,14 @@ export default function CollectionScreen() {
     });
   }, [loadCollectionData, selectedCategory]);
 
+  // Skip the very first write — `sortMode` was just seeded from MMKV, so
+  // there's nothing to persist. Every subsequent change is a user action.
+  const sortModeFirstRunRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    loadCollectionSortMode().then((mode) => {
-      if (cancelled) return;
-      setSortMode(mode);
-      hydratedRef.current = true;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hydratedRef.current) return;
+    if (sortModeFirstRunRef.current) {
+      sortModeFirstRunRef.current = false;
+      return;
+    }
     saveCollectionSortMode(sortMode);
   }, [sortMode]);
 

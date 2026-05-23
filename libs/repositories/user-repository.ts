@@ -1,33 +1,13 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { AnimeRepository } from './anime-repository';
 import { platformSyncService } from '../services/platform-sync-service';
+import { kvGet, kvRemove, kvSet } from '../services/storage/app-storage';
+import {
+  USER_AVATAR_URI_KEY,
+  USER_DISPLAY_NAME_KEY,
+  USER_PRIMARY_PLATFORM_KEY,
+} from '../services/storage/keys';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-  removeItem?(key: string): Promise<void>;
-}
-
-let AsyncStorage: AsyncStorageLike;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memoryStorage = new Map<string, string>();
-  AsyncStorage = {
-    getItem: async (k: string) => memoryStorage.get(k) ?? null,
-    setItem: async (k: string, v: string) => {
-      memoryStorage.set(k, v);
-    },
-    removeItem: async (k: string) => {
-      memoryStorage.delete(k);
-    },
-  };
-}
-
-const PRIMARY_PLATFORM_KEY = 'aniseekr.user.primaryPlatform';
-const AVATAR_URI_KEY = 'aniseekr.user.avatarUri';
-const DISPLAY_NAME_KEY = 'aniseekr.user.displayName';
 const DEFAULT_DISPLAY_NAME = 'Anime fan';
 
 export interface UserProfile {
@@ -46,12 +26,14 @@ export interface UserProfile {
 // Local-first profile: no Aniseekr account exists.
 // Display identity comes from the connected primary platform when available,
 // otherwise from a user-set local display name (purely cosmetic).
+//
+// All three persisted bits (primary platform, display name, avatar URI) are
+// MMKV-backed strings. Every getter has a `*Sync` variant for first-frame
+// `useState` seeding so the profile header doesn't flash defaults.
 export class UserRepository {
   static async getProfile(): Promise<UserProfile> {
-    const [localAvatar, displayName] = await Promise.all([
-      UserRepository.getAvatarUri(),
-      UserRepository.getDisplayName(),
-    ]);
+    const localAvatar = UserRepository.getAvatarUriSync();
+    const displayName = UserRepository.getDisplayNameSync();
 
     try {
       const anilistProfile = await platformSyncService.getAniListProfile();
@@ -93,71 +75,52 @@ export class UserRepository {
     await platformSyncService.syncAll();
   }
 
-  /**
-   * Get sync status for all platforms
-   */
+  /** Get sync status for all platforms */
   static getSyncStatus() {
     return platformSyncService.getAllSyncStatuses();
   }
 
-  /**
-   * Get the user's preferred display platform (persisted)
-   */
+  /** Synchronous MMKV read. `null` when never set. */
+  static getPrimaryPlatformSync(): string | null {
+    return kvGet(USER_PRIMARY_PLATFORM_KEY);
+  }
+
+  /** Get the user's preferred display platform (persisted) */
   static async getPrimaryPlatform(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(PRIMARY_PLATFORM_KEY);
-    } catch {
-      return null;
-    }
+    return UserRepository.getPrimaryPlatformSync();
   }
 
-  /**
-   * Persist the user's preferred display platform
-   */
+  /** Persist the user's preferred display platform */
   static async setPrimaryPlatform(platform: string): Promise<void> {
-    try {
-      await AsyncStorage.setItem(PRIMARY_PLATFORM_KEY, platform);
-    } catch {
-      // ignore
-    }
+    kvSet(USER_PRIMARY_PLATFORM_KEY, platform);
   }
 
-  /**
-   * Local cosmetic display name. null when never set.
-   */
+  /** Synchronous MMKV read. `null` when never set. */
+  static getDisplayNameSync(): string | null {
+    return kvGet(USER_DISPLAY_NAME_KEY);
+  }
+
+  /** Local cosmetic display name. null when never set. */
   static async getDisplayName(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(DISPLAY_NAME_KEY);
-    } catch {
-      return null;
-    }
+    return UserRepository.getDisplayNameSync();
   }
 
   static async setDisplayName(name: string | null): Promise<void> {
     if (!name || !name.trim()) {
-      try {
-        await AsyncStorage.removeItem?.(DISPLAY_NAME_KEY);
-      } catch {
-        // ignore
-      }
+      kvRemove(USER_DISPLAY_NAME_KEY);
       return;
     }
-    try {
-      await AsyncStorage.setItem(DISPLAY_NAME_KEY, name.trim());
-    } catch {
-      // ignore
-    }
+    kvSet(USER_DISPLAY_NAME_KEY, name.trim());
   }
 
-  /**
-   * Get the locally stored avatar URI (file:// path) if set.
-   */
+  /** Synchronous MMKV read. `null` when never set. */
+  static getAvatarUriSync(): string | null {
+    return kvGet(USER_AVATAR_URI_KEY);
+  }
+
+  /** Get the locally stored avatar URI (file:// path) if set. */
   static async getAvatarUri(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem(AVATAR_URI_KEY);
-    } catch {
-      return null;
-    }
+    return UserRepository.getAvatarUriSync();
   }
 
   /**
@@ -165,7 +128,7 @@ export class UserRepository {
    */
   static async setAvatarUri(uri: string | null): Promise<void> {
     if (uri === null) {
-      const existing = await UserRepository.getAvatarUri();
+      const existing = UserRepository.getAvatarUriSync();
       if (existing) {
         try {
           await FileSystem.deleteAsync(existing, { idempotent: true });
@@ -173,17 +136,9 @@ export class UserRepository {
           // ignore — file may already be gone
         }
       }
-      try {
-        await AsyncStorage.removeItem?.(AVATAR_URI_KEY);
-      } catch {
-        // ignore
-      }
+      kvRemove(USER_AVATAR_URI_KEY);
       return;
     }
-    try {
-      await AsyncStorage.setItem(AVATAR_URI_KEY, uri);
-    } catch {
-      // ignore
-    }
+    kvSet(USER_AVATAR_URI_KEY, uri);
   }
 }

@@ -40,27 +40,20 @@ import { buildPilgrimageDetailRoute } from '../libs/services/pilgrimage/pilgrima
 import { getStringParam } from '../libs/utils/route-params';
 import { sameArrayBy } from '../libs/utils/state-array';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
+import { kvGet, kvSet } from '../libs/services/storage/app-storage';
+import { SEARCH_RECENT_KEY } from '../libs/services/storage/keys';
 
-const RECENT_KEY = '@aniseekr/search/recent';
 const MAX_RECENT = 8;
+
+/**
+ * Synchronous MMKV read for the recent-searches list, used as the `useState`
+ * initializer so the empty/populated chips render correctly on frame 1
+ * instead of momentarily flashing the empty state.
+ */
+function readRecentSync(): string[] {
+  const parsed = safeJsonParse(kvGet(SEARCH_RECENT_KEY), isStringArray);
+  return parsed ? parsed.slice(0, MAX_RECENT) : [];
+}
 const DEBOUNCE_MS = 320;
 
 type SortKey = 'relevance' | 'score' | 'year';
@@ -125,7 +118,7 @@ export default function SearchScreen() {
   const [results, setResults] = useState<SearchAnime[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<string[]>(readRecentSync);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('relevance');
   const [sortOpen, setSortOpen] = useState(false);
@@ -177,21 +170,10 @@ export default function SearchScreen() {
     setQuery(next);
   }, [params]);
 
-  useEffect(() => {
-    AsyncStorage.getItem(RECENT_KEY)
-      .then((v) => {
-        const parsed = safeJsonParse(v, isStringArray);
-        if (parsed) setRecent(parsed.slice(0, MAX_RECENT));
-      })
-      .catch(() => {});
-  }, []);
+  // `recent` is seeded synchronously from MMKV above; no async hydrate.
 
-  const persistRecent = useCallback(async (next: string[]) => {
-    try {
-      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+  const persistRecent = useCallback((next: string[]) => {
+    kvSet(SEARCH_RECENT_KEY, JSON.stringify(next));
   }, []);
 
   const runSearch = useCallback(
@@ -372,10 +354,10 @@ export default function SearchScreen() {
     runSearch(query);
   }, [query, runSearch]);
 
-  const handleClearRecent = useCallback(async () => {
+  const handleClearRecent = useCallback(() => {
     hapticsBridge.warning();
     setRecent([]);
-    await persistRecent([]);
+    persistRecent([]);
   }, [persistRecent]);
 
   const handleClose = () => {

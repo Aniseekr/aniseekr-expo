@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Spacing, Typography } from '../../constants/DesignSystem';
@@ -7,26 +7,8 @@ import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { SettingsScreenLayout } from '../../components/setting/SettingsScreenLayout';
 import { safeJsonParse } from '../../libs/utils/safe-json';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
-
-const STORAGE_KEY = '@aniseekr/title-language-priority';
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import { LANGUAGE_PRIORITY_KEY } from '../../libs/services/storage/keys';
 
 type LanguageId = 'english' | 'romaji' | 'japanese' | 'chinese';
 
@@ -42,24 +24,19 @@ const DEFAULT_ORDER: LanguageId[] = ['english', 'romaji', 'japanese', 'chinese']
 const isLanguageOrder = (value: unknown): value is LanguageId[] =>
   Array.isArray(value) && value.every((id): id is LanguageId => typeof id === 'string' && id in LANGUAGES);
 
+function readOrderSync(): LanguageId[] {
+  const parsed = safeJsonParse(kvGet(LANGUAGE_PRIORITY_KEY), isLanguageOrder);
+  return parsed ?? DEFAULT_ORDER;
+}
+
 export default function LanguagePriorityScreen() {
   const { theme } = useTheme();
-  const [order, setOrder] = useState<LanguageId[]>(DEFAULT_ORDER);
+  // Sync seed from MMKV — list renders in the user's chosen order on frame 1.
+  const [order, setOrder] = useState<LanguageId[]>(readOrderSync);
 
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        const parsed = safeJsonParse(raw, isLanguageOrder);
-        if (parsed) setOrder(parsed);
-      })
-      .catch(() => {});
-  }, []);
-
-  const persist = async (next: LanguageId[]) => {
+  const persist = (next: LanguageId[]) => {
     setOrder(next);
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {}
+    kvSet(LANGUAGE_PRIORITY_KEY, JSON.stringify(next));
   };
 
   const move = (index: number, direction: -1 | 1) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
@@ -12,26 +12,8 @@ import {
 } from '../../components/setting/SettingsScreenLayout';
 import { ThemedText, readableTextOn } from '../../components/themed';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
-
-const PREFS_KEY = '@aniseekr/sync/prefs';
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import { SYNC_LAST_RUN_KEY, SYNC_PREFS_KEY } from '../../libs/services/storage/keys';
 
 interface SyncPrefs {
   wifiOnly: boolean;
@@ -45,39 +27,40 @@ const DEFAULTS: SyncPrefs = {
   conflictStrategy: 'newest',
 };
 
+/** Sync MMKV seed so the toggles + "Last sync …" line render on frame 1. */
+function readSyncPrefsSync(): SyncPrefs {
+  const raw = kvGet(SYNC_PREFS_KEY);
+  if (!raw) return DEFAULTS;
+  try {
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULTS;
+  }
+}
+
+function readLastSyncSync(): Date | null {
+  const raw = kvGet(SYNC_LAST_RUN_KEY);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
 export default function SyncHubScreen() {
   const { theme } = useTheme();
-  const [prefs, setPrefs] = useState<SyncPrefs>(DEFAULTS);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [prefs, setPrefs] = useState<SyncPrefs>(readSyncPrefsSync);
+  const [lastSync, setLastSync] = useState<Date | null>(readLastSyncSync);
 
-  useEffect(() => {
-    AsyncStorage.getItem(PREFS_KEY).then((raw) => {
-      if (raw) {
-        try {
-          setPrefs({ ...DEFAULTS, ...JSON.parse(raw) });
-        } catch {}
-      }
-    });
-    AsyncStorage.getItem('@aniseekr/sync/lastRun').then((raw) => {
-      if (raw) setLastSync(new Date(raw));
-    });
-  }, []);
-
-  const persist = async (next: SyncPrefs) => {
+  const persist = (next: SyncPrefs) => {
     hapticsBridge.selection();
     setPrefs(next);
-    try {
-      await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next));
-    } catch {}
+    kvSet(SYNC_PREFS_KEY, JSON.stringify(next));
   };
 
-  const runNow = async () => {
+  const runNow = () => {
     hapticsBridge.tap();
     const now = new Date();
     setLastSync(now);
-    try {
-      await AsyncStorage.setItem('@aniseekr/sync/lastRun', now.toISOString());
-    } catch {}
+    kvSet(SYNC_LAST_RUN_KEY, now.toISOString());
     setTimeout(() => hapticsBridge.success(), 800);
   };
 

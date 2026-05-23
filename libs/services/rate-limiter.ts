@@ -43,6 +43,16 @@ export class RateLimiter {
   private static instance: RateLimiter | null = null;
   private readonly configs: Record<RateLimiterChannel, RateLimiterChannelConfig>;
   private readonly state: Map<RateLimiterChannel, ChannelState> = new Map();
+  /**
+   * Per-channel tail of an ordered promise chain. Each `waitForAvailability`
+   * call hooks itself onto the previous tail so a `Promise.all([...20 calls])`
+   * burst truly serialises: caller N can't read `nextAvailableAt` until N-1
+   * has finished its slot and updated state. Without this, all 20 callers
+   * read the same starting state in the same microtask, all skip the sleep,
+   * and fire concurrently at the upstream — which is exactly what caused the
+   * Discovery genre-image burst to 429 against AniList and cache empty images.
+   */
+  private readonly queues: Map<RateLimiterChannel, Promise<void>> = new Map();
   /** Optional override for `Date.now()` so tests can drive virtual time. */
   private nowFn: () => number = Date.now;
   /** Optional override for `setTimeout` so tests can drive virtual time. */
@@ -84,19 +94,43 @@ export class RateLimiter {
    *
    * Returns the number of milliseconds the caller waited (useful for tests
    * and telemetry; production callers can ignore).
+   *
+   * Concurrent calls (e.g. `Promise.all`) are serialised by hooking each
+   * new caller onto a per-channel promise chain. Caller N+1's slot only
+   * starts once caller N has updated `nextAvailableAt`, so the second
+   * caller sees the first caller's footprint and waits.
    */
   async waitForAvailability(channel: RateLimiterChannel): Promise<number> {
     const config = this.configs[channel];
     if (!config) {
       throw new Error(`Unknown rate-limiter channel: ${channel}`);
     }
-    const now = this.nowFn();
+    const previous = this.queues.get(channel) ?? Promise.resolve();
+    const current = previous.then(() => this.takeSlot(channel, config));
+    // Swallow any rejection so the chain doesn't latch onto an error and
+    // poison every subsequent caller. The caller of `current` still receives
+    // the rejection.
+    this.queues.set(
+      channel,
+      current.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return current;
+  }
+
+  private async takeSlot(
+    channel: RateLimiterChannel,
+    config: RateLimiterChannelConfig,
+  ): Promise<number> {
+    const startedAt = this.nowFn();
     const state = this.state.get(channel);
     const target = state?.nextAvailableAt ?? 0;
 
     let waited = 0;
-    if (target > now) {
-      waited = target - now;
+    if (target > startedAt) {
+      waited = target - startedAt;
       await this.sleep(waited);
     }
 
@@ -141,6 +175,7 @@ export class RateLimiter {
   /** Clear all state. */
   reset(): void {
     this.state.clear();
+    this.queues.clear();
   }
 }
 

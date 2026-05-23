@@ -41,29 +41,12 @@ import {
 } from '../../libs/services/backup';
 import { Logger } from '../../libs/utils/logger';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-  removeItem(key: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-    async removeItem(k) {
-      memory.delete(k);
-    },
-  };
-}
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import {
+  BACKUP_ENCRYPTION_TOGGLE_KEY,
+  BACKUP_LAST_RUN_KEY,
+  BACKUP_PROVIDER_KEY,
+} from '../../libs/services/storage/keys';
 
 let SecureStore: {
   getItemAsync(k: string): Promise<string | null>;
@@ -102,9 +85,17 @@ try {
   Logger.warn('[Backup] @react-native-google-signin/google-signin unavailable', err);
 }
 
-const LAST_BACKUP_KEY = 'aniseekr.cloud.lastBackup.v1';
-const ENCRYPTION_TOGGLE_KEY = 'aniseekr.cloud.encryption.enabled.v1';
-const PROVIDER_KEY = 'aniseekr.cloud.provider.v1';
+const LAST_BACKUP_KEY = BACKUP_LAST_RUN_KEY;
+const ENCRYPTION_TOGGLE_KEY = BACKUP_ENCRYPTION_TOGGLE_KEY;
+const PROVIDER_KEY = BACKUP_PROVIDER_KEY;
+
+/** Sync MMKV seed for the persisted `lastBackupAt` timestamp. */
+function readLastBackupAtSync(): Date | null {
+  const raw = kvGet(LAST_BACKUP_KEY);
+  if (!raw) return null;
+  const ms = Number(raw);
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
 
 type Phase = 'idle' | 'checking' | 'uploading' | 'downloading' | 'restoring' | 'syncing';
 
@@ -120,7 +111,9 @@ export default function BackupScreen() {
   const [provider, setProvider] = useState<string>(Platform.OS === 'ios' ? 'icloud' : 'googledrive');
   const [scope, setScope] = useState<CloudScope | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
-  const [lastBackupAt, setLastBackupAt] = useState<Date | null>(null);
+  // Seed sync from MMKV so the "Last backup …" line renders on frame 1
+  // instead of momentarily showing "Never" before the async read resolves.
+  const [lastBackupAt, setLastBackupAt] = useState<Date | null>(readLastBackupAtSync);
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
   const [autoBackupHours, setAutoBackupHours] = useState(24);
@@ -135,12 +128,12 @@ export default function BackupScreen() {
   const autoBackup = useMemo(
     () =>
       new AutoBackupScheduler({
-        storage: AsyncStorage,
+        // Default storage is MMKV-backed; explicit injection only used in tests.
         onBackup: async () => {
           if (!cloud) throw new Error('Cloud module not available');
           const snapshot = await backupService.createSnapshot();
           await cloud.upload(snapshot);
-          await AsyncStorage.setItem(LAST_BACKUP_KEY, String(Date.now()));
+          kvSet(LAST_BACKUP_KEY, String(Date.now()));
           setLastBackupAt(new Date());
         },
       }),
@@ -149,23 +142,18 @@ export default function BackupScreen() {
 
   const googleConfigured = !!GOOGLE_WEB_CLIENT_ID;
 
-  // Hydrate persisted state once.
+  // Hydrate persisted state once. `lastBackupAt` is already seeded sync above;
+  // the rest needs encryption key resolution + cloud availability probes that
+  // are inherently async.
   useEffect(() => {
-    void AsyncStorage.getItem(LAST_BACKUP_KEY).then((raw) => {
-      if (raw) {
-        const ms = Number(raw);
-        if (Number.isFinite(ms)) setLastBackupAt(new Date(ms));
-      }
-    });
-    void AsyncStorage.getItem(ENCRYPTION_TOGGLE_KEY).then(async (v) => {
-      if (v === 'true') {
-        const key = await keyStore.getKey();
+    if (kvGet(ENCRYPTION_TOGGLE_KEY) === 'true') {
+      void keyStore.getKey().then((key) => {
         if (key && cloud) {
           cloud.setEncryptionKey(key);
           setEncryptionEnabled(true);
         }
-      }
-    });
+      });
+    }
     void autoBackup.loadPrefs().then((prefs) => {
       setAutoBackupEnabled(prefs.enabled);
       setAutoBackupHours(prefs.intervalHours);
@@ -179,17 +167,17 @@ export default function BackupScreen() {
       return;
     }
     setPhase('checking');
-    void (async () => {
-      const saved = await AsyncStorage.getItem(PROVIDER_KEY);
-      if ((saved === 'icloud' || saved === 'googledrive') && saved !== cloud.getProvider()) {
-        try {
-          cloud.setProvider(saved);
-        } catch (err) {
-          Logger.warn('[Backup] could not restore saved provider', err);
-        }
+    const saved = kvGet(PROVIDER_KEY);
+    if ((saved === 'icloud' || saved === 'googledrive') && saved !== cloud.getProvider()) {
+      try {
+        cloud.setProvider(saved);
+      } catch (err) {
+        Logger.warn('[Backup] could not restore saved provider', err);
       }
-      setProvider(cloud.getProvider());
-      setScope(cloud.getActiveScope());
+    }
+    setProvider(cloud.getProvider());
+    setScope(cloud.getActiveScope());
+    void (async () => {
       try {
         setAvailable(await cloud.isAvailable());
       } catch {
@@ -226,7 +214,7 @@ export default function BackupScreen() {
       }
       setProvider(next);
       setScope(cloud.getActiveScope());
-      void AsyncStorage.setItem(PROVIDER_KEY, next);
+      kvSet(PROVIDER_KEY, next);
       setHasGoogleToken(false);
       setPhase('checking');
       try {
@@ -267,7 +255,7 @@ export default function BackupScreen() {
       const snapshot = await backupService.createSnapshot();
       await cloud.upload(snapshot);
       const stamp = Date.now();
-      await AsyncStorage.setItem(LAST_BACKUP_KEY, String(stamp));
+      kvSet(LAST_BACKUP_KEY, String(stamp));
       setLastBackupAt(new Date(stamp));
       hapticsBridge.success();
       Alert.alert('Backup uploaded', describeSnapshot(snapshot));
@@ -368,11 +356,11 @@ export default function BackupScreen() {
         if (value) {
           const key = await keyStore.ensureKey();
           if (cloud) cloud.setEncryptionKey(key);
-          await AsyncStorage.setItem(ENCRYPTION_TOGGLE_KEY, 'true');
+          kvSet(ENCRYPTION_TOGGLE_KEY, 'true');
           setEncryptionEnabled(true);
         } else {
           if (cloud) cloud.setEncryptionKey(null);
-          await AsyncStorage.setItem(ENCRYPTION_TOGGLE_KEY, 'false');
+          kvSet(ENCRYPTION_TOGGLE_KEY, 'false');
           setEncryptionEnabled(false);
         }
       } catch (err) {

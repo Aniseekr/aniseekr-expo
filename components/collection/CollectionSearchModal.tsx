@@ -22,27 +22,28 @@ import { CollectionFolder } from '../../types';
 import { LocalDB } from '../../libs/db';
 import { pushAnimeDetail } from '../../libs/utils/navigate-to-anime';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import { COLLECTION_SEARCH_RECENTS_KEY } from '../../libs/services/storage/keys';
 
-const RECENT_KEY = 'aniseekr.collection.search.recents.v1';
 const MAX_RECENT = 8;
+
+/**
+ * Synchronous MMKV read for the collection-search recents — runs in the
+ * `useState` initializer so the modal opens with the user's history already
+ * rendered. Previously this was an async read gated on `visible`, which
+ * meant the recents area popped in after a microtask.
+ */
+function readCollectionRecentsSync(): string[] {
+  const raw = kvGet(COLLECTION_SEARCH_RECENTS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((s): s is string => typeof s === 'string').slice(0, MAX_RECENT);
+  } catch {
+    return [];
+  }
+}
 const DEBOUNCE_MS = 320;
 
 interface AnimeIndexEntry {
@@ -76,28 +77,14 @@ export function CollectionSearchModal({ visible, onClose, folders }: CollectionS
   const { theme } = useTheme();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<string[]>(readCollectionRecentsSync);
   const [animeIndex, setAnimeIndex] = useState<AnimeIndexEntry[]>([]);
   const [indexReady, setIndexReady] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => {
-    if (!visible) return;
-    AsyncStorage.getItem(RECENT_KEY)
-      .then((v) => {
-        if (!v) return;
-        try {
-          const parsed = JSON.parse(v);
-          if (Array.isArray(parsed)) {
-            setRecent(parsed.filter((s) => typeof s === 'string').slice(0, MAX_RECENT));
-          }
-        } catch {
-          // ignore
-        }
-      })
-      .catch(() => {});
-  }, [visible]);
+  // `recent` is seeded synchronously from MMKV above; modal opens with the
+  // user's history already rendered. No async re-read needed.
 
   useEffect(() => {
     if (!visible) {
@@ -220,12 +207,8 @@ export function CollectionSearchModal({ visible, onClose, folders }: CollectionS
     };
   }, [query]);
 
-  const persistRecent = useCallback(async (next: string[]) => {
-    try {
-      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    } catch {
-      // best-effort
-    }
+  const persistRecent = useCallback((next: string[]) => {
+    kvSet(COLLECTION_SEARCH_RECENTS_KEY, JSON.stringify(next));
   }, []);
 
   const folderHits = useMemo<FolderHit[]>(() => {

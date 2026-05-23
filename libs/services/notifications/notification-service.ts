@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { LocalDB } from '../../db';
 import { isObject, safeJsonParse } from '../../utils/safe-json';
+import { kvGet, kvSet } from '../storage/app-storage';
+import { NOTIFICATION_PREFS_KEY } from '../storage/keys';
 
 export type NotificationKind =
   | 'episode_reminder'
@@ -24,30 +26,7 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   leadTimeMinutes: 15,
 };
 
-export const NOTIFICATION_PREFS_KEY = '@aniseekr/notifications/prefs';
-
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let prefsStorage: AsyncStorageLike;
-try {
-  prefsStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  prefsStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
-
-// Cached in memory so hot paths (scheduling per anime, achievement send) stay sync.
-let cachedPrefs: NotificationPreferences = DEFAULT_PREFERENCES;
-let prefsLoadPromise: Promise<NotificationPreferences> | null = null;
+export { NOTIFICATION_PREFS_KEY };
 
 function pickValidPreferences(value: unknown): Partial<NotificationPreferences> | null {
   if (!isObject(value)) return null;
@@ -65,20 +44,32 @@ function pickValidPreferences(value: unknown): Partial<NotificationPreferences> 
   return out;
 }
 
+/**
+ * Synchronous MMKV read. Used to seed the in-memory cache on first access AND
+ * as the fast path for `getCachedNotificationPrefs` / `loadNotificationPrefs`
+ * — both now resolve in ≤ one microtask instead of waiting on AsyncStorage.
+ */
+function readPrefsSync(): NotificationPreferences {
+  try {
+    const raw = kvGet(NOTIFICATION_PREFS_KEY);
+    const parsed = safeJsonParse(raw, isObject);
+    const valid = parsed ? pickValidPreferences(parsed) : null;
+    return valid ? { ...DEFAULT_PREFERENCES, ...valid } : DEFAULT_PREFERENCES;
+  } catch {
+    return DEFAULT_PREFERENCES;
+  }
+}
+
+// Cached in memory so hot paths (scheduling per anime, achievement send) stay
+// sync. Seeded eagerly from MMKV at module load — no async warmup needed.
+let cachedPrefs: NotificationPreferences = readPrefsSync();
+
+export function loadNotificationPrefsSync(): NotificationPreferences {
+  return cachedPrefs;
+}
+
 export async function loadNotificationPrefs(): Promise<NotificationPreferences> {
-  if (prefsLoadPromise) return prefsLoadPromise;
-  prefsLoadPromise = (async () => {
-    try {
-      const raw = await prefsStorage.getItem(NOTIFICATION_PREFS_KEY);
-      const parsed = safeJsonParse(raw, isObject);
-      const valid = parsed ? pickValidPreferences(parsed) : null;
-      cachedPrefs = valid ? { ...DEFAULT_PREFERENCES, ...valid } : DEFAULT_PREFERENCES;
-    } catch {
-      cachedPrefs = DEFAULT_PREFERENCES;
-    }
-    return cachedPrefs;
-  })();
-  return prefsLoadPromise;
+  return cachedPrefs;
 }
 
 export function getCachedNotificationPrefs(): NotificationPreferences {
@@ -86,8 +77,17 @@ export function getCachedNotificationPrefs(): NotificationPreferences {
 }
 
 export async function refreshNotificationPrefs(): Promise<NotificationPreferences> {
-  prefsLoadPromise = null;
-  return loadNotificationPrefs();
+  cachedPrefs = readPrefsSync();
+  return cachedPrefs;
+}
+
+/**
+ * Persist updated notification preferences and refresh the in-memory cache.
+ * The settings screen calls this on every toggle/slider commit.
+ */
+export function saveNotificationPrefs(prefs: NotificationPreferences): void {
+  cachedPrefs = prefs;
+  kvSet(NOTIFICATION_PREFS_KEY, JSON.stringify(prefs));
 }
 
 export interface ScheduledNotificationRow {

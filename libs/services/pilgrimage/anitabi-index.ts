@@ -61,8 +61,15 @@ interface IndexFile {
 
 // Mutable so anitabi-data-service can replace it after runtime fetch.
 let INDEX = normalizeIndexFile(indexJson as unknown as IndexFile);
+let INDEX_BY_ID = buildIdMap(INDEX.entries);
 let indexVersion = 0;
 const listeners = new Set<() => void>();
+
+function buildIdMap(entries: readonly AnitabiIndexEntry[]): Map<number, AnitabiIndexEntry> {
+  const map = new Map<number, AnitabiIndexEntry>();
+  for (const entry of entries) map.set(entry.id, entry);
+  return map;
+}
 
 /**
  * Replace the in-memory index with a freshly-downloaded payload. Called by
@@ -72,6 +79,7 @@ const listeners = new Set<() => void>();
 export function hydrateFromRuntime(file: IndexFile): void {
   if (!file || !Array.isArray(file.entries)) return;
   INDEX = normalizeIndexFile(file);
+  INDEX_BY_ID = buildIdMap(INDEX.entries);
   indexVersion += 1;
   for (const listener of listeners) listener();
 }
@@ -117,6 +125,16 @@ const EARTH_RADIUS_KM = 6371;
  */
 export function getAllIndexed(): readonly AnitabiIndexEntry[] {
   return INDEX.entries;
+}
+
+/**
+ * O(1) lookup by Bangumi subject id against the bundled / runtime-hydrated
+ * index. Used by the pilgrimage hub to seed the popular-animes rail without
+ * waiting for the per-anime `/lite` HTTP fetches, so the rail renders on
+ * frame 1 instead of after ~30 round trips.
+ */
+export function getIndexedById(bangumiId: number): AnitabiIndexEntry | null {
+  return INDEX_BY_ID.get(bangumiId) ?? null;
 }
 
 /** Build timestamp of the shipped index (epoch ms). */

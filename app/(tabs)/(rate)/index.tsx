@@ -35,9 +35,7 @@ import { clearAllDecks } from '../../../libs/services/rate/deck-cache';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 import {
-  DEFAULT_SWIPE_PREFS,
-  DEFAULT_USER_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchSwipePrefs,
   patchUserPrefs,
   type SeasonalLayout,
@@ -66,28 +64,19 @@ export default function HomeRateScreen() {
   const router = useRouter();
   const [showAI, setShowAI] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
-  const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(DEFAULT_SWIPE_PREFS);
+  // Seed both prefs synchronously from MMKV so the deck render and settings
+  // sheet open with the user's real values on the first frame — no async
+  // round-trip, no flash of defaults.
+  const [bootstrapPrefs] = useState(loadUserPrefsSync);
+  const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(() => bootstrapPrefs.swipe);
   const [seasonalLayout, setSeasonalLayout] = useState<SeasonalLayout>(
-    DEFAULT_USER_PREFS.seasonalLayout,
+    () => bootstrapPrefs.seasonalLayout,
   );
   const [trendPilgrimages, setTrendPilgrimages] = useState<AnitabiBangumi[]>([]);
   const [loadingTrendPilgrimages, setLoadingTrendPilgrimages] = useState(false);
   const [trendRange, setTrendRange] = useState<TrendRange>('week');
 
   const styles = useMemo(() => makeStyles(theme), [theme]);
-
-  // Hydrate swipe prefs once; the settings sheet writes back via patchSwipePrefs.
-  useEffect(() => {
-    let cancelled = false;
-    void loadUserPrefs().then((p) => {
-      if (cancelled) return;
-      setSwipePrefs(p.swipe);
-      setSeasonalLayout(p.seasonalLayout);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleSwipePrefsChange = useCallback((next: SwipePrefs) => {
     setSwipePrefs(next);

@@ -7,22 +7,19 @@
 // `app/(tabs)/pilgrimage/[animeId].tsx`. Moving them into one feature hook
 // shrinks the route shell and keeps the persistence policy in one file.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
-  listCaptures,
   loadCapturesSync,
   type PilgrimageCapture,
 } from '../libs/services/pilgrimage/captures';
 import {
-  loadSpotIntents,
   loadSpotIntentsSync,
   saveSpotIntents,
   type SpotIntentKind,
   type SpotIntentMap,
 } from '../libs/services/pilgrimage/spot-intents';
 import {
-  loadVisitedSpots,
   loadVisitedSpotsSync,
   saveVisitedSpots,
   type VisitedMap,
@@ -67,34 +64,11 @@ export function usePilgrimageInteractions(): UsePilgrimageInteractionsResult {
   const [captures, setCaptures] =
     useState<Record<string, PilgrimageCapture>>(loadCapturesSync);
 
+  // The three pieces of state are seeded synchronously from MMKV above.
+  // `refreshCaptures` is exposed so callers can re-pull after they record a
+  // capture from the camera flow without re-mounting the hook.
   const refreshCaptures = useCallback(() => {
-    listCaptures()
-      .then((map) => setCaptures(map))
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    refreshCaptures();
-  }, [refreshCaptures]);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadVisitedSpots().then((map) => {
-      if (!cancelled) setVisited(map);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    loadSpotIntents().then((map) => {
-      if (!cancelled) setSpotIntents(map);
-    });
-    return () => {
-      cancelled = true;
-    };
+    setCaptures(loadCapturesSync());
   }, []);
 
   const toggleVisitedPoint = useCallback((spot: AnitabiPoint) => {

@@ -241,9 +241,8 @@ export default function CompareCaptureScreen() {
 
   // Persistence wiring for overlay-mode + its sub-knobs (edge intensity,
   // subject focus / combine). The hud reducer is the source of truth at
-  // runtime; `CameraSettings` is the write-through cache. We sync ONCE
-  // after AsyncStorage hydrates (seed hud with the persisted pick) and
-  // then mirror every subsequent hud change back into settings so a
+  // runtime; `CameraSettings` is the write-through cache. We seed once from
+  // persisted MMKV settings and then mirror every subsequent hud change so a
   // mode/intensity/focus picked this session restores on the next launch.
   //
   // The ref-gated one-shot seed prevents the post-hydration sync from

@@ -13,10 +13,16 @@
 // next opportunity will retry instead of silently honoring a broken backup.
 
 import { Logger } from '../../utils/logger';
+import { mmkvAsyncStorageAdapter } from '../storage/app-storage';
+import {
+  AUTO_BACKUP_LAST_ERR_KEY,
+  AUTO_BACKUP_LAST_RUN_KEY,
+  AUTO_BACKUP_PREFS_KEY,
+} from '../storage/keys';
 
-const PREFS_KEY = 'aniseekr.cloud.autoBackup.prefs.v1';
-const LAST_RUN_KEY = 'aniseekr.cloud.autoBackup.lastRunAt';
-const LAST_ERR_KEY = 'aniseekr.cloud.autoBackup.lastError';
+const PREFS_KEY = AUTO_BACKUP_PREFS_KEY;
+const LAST_RUN_KEY = AUTO_BACKUP_LAST_RUN_KEY;
+const LAST_ERR_KEY = AUTO_BACKUP_LAST_ERR_KEY;
 
 export interface AutoBackupPrefs {
   enabled: boolean;
@@ -35,7 +41,13 @@ export interface AsyncStorageLike {
 }
 
 export interface AutoBackupOptions {
-  storage: AsyncStorageLike;
+  /**
+   * Optional storage injection — tests pass an in-memory FakeStorage.
+   * Production defaults to the MMKV-backed AsyncStorage adapter so the
+   * prefs / lastRun / lastError keys land in the same store as every
+   * other migrated preference.
+   */
+  storage?: AsyncStorageLike;
   onBackup: () => Promise<void>;
   now?: () => number;
 }
@@ -46,7 +58,7 @@ export class AutoBackupScheduler {
   private readonly now: () => number;
 
   constructor(opts: AutoBackupOptions) {
-    this.storage = opts.storage;
+    this.storage = opts.storage ?? mmkvAsyncStorageAdapter;
     this.onBackup = opts.onBackup;
     this.now = opts.now ?? Date.now;
   }

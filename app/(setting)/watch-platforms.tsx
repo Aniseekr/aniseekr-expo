@@ -12,8 +12,7 @@ import {
 } from '../../components/setting/SettingsScreenLayout';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import {
-  DEFAULT_STREAMING_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchStreamingPrefs,
   subscribeUserPrefs,
   type StreamingPrefs,
@@ -27,15 +26,15 @@ import {
 
 export default function WatchPlatformsScreen() {
   const { theme } = useTheme();
-  const [prefs, setPrefs] = useState<StreamingPrefs>(DEFAULT_STREAMING_PREFS);
+  const [prefs, setPrefs] = useState<StreamingPrefs>(
+    () => loadUserPrefsSync().streamingPlatforms,
+  );
 
   useEffect(() => {
     let mounted = true;
-    loadUserPrefs().then((p) => {
-      if (mounted) setPrefs(p.streamingPlatforms);
-    });
-    // Stay in sync if another screen (e.g. anime detail long-press, settings
-    // quick action) patches the prefs while this one is still mounted.
+    // Initial state is seeded synchronously; this effect only needs to keep
+    // it in sync when another mounted screen (anime detail long-press,
+    // settings quick action) patches the prefs.
     const unsub = subscribeUserPrefs((p) => {
       if (mounted) setPrefs(p.streamingPlatforms);
     });
@@ -55,7 +54,7 @@ export default function WatchPlatformsScreen() {
   // so children stay memo-friendly, and removes the "stale toggle" race
   // when two taps land before the first patch completes.
   const togglePlatform = useCallback(async (id: StreamingPlatformId) => {
-    const current = (await loadUserPrefs()).streamingPlatforms;
+    const current = loadUserPrefsSync().streamingPlatforms;
     const isOn = current.enabled.includes(id);
     const enabled = isOn ? current.enabled.filter((x) => x !== id) : [...current.enabled, id];
     const primary = enabled.includes(current.primary ?? ('' as StreamingPlatformId))
@@ -66,7 +65,7 @@ export default function WatchPlatformsScreen() {
   }, []);
 
   const setPrimary = useCallback(async (id: StreamingPlatformId) => {
-    const current = (await loadUserPrefs()).streamingPlatforms;
+    const current = loadUserPrefsSync().streamingPlatforms;
     if (!current.enabled.includes(id)) {
       // First add the platform, then mark primary — keeps the rule that
       // primary ∈ enabled (see normalizeStreamingPrefs).

@@ -5,9 +5,9 @@
 // The parsed index is memoised against the raw MMKV string: repeated
 // listCaptures / getCapture calls reuse the parsed object instead of
 // re-running JSON.parse, and the cache self-invalidates whenever the stored
-// string changes (a save, or the one-time AsyncStorage → MMKV migration).
+// string changes.
 
-import { kvGet, kvSet, migrateToMMKV } from '../storage/app-storage';
+import { kvGet, kvSet } from '../storage/app-storage';
 import { CAPTURES_STORAGE_KEY } from '../storage/keys';
 
 export { CAPTURES_STORAGE_KEY };
@@ -113,24 +113,20 @@ export function loadCapturesSync(): Record<string, PilgrimageCapture> {
 }
 
 export async function recordCapture(capture: PilgrimageCapture): Promise<void> {
-  await migrateToMMKV();
   const idx = loadSync();
   const next: Index = { spots: { ...idx.spots, [capture.spotId]: capture } };
   persist(next);
 }
 
 export async function listCaptures(): Promise<Record<string, PilgrimageCapture>> {
-  await migrateToMMKV();
   return loadSync().spots;
 }
 
 export async function getCapture(spotId: string): Promise<PilgrimageCapture | null> {
-  await migrateToMMKV();
   return loadSync().spots[spotId] ?? null;
 }
 
 export async function clearCapture(spotId: string): Promise<void> {
-  await migrateToMMKV();
   const idx = loadSync();
   if (!idx.spots[spotId]) return;
   const nextSpots = { ...idx.spots };

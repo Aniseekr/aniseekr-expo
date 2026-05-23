@@ -1,9 +1,8 @@
-// Storage keys for every preference that moved from AsyncStorage to MMKV.
+// Storage keys for every preference backed by MMKV.
 //
-// This file is intentionally dependency-free: both `app-storage` (which needs
-// the full key list to drive the one-time migration) and each owning module
-// (which re-exports its own key) import from here, so a shared constants file
-// avoids an import cycle between them.
+// This file is intentionally dependency-free so each owning module can import
+// its own key without pulling in `app-storage` (which transitively pulls
+// `react-native-mmkv`).
 
 // --- Tier 1: theme + pilgrimage/camera (frame-1 critical reads) ---
 export const THEME_ID_KEY = '@aniseekr/theme';
@@ -26,27 +25,26 @@ export const BROWSE_SOURCE_STORAGE_KEY = 'aniseekr.browseSource';
 export const ALLOW_R18_STORAGE_KEY = 'aniseekr.allowR18Content';
 export const ONBOARDING_COMPLETE_KEY = 'aniseekr.onboarding.complete.v1';
 
-/**
- * Every key the one-time AsyncStorage → MMKV migration copies. Keys NOT listed
- * here (backup/sync screens, notification service, user-repository, gacha,
- * search history, etc.) deliberately stay on AsyncStorage — see Tier 3.
- */
-export const MIGRATED_KEYS: readonly string[] = [
-  THEME_ID_KEY,
-  THEME_CUSTOM_ACCENT_KEY,
-  THEME_RECENT_ACCENTS_KEY,
-  THEME_MODE_KEY,
-  THEME_TINT_INTENSITY_KEY,
-  THEME_INCREASE_CONTRAST_KEY,
-  MAP_THEME_STORAGE_KEY,
-  VISITED_SPOTS_STORAGE_KEY,
-  SPOT_INTENTS_STORAGE_KEY,
-  CAPTURES_STORAGE_KEY,
-  CAMERA_SETTINGS_STORAGE_KEY,
-  USER_PREFS_STORAGE_KEY,
-  COLLECTION_SORT_MODE_STORAGE_KEY,
-  BANGUMI_PREFS_STORAGE_KEY,
-  BROWSE_SOURCE_STORAGE_KEY,
-  ALLOW_R18_STORAGE_KEY,
-  ONBOARDING_COMPLETE_KEY,
-] as const;
+// --- Tier 3: user repository / search / collection / notifications / cloud ---
+// These were the remaining AsyncStorage users that all moved to MMKV in one
+// pass — same key names, same string formats, just a faster backend.
+export const USER_PRIMARY_PLATFORM_KEY = 'aniseekr.user.primaryPlatform';
+export const USER_DISPLAY_NAME_KEY = 'aniseekr.user.displayName';
+export const USER_AVATAR_URI_KEY = 'aniseekr.user.avatarUri';
+export const SEARCH_RECENT_KEY = '@aniseekr/search/recent';
+export const COLLECTION_SEARCH_RECENTS_KEY = 'aniseekr.collection.search.recents.v1';
+export const NOTIFICATION_PREFS_KEY = '@aniseekr/notifications/prefs';
+export const BACKUP_LAST_RUN_KEY = 'aniseekr.cloud.lastBackup.v1';
+export const BACKUP_ENCRYPTION_TOGGLE_KEY = 'aniseekr.cloud.encryption.enabled.v1';
+export const BACKUP_PROVIDER_KEY = 'aniseekr.cloud.provider.v1';
+export const AUTO_BACKUP_PREFS_KEY = 'aniseekr.cloud.autoBackup.prefs.v1';
+export const AUTO_BACKUP_LAST_RUN_KEY = 'aniseekr.cloud.autoBackup.lastRunAt';
+export const AUTO_BACKUP_LAST_ERR_KEY = 'aniseekr.cloud.autoBackup.lastError';
+export const SYNC_PREFS_KEY = '@aniseekr/sync/prefs';
+export const SYNC_LAST_RUN_KEY = '@aniseekr/sync/lastRun';
+export const LANGUAGE_PRIORITY_KEY = '@aniseekr/title-language-priority';
+export const GACHA_USER_DATA_KEY = '@gacha_user_data';
+/** Prefix for one-shot collection tip-dismissal flags (`@aniseekr/${tip}`). */
+export const COLLECTION_TIP_KEY_PREFIX = '@aniseekr/';
+/** Prefix for swipe-action tip-dismissal flags (`@aniseekr/tip/${id}`). */
+export const SWIPE_ACTION_TIP_KEY_PREFIX = '@aniseekr/tip/';

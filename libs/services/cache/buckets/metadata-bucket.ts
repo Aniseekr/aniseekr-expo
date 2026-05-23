@@ -6,7 +6,7 @@
 // in METADATA_GROUPS fall into the `misc` sub-bucket so they remain
 // visible and clearable.
 //
-// The bucket NEVER touches LocalDB (user collections) or AsyncStorage.
+// The bucket NEVER touches LocalDB user data or MMKV preferences.
 
 import { CacheService } from '../../cache-service';
 import type { CacheBucket, CacheSubBucket, BucketStats } from '../cache-manager';

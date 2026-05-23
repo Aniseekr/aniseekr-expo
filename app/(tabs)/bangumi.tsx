@@ -39,8 +39,16 @@ import { BangumiCardDeck } from '../../components/bangumi/BangumiCardDeck';
 import { AnimeRepository, unifiedToLegacyAnime } from '../../libs/repositories/anime-repository';
 import { dataSourceConfig } from '../../libs/services/data-source-config';
 import { animeNotificationService } from '../../modules/notifications/animeNotificationService';
-import { loadBangumiPrefs, saveBangumiPrefs } from '../../libs/services/bangumi-prefs';
-import { loadUserPrefs, patchUserPrefs } from '../../libs/services/user-prefs';
+import {
+  loadBangumiPrefs,
+  loadBangumiPrefsSync,
+  saveBangumiPrefs,
+} from '../../libs/services/bangumi-prefs';
+import {
+  loadUserPrefs,
+  loadUserPrefsSync,
+  patchUserPrefs,
+} from '../../libs/services/user-prefs';
 import { trackingService } from '../../libs/services/tracking/tracking-service';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
@@ -175,15 +183,19 @@ export default function BangumiScreen() {
     const key = snapshotKey(currentSeason, currentYear, dataSourceConfig.browseSource);
     return seasonSnapshots.get(key)?.sourcePlatform ?? dataSourceConfig.browseSource;
   });
-  const [prefs, setPrefsState] = useState<BangumiPreferences>(DEFAULT_BANGUMI_PREFS);
-  const [hydrated, setHydrated] = useState(false);
+  // Seed prefs synchronously from MMKV so the calendar/list view renders in
+  // the user's chosen mode on frame 1. Without this, the screen used to
+  // briefly render in the default mode before the async load flipped it —
+  // visible as a layout shift on a cold open.
+  const [prefs, setPrefsState] = useState<BangumiPreferences>(loadBangumiPrefsSync);
+  const [hydrated, setHydrated] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotifManager, setShowNotifManager] = useState(false);
   const [pendingShare, setPendingShare] = useState(false);
   const [trackingTarget, setTrackingTarget] = useState<Anime | null>(null);
-  const [adultContent, setAdultContent] = useState(false);
+  const [adultContent, setAdultContent] = useState(() => loadUserPrefsSync().allowAdultContent);
   const [trackedIds, setTrackedIds] = useState<Set<string>>(() => new Set());
   const [snackbar, setSnackbar] = useState<{
     key: number;
@@ -212,6 +224,12 @@ export default function BangumiScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    // Prefs are already seeded synchronously above. The async loaders here
+    // only exist to (1) fire the legacy `showAdult` → `allowAdultContent`
+    // promotion side effect inside `loadBangumiPrefs`, (2) reconcile if the
+    // bangumi blob was rewritten by another mounted screen, and (3) wait for
+    // the SQLite-backed tracked-ids set (no sync equivalent exists).
+    hydratedRef.current = true;
     (async () => {
       const [loaded, userPrefs, ids] = await Promise.all([
         loadBangumiPrefs(),
@@ -222,8 +240,6 @@ export default function BangumiScreen() {
       setPrefsState(loaded);
       setAdultContent(userPrefs.allowAdultContent);
       setTrackedIds(ids);
-      hydratedRef.current = true;
-      setHydrated(true);
     })();
     return () => {
       cancelled = true;

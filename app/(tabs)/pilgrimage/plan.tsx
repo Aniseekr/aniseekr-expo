@@ -21,8 +21,12 @@ import { ThemedText, readableTextOn, Skeleton } from '../../../components/themed
 import { cityToColor } from '../../../components/pilgrimage/PilgrimageMapView';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
+import { getIndexedById } from '../../../libs/services/pilgrimage/anitabi-index';
 import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
-import { loadVisitedSpots, type VisitedMap } from '../../../libs/services/pilgrimage/visited-prefs';
+import {
+  loadVisitedSpotsSync,
+  type VisitedMap,
+} from '../../../libs/services/pilgrimage/visited-prefs';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 
@@ -50,14 +54,48 @@ export default function PilgrimagePlanScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
-  const [candidates, setCandidates] = useState<TripCandidate[]>([]);
+  // Seed candidates synchronously from the bundled offline index so the
+  // "Featured Trip" + 「Suggested trips」 lists render on frame 1. The HTTP
+  // fetch below upgrades each entry with its richer payload (litePoints,
+  // canonical cover URLs) — same pattern as the pilgrimage hub.
+  const [candidates, setCandidates] = useState<TripCandidate[]>(() => {
+    const seeded: TripCandidate[] = [];
+    for (const { bangumiId } of FEATURED_PILGRIMAGE_ANIME) {
+      const entry = getIndexedById(bangumiId);
+      if (!entry) continue;
+      const spots = entry.pointsLength ?? 0;
+      seeded.push({
+        anime: {
+          id: entry.id,
+          cn: entry.cn,
+          title: entry.title,
+          city: entry.city,
+          cover: entry.cover,
+          color: entry.color,
+          geo: [entry.lat, entry.lng],
+          zoom: entry.zoom,
+          modified: entry.builtAt,
+          litePoints: [],
+          pointsLength: entry.pointsLength,
+          imagesLength: 0,
+        },
+        estimatedDays: Math.max(1, Math.ceil(spots / 6)),
+        walkingHours: +(spots * 0.4).toFixed(1),
+      });
+    }
+    seeded.sort((a, b) => (b.anime.pointsLength ?? 0) - (a.anime.pointsLength ?? 0));
+    return seeded;
+  });
   const [collectedCount, setCollectedCount] = useState(0);
-  const [visited, setVisited] = useState<VisitedMap>({});
-  const [loading, setLoading] = useState(true);
+  // Visited map is in MMKV — seed sync so the "X / N visited" stat is real
+  // from frame 1 instead of momentarily reading 0.
+  const [visited, setVisited] = useState<VisitedMap>(loadVisitedSpotsSync);
+  // Only show the placeholder when the offline seed gave us nothing AND
+  // the HTTP fetch hasn't returned yet — vanishingly rare in practice.
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     Promise.all([
       Promise.allSettled(
@@ -66,24 +104,30 @@ export default function PilgrimagePlanScreen() {
         )
       ),
       collectionPilgrimageService.getStats().catch(() => ({ total: 0 })),
-      loadVisitedSpots().catch(() => ({}) as VisitedMap),
     ])
-      .then(([fetched, stats, visitedMap]) => {
+      .then(([fetched, stats]) => {
         if (cancelled) return;
-        const animeList: AnitabiBangumi[] = [];
-        for (const r of fetched) {
-          if (r.status === 'fulfilled' && r.value) animeList.push(r.value);
-        }
-        animeList.sort((a, b) => (b.pointsLength ?? 0) - (a.pointsLength ?? 0));
-        const enriched: TripCandidate[] = animeList.map((a) => {
-          const spots = a.pointsLength ?? 0;
-          const days = Math.max(1, Math.ceil(spots / 6));
-          const hours = +(spots * 0.4).toFixed(1);
-          return { anime: a, estimatedDays: days, walkingHours: hours };
+        // Merge HTTP results onto the seeded list. Anything that didn't
+        // resolve keeps its index-derived entry — better than blanking the
+        // row when one of ~30 requests fails.
+        setCandidates((prev) => {
+          const byId = new Map(prev.map((c) => [c.anime.id, c] as const));
+          for (const r of fetched) {
+            if (r.status !== 'fulfilled' || !r.value) continue;
+            const anime = r.value;
+            const spots = anime.pointsLength ?? 0;
+            byId.set(anime.id, {
+              anime,
+              estimatedDays: Math.max(1, Math.ceil(spots / 6)),
+              walkingHours: +(spots * 0.4).toFixed(1),
+            });
+          }
+          return Array.from(byId.values()).sort(
+            (a, b) => (b.anime.pointsLength ?? 0) - (a.anime.pointsLength ?? 0),
+          );
         });
-        setCandidates(enriched);
         setCollectedCount(stats.total ?? 0);
-        setVisited(visitedMap);
+        setVisited(loadVisitedSpotsSync());
         setLoading(false);
       })
       .catch(() => {

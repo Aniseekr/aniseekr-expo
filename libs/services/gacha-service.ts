@@ -1,22 +1,6 @@
 import { characterService, Character } from './character-service';
-
-// AsyncStorage fallback for when package is not installed
-let AsyncStorage: any;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  // Fallback to in-memory storage if AsyncStorage is not available
-  const memoryStorage: Record<string, string> = {};
-  AsyncStorage = {
-    getItem: async (key: string) => memoryStorage[key] || null,
-    setItem: async (key: string, value: string) => {
-      memoryStorage[key] = value;
-    },
-    removeItem: async (key: string) => {
-      delete memoryStorage[key];
-    },
-  };
-}
+import { kvGet, kvSet } from './storage/app-storage';
+import { GACHA_USER_DATA_KEY } from './storage/keys';
 
 export type CardRarity = 'SSR' | 'SR' | 'R' | 'N';
 
@@ -52,7 +36,6 @@ const RARITY_SHARD_VALUES: Record<CardRarity, number> = {
   N: 1,
 };
 
-const STORAGE_KEY = '@gacha_user_data';
 const DEFAULT_COINS = 500;
 const PULL_COST = 100;
 
@@ -89,7 +72,7 @@ class GachaService {
     }
 
     try {
-      const data = await AsyncStorage.getItem(STORAGE_KEY);
+      const data = kvGet(GACHA_USER_DATA_KEY);
       if (data) {
         this.userData = JSON.parse(data);
         return this.userData!;
@@ -116,7 +99,7 @@ class GachaService {
     if (!this.userData) return;
 
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(this.userData));
+      kvSet(GACHA_USER_DATA_KEY, JSON.stringify(this.userData));
     } catch (error) {
       console.error('Error saving user data:', error);
     }

@@ -18,7 +18,7 @@ import { authService } from '../../libs/services/auth/auth-service';
 import { PLATFORM_CONFIGS, PlatformType } from '../../libs/services/auth/types';
 import {
   DEFAULT_USER_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchUserPrefs,
 } from '../../libs/services/user-prefs';
 import {
@@ -52,12 +52,18 @@ export default function ProfileScreen() {
   const [cardsCount, setCardsCount] = useState(0);
   const [coins, setCoins] = useState(0);
   const [shards, setShards] = useState(0);
-  const [selectedPlatform, setSelectedPlatform] = useState<string>(DEFAULT_PLATFORM_ID);
+  // Seed sync from MMKV so the platform switcher renders on the user's
+  // chosen primary on frame 1 instead of momentarily showing `DEFAULT`.
+  const [selectedPlatform, setSelectedPlatform] = useState<string>(
+    () => UserRepository.getPrimaryPlatformSync() ?? DEFAULT_PLATFORM_ID,
+  );
   const [connectedPlatforms, setConnectedPlatforms] = useState<PlatformInfo[]>([]);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [nameSheetVisible, setNameSheetVisible] = useState(false);
+  // Seed shortcuts synchronously from MMKV so the dock renders the user's
+  // chosen layout on frame 1 instead of `DEFAULT_USER_PREFS.profileShortcuts`.
   const [shortcuts, setShortcuts] = useState<ShortcutId[]>(
-    DEFAULT_USER_PREFS.profileShortcuts,
+    () => normalizeProfileShortcuts(loadUserPrefsSync().profileShortcuts),
   );
 
   const loadConnectedPlatforms = useCallback(async () => {
@@ -102,18 +108,10 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
     loadData();
     loadConnectedPlatforms();
-    UserRepository.getPrimaryPlatform().then((stored) => {
-      if (mounted && stored) setSelectedPlatform(stored);
-    });
-    loadUserPrefs().then((p) => {
-      if (mounted) setShortcuts(normalizeProfileShortcuts(p.profileShortcuts));
-    });
-    return () => {
-      mounted = false;
-    };
+    // `selectedPlatform` and `shortcuts` are both seeded synchronously from
+    // MMKV above; nothing to await here.
   }, [loadData, loadConnectedPlatforms]);
 
   const handleShortcutsChange = useCallback((next: ShortcutId[]) => {

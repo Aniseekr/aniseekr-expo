@@ -24,10 +24,8 @@ import { notificationService } from '../libs/services/notifications/notification
 import { routeForNotificationResponse } from '../libs/services/streaming/streaming-notification-route';
 import { initClarity } from '../libs/services/analytics/clarity';
 import { authService } from '../libs/services/auth/auth-service';
-import { isOnboardingComplete } from '../libs/services/onboarding-service';
-import { dataSourceConfig } from '../libs/services/data-source-config';
+import { isOnboardingCompleteSync } from '../libs/services/onboarding-service';
 import { loadUserPrefs } from '../libs/services/user-prefs';
-import { migrateToMMKV } from '../libs/services/storage/app-storage';
 import { idMappingService } from '../libs/services/sync/id-mapping-service';
 import { hydrateAllPilgrimageData } from '../libs/services/pilgrimage/anitabi-data-service';
 import { CacheManager } from '../libs/services/cache/cache-manager';
@@ -36,17 +34,20 @@ import { isCameraCapturePath } from '../libs/services/pilgrimage/camera-ui';
 export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  // Read the onboarding flag synchronously so the very first render of
+  // `_layout` already knows whether to gate tabs or push to `/onboarding`.
+  // Previously we awaited an async read, which on a fresh install always
+  // painted the tabs for one frame before flipping to the onboarding route.
+  const [onboardingChecked] = useState(true);
+  const onboardingDoneRef = useRef(isOnboardingCompleteSync());
 
   useEffect(() => {
-    // One-time AsyncStorage → MMKV migration. Kicked off first so the pref
-    // modules' async reconcile paths see migrated data. Idempotent — every
-    // other migrateToMMKV() caller shares this same in-flight promise.
-    void migrateToMMKV();
-
-    // Critical-path: data fetches anywhere in the tree depend on this resolving,
-    // so we kick it off immediately (still async — doesn't block the first paint).
-    void dataSourceConfig.init().then(() => loadUserPrefs());
+    // `dataSourceConfig` is already seeded synchronously from MMKV in its
+    // constructor, and `loadUserPrefsSync` is what screens use directly.
+    // We still call `loadUserPrefs()` here once for the `syncAdultFlag`
+    // side effect — it mirrors the user's `allowAdultContent` pref onto
+    // `dataSourceConfig.allowR18Content` when the two have drifted.
+    void loadUserPrefs();
 
     // Rule 10: everything below is non-critical for the first frame. Defer it
     // past the initial interaction so analytics / auth / notification setup
@@ -128,18 +129,9 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const done = await isOnboardingComplete();
-      if (cancelled) return;
-      setOnboardingChecked(true);
-      if (!done && pathname !== '/onboarding') {
-        router.replace('/onboarding');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (!onboardingDoneRef.current && pathname !== '/onboarding') {
+      router.replace('/onboarding');
+    }
     // pathname intentionally excluded — we only gate once on bootstrap; later
     // nav back to /onboarding (e.g. via dev reset) is handled by the user.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -13,7 +13,7 @@
 // Storage: a single MMKV key (see app-storage). The synchronous read lets the
 // map screens push the correct tile theme into the WebView on the first frame
 // instead of flashing the default and re-injecting after an async resolve.
-import { kvGet, kvSet, migrateToMMKV } from '../storage/app-storage';
+import { kvGet, kvSet } from '../storage/app-storage';
 import { MAP_THEME_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
@@ -65,12 +65,8 @@ export function loadMapThemePrefSync(): MapThemePref {
   return DEFAULT_MAP_THEME;
 }
 
-/**
- * Async read that first ensures the one-time AsyncStorage → MMKV migration has
- * run. Kept for the migration-launch reconcile; warm launches use the sync read.
- */
+/** Async read kept for callers that want a `Promise` signature. */
 export async function loadMapThemePref(): Promise<MapThemePref> {
-  await migrateToMMKV();
   return loadMapThemePrefSync();
 }
 

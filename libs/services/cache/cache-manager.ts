@@ -5,7 +5,7 @@
 //
 // **Out of scope** for cache management:
 //   - LocalDB (libs/db.ts)        — user collections / ratings / pilgrimage
-//   - AsyncStorage                — small user prefs (onboarding, display name)
+//   - MMKV preference storage     — small user prefs (onboarding, display name)
 //   - Paths.document/avatars/     — user avatar files
 //
 // Those are user data and must never be cleared by "Clear cache" actions.

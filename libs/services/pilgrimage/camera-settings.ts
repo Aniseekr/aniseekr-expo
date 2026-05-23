@@ -1,11 +1,11 @@
 // Persisted camera tool prefs (mute shutter, mirror selfie, animation,
 // quality, resolution tier, countdown, capture mode).
 //
-// Lives in its own AsyncStorage key — independent of UserPrefs and the map
+// Lives in its own MMKV key — independent of UserPrefs and the map
 // theme pref — so the camera screen can read/write without dragging unrelated
 // preference shapes into its render path. Defensive against corrupted JSON:
 // any missing or malformed field falls back to its default value.
-import { kvGet, kvSet, migrateToMMKV } from '../storage/app-storage';
+import { kvGet, kvSet } from '../storage/app-storage';
 import { CAMERA_SETTINGS_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 import { isObject, safeJsonParse } from '../../utils/safe-json';
@@ -225,9 +225,8 @@ export function loadCameraSettingsSync(): CameraSettings {
   }
 }
 
-/** Async read that first ensures the one-time AsyncStorage → MMKV migration. */
+/** Async read kept for callers that want a `Promise` signature. */
 export async function loadCameraSettings(): Promise<CameraSettings> {
-  await migrateToMMKV();
   return loadCameraSettingsSync();
 }
 

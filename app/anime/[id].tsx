@@ -31,8 +31,7 @@ import { AddToCollectionSheet } from '../../components/collection/AddToCollectio
 import { trackingService } from '../../libs/services/tracking/tracking-service';
 import { collectionService } from '../../libs/services/collection/collection-service';
 import {
-  DEFAULT_STREAMING_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchUserPrefs,
   subscribeUserPrefs,
   type StreamingPrefs,
@@ -155,17 +154,19 @@ export default function AnimeDetailScreen() {
   const [favorite, setFavorite] = useState(false);
   const [inCollection, setInCollection] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [streamingPrefs, setStreamingPrefs] = useState<StreamingPrefs>(DEFAULT_STREAMING_PREFS);
+  // Seed streaming prefs synchronously from MMKV so the "Watch on" rail
+  // renders the user's chosen primary on frame 1, instead of flashing
+  // through `DEFAULT_STREAMING_PREFS` (empty list, no CTA) first.
+  const [streamingPrefs, setStreamingPrefs] = useState<StreamingPrefs>(
+    () => loadUserPrefsSync().streamingPlatforms,
+  );
   const reminderScheduled = useIsAnimeScheduled(id);
 
   useEffect(() => {
     let mounted = true;
-    loadUserPrefs().then((p) => {
-      if (mounted) setStreamingPrefs(p.streamingPlatforms);
-    });
     // Stay in sync when the user toggles primary / enabled platforms on the
     // settings screen and returns here — the detail page is still mounted in
-    // the Expo Router stack so the initial loadUserPrefs above won't re-run.
+    // the Expo Router stack so the seed above won't re-run.
     const unsub = subscribeUserPrefs((p) => {
       if (mounted) setStreamingPrefs(p.streamingPlatforms);
     });
@@ -366,8 +367,7 @@ export default function AnimeDetailScreen() {
   const handleQuickAdd = useCallback(async () => {
     if (!anime) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const prefs = await loadUserPrefs();
-    const target = prefs.lastAddedFolderId || 'system_favorites';
+    const target = loadUserPrefsSync().lastAddedFolderId || 'system_favorites';
     const payload = { id: anime.id, title: anime.title, image: anime.image };
     try {
       if (target === 'system_favorites') {

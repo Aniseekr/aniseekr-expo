@@ -33,8 +33,7 @@ import {
 import { ThemedText, readableTextOn } from '../../components/themed';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import {
-  DEFAULT_USER_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchUserPrefs,
   subscribeUserPrefs,
   type UserPrefs,
@@ -100,7 +99,7 @@ export default function SettingsScreen() {
     themes,
   } = useTheme();
 
-  const [prefs, setPrefs] = useState<UserPrefs>(DEFAULT_USER_PREFS);
+  const [prefs, setPrefs] = useState<UserPrefs>(loadUserPrefsSync);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [nameSheetVisible, setNameSheetVisible] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -112,7 +111,8 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let mounted = true;
-    loadUserPrefs().then((p) => mounted && setPrefs(p));
+    // Prefs are seeded synchronously above; the subscription below catches
+    // any subsequent edits made on other settings screens.
     UserRepository.getProfile().then((u) => mounted && setUser(u));
     (async () => {
       try {

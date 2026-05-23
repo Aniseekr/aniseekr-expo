@@ -38,8 +38,8 @@ export interface ResolvedCameraDevicesResult {
   /** Raw device list, exposed so callers can do extra inspection without
    *  re-subscribing to VisionCamera. */
   readonly devices: readonly CameraDevice[];
-  /** Last-known snapshot from a previous cold launch. Null while the
-   *  AsyncStorage read is in flight OR on first launch. Use this to predict
+  /** Last-known snapshot from a previous cold launch. Null on first launch.
+   *  Use this to predict
    *  layout (island chip / strategy) before `cohort` resolves; the actual
    *  camera session always uses `cohort`. */
   readonly cachedSnapshot: CohortSnapshot | null;
@@ -112,8 +112,8 @@ export function useResolvedCameraDevices(
   }, [devices, facing]);
 
   // Persist the latest classification. `save()` debounces identical writes
-  // (same strategy + same device IDs) so we don't churn AsyncStorage; it's
-  // safe to call from a render-driven effect.
+  // (same strategy + same device IDs) so we don't churn MMKV; it's safe to
+  // call from a render-driven effect.
   useEffect(() => {
     if (!cohort) return;
     save({

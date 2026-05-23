@@ -3,7 +3,7 @@ import { View, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { AniseekrEye } from '../components/common/AniseekrEye';
-import { isOnboardingComplete } from '../libs/services/onboarding-service';
+import { isOnboardingCompleteSync } from '../libs/services/onboarding-service';
 
 // Mirrors aniseeker/AniseekrSplashScreen.swift:
 // - pulsating cyan glow ball behind the eye (.repeatForever, autoreverses)
@@ -157,9 +157,8 @@ export default function Index() {
       ]),
     ).start();
 
-    const timer = setTimeout(async () => {
-      const done = await isOnboardingComplete();
-      router.replace(done ? '/(rate)' : '/onboarding');
+    const timer = setTimeout(() => {
+      router.replace(isOnboardingCompleteSync() ? '/(rate)' : '/onboarding');
     }, 2600);
 
     return () => clearTimeout(timer);

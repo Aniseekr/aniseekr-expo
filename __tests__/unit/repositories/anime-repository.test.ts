@@ -651,17 +651,24 @@ describe('AnimeRepository', () => {
 
       return fakeJson({
         data: {
-          Page: {
+          g0: {
             media: [
-              makeAniListAnime({
-                id: 10,
-                title: {
-                  romaji: `${String(parsedBody.variables.genre)} Sample`,
-                  english: null,
-                  native: null,
+              {
+                coverImage: {
+                  large: 'https://img/action.jpg',
+                  extraLarge: 'https://img/action-xl.jpg',
                 },
-                genres: [String(parsedBody.variables.genre)],
-              }),
+              },
+            ],
+          },
+          g1: {
+            media: [
+              {
+                coverImage: {
+                  large: 'https://img/comedy.jpg',
+                  extraLarge: 'https://img/comedy-xl.jpg',
+                },
+              },
             ],
           },
         },
@@ -674,9 +681,17 @@ describe('AnimeRepository', () => {
     const genres = await AnimeRepository.getGenres();
 
     expect(genres.map((genre) => genre.displayName)).toEqual(['Action', 'Comedy']);
-    expect(calls.map((call) => call.parsedBody.variables.genre).filter(Boolean)).toEqual([
-      'Action',
-      'Comedy',
+    expect(calls).toHaveLength(2);
+    expect(calls[1].parsedBody.variables).toMatchObject({
+      isAdult: false,
+      genre0: 'Action',
+      genre1: 'Comedy',
+    });
+    expect(Object.values(calls[1].parsedBody.variables)).not.toContain('Hentai');
+    expect(Object.values(calls[1].parsedBody.variables)).not.toContain('Ecchi');
+    expect(genres.map((genre) => genre.image)).toEqual([
+      'https://img/action-xl.jpg',
+      'https://img/comedy-xl.jpg',
     ]);
   });
 

@@ -4,7 +4,7 @@
 // The synchronous read lets the map / spot list seed save & plan markers on
 // the first frame instead of popping them in after an async resolve.
 
-import { kvGet, kvSet, migrateToMMKV } from '../storage/app-storage';
+import { kvGet, kvSet } from '../storage/app-storage';
 import { SPOT_INTENTS_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
@@ -31,9 +31,8 @@ export function loadSpotIntentsSync(): SpotIntentMap {
   }
 }
 
-/** Async read that first ensures the one-time AsyncStorage → MMKV migration. */
+/** Async read kept for callers that want a `Promise` signature. */
 export async function loadSpotIntents(): Promise<SpotIntentMap> {
-  await migrateToMMKV();
   return loadSpotIntentsSync();
 }
 

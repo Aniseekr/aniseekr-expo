@@ -11,7 +11,7 @@ import {
   type StreamingPlatformId,
 } from './streaming/streaming-platforms';
 
-import { kvGet, kvSet, migrateToMMKV } from './storage/app-storage';
+import { kvGet, kvSet } from './storage/app-storage';
 import { USER_PREFS_STORAGE_KEY } from './storage/keys';
 
 export { USER_PREFS_STORAGE_KEY };
@@ -129,9 +129,16 @@ export function normalizeStreamingPrefs(input: unknown): StreamingPrefs {
   return { enabled, primary, preferAppDeepLink };
 }
 
-export async function loadUserPrefs(): Promise<UserPrefs> {
+/**
+ * Synchronous MMKV read. Safe for first-frame `useState` initialisers — no
+ * `await`, no skeleton flash. The async {@link loadUserPrefs} wraps this so
+ * existing call sites keep working; new code should prefer the sync variant.
+ *
+ * Returns a fresh defaults object on miss / parse failure so callers can
+ * mutate the result without worrying about shared state.
+ */
+export function loadUserPrefsSync(): UserPrefs {
   try {
-    await migrateToMMKV();
     const raw = kvGet(USER_PREFS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_USER_PREFS };
     const parsed = JSON.parse(raw) as Partial<UserPrefs>;
@@ -146,15 +153,21 @@ export async function loadUserPrefs(): Promise<UserPrefs> {
         : DEFAULT_USER_PREFS.seasonalLayout,
       streamingPlatforms: normalizeStreamingPrefs(parsed.streamingPlatforms),
     };
-    // Mirror the adult-content flag onto the data-source config so the read
-    // pipeline (AniList isAdult, Jikan sfw, repository safety net) reflects
-    // the user's choice without a separate toggle.
-    void syncAdultFlag(result.allowAdultContent);
     return result;
   } catch (err) {
     Logger.warn('[UserPrefs] load failed, using defaults', err);
     return { ...DEFAULT_USER_PREFS };
   }
+}
+
+export async function loadUserPrefs(): Promise<UserPrefs> {
+  const result = loadUserPrefsSync();
+  // Mirror the adult-content flag onto the data-source config so the read
+  // pipeline (AniList isAdult, Jikan sfw, repository safety net) reflects
+  // the user's choice without a separate toggle. Fire-and-forget so the
+  // returned Promise resolves immediately.
+  void syncAdultFlag(result.allowAdultContent);
+  return result;
 }
 
 export async function saveUserPrefs(prefs: UserPrefs): Promise<void> {

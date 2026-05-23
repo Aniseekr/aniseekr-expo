@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,25 +6,10 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import { COLLECTION_TIP_KEY_PREFIX } from '../../libs/services/storage/keys';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
+const tipMmkvKey = (storageKey: string) => `${COLLECTION_TIP_KEY_PREFIX}${storageKey}`;
 
 interface TipDef {
   icon: React.ComponentProps<typeof MaterialIcons>['name'];
@@ -69,42 +54,24 @@ interface CollectionTipsProps {
 
 function CollectionTipsComponent({ context }: CollectionTipsProps) {
   const { theme } = useTheme();
-  const [seen, setSeen] = useState<Record<string, boolean>>({});
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    Promise.all(
-      TIPS.map(async (tip) => {
-        const value = await AsyncStorage.getItem(`@aniseekr/${tip.storageKey}`);
-        return [tip.storageKey, value === 'seen'] as const;
-      })
-    )
-      .then((entries) => {
-        if (!mounted) return;
-        const map = Object.fromEntries(entries);
-        setSeen(map);
-        setHydrated(true);
-      })
-      .catch(() => {
-        if (mounted) setHydrated(true);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (!hydrated) return null;
+  // Seed sync from MMKV — no async hydrate, no `hydrated` flag, no flash of
+  // a tip that should be hidden. `seen[storageKey]` is true when the user
+  // has already dismissed that tip on this device.
+  const [seen, setSeen] = useState<Record<string, boolean>>(() => {
+    const out: Record<string, boolean> = {};
+    for (const tip of TIPS) {
+      out[tip.storageKey] = kvGet(tipMmkvKey(tip.storageKey)) === 'seen';
+    }
+    return out;
+  });
 
   const tip = TIPS.find((t) => !seen[t.storageKey] && t.shouldShow(context));
   if (!tip) return null;
 
-  const dismiss = async () => {
+  const dismiss = () => {
     hapticsBridge.tap();
     setSeen((prev) => ({ ...prev, [tip.storageKey]: true }));
-    try {
-      await AsyncStorage.setItem(`@aniseekr/${tip.storageKey}`, 'seen');
-    } catch {}
+    kvSet(tipMmkvKey(tip.storageKey), 'seen');
   };
 
   return (

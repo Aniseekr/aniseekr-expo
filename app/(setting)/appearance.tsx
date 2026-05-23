@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -23,8 +23,7 @@ import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { ThemedButton, ThemedText, readableTextOn } from '../../components/themed';
 import { PaywallSheet } from '../../components/subscription/PaywallSheet';
 import {
-  DEFAULT_USER_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchUserPrefs,
   type UserPrefs,
 } from '../../libs/services/user-prefs';
@@ -65,8 +64,9 @@ export default function AppearanceScreen() {
     setIncreaseContrast,
   } = useTheme();
 
-  const [prefs, setPrefs] = useState<UserPrefs>(DEFAULT_USER_PREFS);
-  const [cardHeight, setCardHeight] = useState<number>(DEFAULT_USER_PREFS.cardHeightPercent);
+  const [bootstrapPrefs] = useState(loadUserPrefsSync);
+  const [prefs, setPrefs] = useState<UserPrefs>(bootstrapPrefs);
+  const [cardHeight, setCardHeight] = useState<number>(bootstrapPrefs.cardHeightPercent);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const { pref: mapThemePref, setPref: setMapThemePref } = useMapThemePref();
 
@@ -77,17 +77,7 @@ export default function AppearanceScreen() {
   const tintIndex = TINT_STEPS.indexOf(tintIntensity);
   const isPro = subscription.isPro;
 
-  useEffect(() => {
-    let mounted = true;
-    loadUserPrefs().then((p) => {
-      if (!mounted) return;
-      setPrefs(p);
-      setCardHeight(p.cardHeightPercent);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // Prefs are seeded synchronously above; no async load required.
 
   const handleThemePress = (palette: ThemePalette) => {
     if (palette.id === themeId && !customAccent) return;

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform, useColorScheme } from 'react-native';
 
-import { isMigrated, kvGet, kvSet, migrateToMMKV } from '../libs/services/storage/app-storage';
+import { kvGet, kvSet } from '../libs/services/storage/app-storage';
 import {
   THEME_CUSTOM_ACCENT_KEY,
   THEME_ID_KEY,
@@ -465,63 +465,18 @@ function readStoredTheme(): StoredTheme {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Seed synchronously from MMKV so the very first paint is in the user's
-  // theme. On a warm launch this is the real persisted value; only the single
-  // launch right after the AsyncStorage → MMKV migration starts from defaults.
-  const [bootstrap] = useState(() => ({
-    stored: readStoredTheme(),
-    migrated: isMigrated(),
-  }));
-  const [themeId, setThemeId] = useState<ThemeId>(bootstrap.stored.themeId);
-  const [customAccent, setCustomAccentState] = useState<string | null>(
-    bootstrap.stored.customAccent
-  );
-  const [recentAccents, setRecentAccentsState] = useState<string[]>(
-    bootstrap.stored.recentAccents
-  );
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(bootstrap.stored.themeMode);
-  const [tintIntensity, setTintIntensityState] = useState<TintIntensity>(
-    bootstrap.stored.tintIntensity
-  );
+  // theme. MMKV is memory-mapped so this is essentially free — the read
+  // happens during `useState`'s lazy initialiser and never flips on the user.
+  const [bootstrap] = useState(() => readStoredTheme());
+  const [themeId, setThemeId] = useState<ThemeId>(bootstrap.themeId);
+  const [customAccent, setCustomAccentState] = useState<string | null>(bootstrap.customAccent);
+  const [recentAccents, setRecentAccentsState] = useState<string[]>(bootstrap.recentAccents);
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(bootstrap.themeMode);
+  const [tintIntensity, setTintIntensityState] = useState<TintIntensity>(bootstrap.tintIntensity);
   const [increaseContrast, setIncreaseContrastState] = useState<boolean>(
-    bootstrap.stored.increaseContrast
+    bootstrap.increaseContrast
   );
-  const [hydrated, setHydrated] = useState(bootstrap.migrated);
   const systemScheme = useColorScheme();
-
-  // Migration-launch reconcile: a warm launch already has the real values from
-  // the synchronous seed, so the effect is a no-op there. Only the first launch
-  // after updating runs the AsyncStorage → MMKV copy, then re-applies the
-  // migrated values once.
-  useEffect(() => {
-    let mounted = true;
-    const applyStoredTheme = () => {
-      if (!mounted) return;
-      const stored = readStoredTheme();
-      setThemeId(stored.themeId);
-      setCustomAccentState(stored.customAccent);
-      setRecentAccentsState(stored.recentAccents);
-      setThemeModeState(stored.themeMode);
-      setTintIntensityState(stored.tintIntensity);
-      setIncreaseContrastState(stored.increaseContrast);
-      setHydrated(true);
-    };
-
-    if (isMigrated()) {
-      if (!bootstrap.migrated) applyStoredTheme();
-      return () => {
-        mounted = false;
-      };
-    }
-
-    migrateToMMKV()
-      .catch(() => undefined)
-      .finally(() => {
-        applyStoredTheme();
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const setTheme = useCallback(async (id: ThemeId) => {
     if (!(id in THEMES)) return;
@@ -642,7 +597,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       theme: resolvedTheme,
       themeId,
       setTheme,
-      hydrated,
+      hydrated: true,
       themes: THEME_LIST,
       customAccent,
       setCustomAccent,
@@ -659,7 +614,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       resolvedTheme,
       themeId,
       setTheme,
-      hydrated,
       customAccent,
       setCustomAccent,
       recentAccents,

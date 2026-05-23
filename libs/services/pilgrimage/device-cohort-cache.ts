@@ -28,6 +28,7 @@
 // other devices. Back and front cohorts never share storage.
 
 import { Logger } from '../../utils/logger';
+import { mmkvAsyncStorageAdapter } from '../storage/app-storage';
 import type { CohortStrategy } from './device-cohort';
 
 interface AsyncStorageLike {
@@ -36,22 +37,9 @@ interface AsyncStorageLike {
   removeItem(key: string): Promise<void>;
 }
 
-let defaultStorage: AsyncStorageLike;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  defaultStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  defaultStorage = {
-    getItem: async (k) => memory.get(k) ?? null,
-    setItem: async (k, v) => {
-      memory.set(k, v);
-    },
-    removeItem: async (k) => {
-      memory.delete(k);
-    },
-  };
-}
+// Production default is the MMKV-backed adapter. Tests pass their own in-
+// memory FakeStorage through the `storage` option below.
+const defaultStorage: AsyncStorageLike = mmkvAsyncStorageAdapter;
 
 export const COHORT_CACHE_PREFIX = 'aniseekr.pilgrimage.cohort.v1';
 /** 30-day TTL — comfortably longer than any plausible "I left my phone

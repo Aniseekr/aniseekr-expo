@@ -24,7 +24,7 @@ import { trackingService } from '../../../libs/services/tracking/tracking-servic
 import { LocalDB } from '../../../libs/db';
 import {
   DEFAULT_SWIPE_PREFS,
-  loadUserPrefs,
+  loadUserPrefsSync,
   patchSwipePrefs,
   type SwipeMode,
   type SwipePrefs,
@@ -170,7 +170,11 @@ export default function RatingScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(DEFAULT_SWIPE_PREFS);
+  // Seed sync so the swipe deck opens in the user's chosen mode/content-fit
+  // on frame 1 — previously this rendered the default deck first and only
+  // flipped after an async load resolved (visible flicker when re-entering
+  // from a tab).
+  const [swipePrefs, setSwipePrefs] = useState<SwipePrefs>(() => loadUserPrefsSync().swipe);
   const [showSettings, setShowSettings] = useState(false);
   const [showModeSwitcher, setShowModeSwitcher] = useState(false);
   const [restartableSeenIds, setRestartableSeenIds] = useState<string[]>([]);
@@ -216,17 +220,8 @@ export default function RatingScreen() {
     setRestartableSeenIds([...next]);
   }, []);
 
-  // Hydrate swipe prefs on mount; the ModeSelector + settings sheet persist
-  // changes via patchSwipePrefs so they survive deck reloads.
-  useEffect(() => {
-    let cancelled = false;
-    void loadUserPrefs().then((p) => {
-      if (!cancelled) setSwipePrefs(p.swipe);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Swipe prefs are seeded synchronously above via `loadUserPrefsSync` so the
+  // deck opens in the user's chosen mode on frame 1. No async hydrate needed.
 
   const handleModeChange = useCallback((mode: SwipeMode) => {
     setSwipePrefs((prev) => ({ ...prev, mode }));

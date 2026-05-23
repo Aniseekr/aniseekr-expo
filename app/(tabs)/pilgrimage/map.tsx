@@ -80,11 +80,10 @@ import { getNearbyMapEntries, MAP_LOCATE_ZOOM } from '../../../libs/services/pil
 import { getPilgrimageAnimeTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import {
-  loadVisitedSpots,
   loadVisitedSpotsSync,
   type VisitedMap,
 } from '../../../libs/services/pilgrimage/visited-prefs';
-import { listCaptures, loadCapturesSync } from '../../../libs/services/pilgrimage/captures';
+import { loadCapturesSync } from '../../../libs/services/pilgrimage/captures';
 import {
   appendIndexedEntries,
   buildKnownAnimeIdSet,
@@ -638,29 +637,10 @@ export default function PilgrimageMapScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    loadVisitedSpots()
-      .then((m) => {
-        if (!cancelled) setVisited(m);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    listCaptures()
-      .then((map) => {
-        if (!cancelled) setCaptureCount(Object.keys(map).length);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // `visited` and `captureCount` are seeded synchronously from MMKV in the
+  // useState initializers above. The previous async reconcile was a no-op on
+  // the render path now that reads are sync — drop it to avoid an extra
+  // re-render that re-rendered the WebView marker layer for no reason.
 
   const updateUserLocation = useCallback((loc: LatLng) => {
     if (sameLatLng(userLocationRef.current, loc)) return false;

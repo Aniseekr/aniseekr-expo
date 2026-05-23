@@ -1,4 +1,4 @@
-import { kvGet, kvSet, migrateToMMKV } from './storage/app-storage';
+import { kvGet, kvSet } from './storage/app-storage';
 import { COLLECTION_SORT_MODE_STORAGE_KEY } from './storage/keys';
 import { Logger } from '../utils/logger';
 
@@ -15,9 +15,11 @@ const VALID_SORT_MODES: CollectionSortMode[] = [
   'id',
 ];
 
-export async function loadCollectionSortMode(): Promise<CollectionSortMode> {
+/**
+ * Synchronous MMKV read. Safe for first-frame `useState` initialisers.
+ */
+export function loadCollectionSortModeSync(): CollectionSortMode {
   try {
-    await migrateToMMKV();
     const raw = kvGet(COLLECTION_SORT_MODE_STORAGE_KEY);
     if (!raw) return 'newest';
     if (VALID_SORT_MODES.includes(raw as CollectionSortMode)) {
@@ -28,6 +30,10 @@ export async function loadCollectionSortMode(): Promise<CollectionSortMode> {
     Logger.warn('[CollectionPrefs] load sortMode failed, using default', err);
     return 'newest';
   }
+}
+
+export async function loadCollectionSortMode(): Promise<CollectionSortMode> {
+  return loadCollectionSortModeSync();
 }
 
 export async function saveCollectionSortMode(mode: CollectionSortMode): Promise<void> {

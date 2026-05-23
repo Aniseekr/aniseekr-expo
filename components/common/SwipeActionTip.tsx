@@ -11,25 +11,10 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
+import { SWIPE_ACTION_TIP_KEY_PREFIX } from '../../libs/services/storage/keys';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
+const tipMmkvKey = (storageKey: string) => `${SWIPE_ACTION_TIP_KEY_PREFIX}${storageKey}`;
 
 interface SwipeActionTipProps {
   storageKey: string;
@@ -43,25 +28,24 @@ function SwipeActionTipComponent({
   visibleByDefault = false,
 }: SwipeActionTipProps) {
   const { theme } = useTheme();
-  const [visible, setVisible] = useState(visibleByDefault);
+  // Seed sync from MMKV — `visible` is correct on frame 1. Previously the
+  // tip popped in after an async resolve which was visually jarring.
+  const [visible, setVisible] = useState(() => {
+    if (visibleByDefault) return true;
+    return kvGet(tipMmkvKey(storageKey)) !== 'seen';
+  });
   const arrowX = useSharedValue(0);
-  const opacity = useSharedValue(visibleByDefault ? 1 : 0);
+  const opacity = useSharedValue(visible ? 1 : 0);
 
   useEffect(() => {
-    let mounted = true;
-    AsyncStorage.getItem(`@aniseekr/tip/${storageKey}`)
-      .then((v) => {
-        if (!mounted) return;
-        if (v !== 'seen') {
-          setVisible(true);
-          opacity.value = withTiming(1, { duration: 300 });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, [storageKey, opacity]);
+    if (visibleByDefault) return;
+    if (visible && opacity.value === 0) {
+      opacity.value = withTiming(1, { duration: 300 });
+    }
+    // visible & opacity intentionally read only once on mount — the dismiss
+    // handler owns the visible→hidden transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
@@ -82,13 +66,11 @@ function SwipeActionTipComponent({
 
   if (!visible) return null;
 
-  const dismiss = async () => {
+  const dismiss = () => {
     hapticsBridge.tap();
     opacity.value = withTiming(0, { duration: 200 });
     setTimeout(() => setVisible(false), 220);
-    try {
-      await AsyncStorage.setItem(`@aniseekr/tip/${storageKey}`, 'seen');
-    } catch {}
+    kvSet(tipMmkvKey(storageKey), 'seen');
   };
 
   return (

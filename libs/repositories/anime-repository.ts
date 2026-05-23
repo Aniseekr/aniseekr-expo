@@ -1056,26 +1056,47 @@ export class AnimeRepository {
     const cacheKey = `genres_list_v2_r${r18CacheFlag()}`;
     const overrides = await getGenreCoverOverrides();
     const cached = await CacheService.get<Genre[]>(cacheKey);
-    if (cached) return filterGenreCards(applyGenreCoverOverrides(cached, overrides));
+    if (cached) {
+      // Treat an all-empty cached payload as a miss and re-fetch. Without this,
+      // a single failed cold start (e.g. AniList 429-ing the 20-genre burst
+      // before the rate-limiter chain was added) would lock the user into a
+      // placeholder-icon carousel for the full 24h TTL. Overrides are applied
+      // first because a user who entered a genre later may have stamped a
+      // cover URL into LocalDB that resurrects an otherwise-empty row.
+      const withOverrides = applyGenreCoverOverrides(cached, overrides);
+      if (withOverrides.some((g) => g.image !== '')) {
+        return filterGenreCards(withOverrides);
+      }
+    }
 
-    const genres = filterGenreNames(await AniListClient.getGenres());
+    const allGenres = filterGenreNames(await AniListClient.getGenres());
+    const genreNames = allGenres.slice(0, 20);
 
-    const fetched: Genre[] = await Promise.all(
-      genres.slice(0, 20).map(async (name) => {
-        try {
-          const anime = filterAniListAnime(
-            await AniListClient.getAnimeByGenre(name, 1, 1, legacyAniListOptions())
-          );
-          const image = anime[0]?.coverImage?.extraLarge ?? anime[0]?.coverImage?.large ?? '';
-          return { id: name, displayName: name, image };
-        } catch {
-          return { id: name, displayName: name, image: '' };
-        }
-      })
-    );
+    // One alias-bundled GraphQL request instead of 20 parallel HTTP calls.
+    // Single rate-limit slot, single network round-trip, no risk of partial
+    // failure where some genres succeed and others 429.
+    let covers: Map<string, { extraLarge: string; large: string } | null>;
+    try {
+      covers = await AniListClient.getGenreCovers(genreNames, legacyAniListOptions());
+    } catch (err) {
+      Logger.warn('[AnimeRepository] getGenreCovers failed, returning placeholder list', err);
+      covers = new Map(genreNames.map((name) => [name, null] as const));
+    }
+
+    const fetched: Genre[] = genreNames.map((name) => {
+      const cover = covers.get(name);
+      const image = cover?.extraLarge || cover?.large || '';
+      return { id: name, displayName: name, image };
+    });
 
     const genresWithImages = applyGenreCoverOverrides(fetched, overrides);
-    await CacheService.set(cacheKey, genresWithImages, LEGACY_DETAIL_CACHE_TTL_MS);
+    // Only commit the cache when at least one card carries a real image.
+    // An all-empty fetch is treated as ephemeral failure — the UI still
+    // renders this run's placeholders (the next call re-fetches) rather
+    // than spending the 24h TTL on a known-bad payload.
+    if (genresWithImages.some((g) => g.image !== '')) {
+      await CacheService.set(cacheKey, genresWithImages, LEGACY_DETAIL_CACHE_TTL_MS);
+    }
     return genresWithImages;
   }
 

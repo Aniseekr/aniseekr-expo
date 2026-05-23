@@ -63,7 +63,7 @@ export interface BackupDbV1 {
 }
 
 export interface BackupPrefsV1 {
-  // Raw JSON-serialised values, restored back into AsyncStorage as-is.
+  // Raw JSON-serialised preference values, restored back into MMKV as-is.
   user: string | null; // aniseekr.user.prefs.v1
   collectionSortMode: string | null; // aniseekr.collection.sortMode.v1
   bangumi: string | null; // aniseekr.bangumi.prefs.v1

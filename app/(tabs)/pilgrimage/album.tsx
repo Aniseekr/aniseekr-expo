@@ -21,7 +21,10 @@ import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
 import { ThemedText, readableTextOn } from '../../../components/themed';
 import { Shadow, Spacing } from '../../../constants/DesignSystem';
-import { listCaptures, type PilgrimageCapture } from '../../../libs/services/pilgrimage/captures';
+import {
+  loadCapturesSync,
+  type PilgrimageCapture,
+} from '../../../libs/services/pilgrimage/captures';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import { collectionPilgrimageService } from '../../../libs/services/pilgrimage/collection-pilgrimage-service';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
@@ -109,20 +112,16 @@ export default function PilgrimageAlbumScreen() {
   // folder-tap users go back to the folder grid.
   const cameFromUrlRef = useRef<boolean>(!!animeIdParam);
 
-  const [captures, setCaptures] = useState<Record<string, PilgrimageCapture>>({});
+  // Seed sync from MMKV so the album thumbnail grid renders the user's
+  // captures on frame 1 instead of momentarily showing the empty state.
+  const [captures, setCaptures] = useState<Record<string, PilgrimageCapture>>(loadCapturesSync);
   const [animes, setAnimes] = useState<AnitabiBangumi[]>([]);
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [selectedAnimeId, setSelectedAnimeId] = useState<string | null>(animeIdParam ?? null);
 
-  useEffect(() => {
-    let cancelled = false;
-    listCaptures().then((m) => {
-      if (!cancelled) setCaptures(m);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Captures are seeded synchronously above; no async reload needed because
+  // every writer (camera capture flow, clear actions) updates MMKV directly
+  // and the new mount will see the fresh value.
 
   useEffect(() => {
     let cancelled = false;

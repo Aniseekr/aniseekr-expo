@@ -26,29 +26,12 @@ import {
   notificationService,
   DEFAULT_PREFERENCES,
   NotificationPreferences,
-  NOTIFICATION_PREFS_KEY,
-  loadNotificationPrefs,
+  loadNotificationPrefsSync,
   refreshNotificationPrefs,
+  saveNotificationPrefs,
 } from '../../libs/services/notifications/notification-service';
 
-interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-let AsyncStorage: AsyncStorageLike;
-try {
-  AsyncStorage = require('@react-native-async-storage/async-storage').default;
-} catch {
-  const memory = new Map<string, string>();
-  AsyncStorage = {
-    async getItem(k) {
-      return memory.get(k) ?? null;
-    },
-    async setItem(k, v) {
-      memory.set(k, v);
-    },
-  };
-}
+// Storage now lives on MMKV via notification-service.saveNotificationPrefs.
 
 const LEAD_OPTIONS = [5, 15, 30, 60];
 
@@ -124,7 +107,9 @@ export default function NotificationsScreen() {
   const { theme } = useTheme();
   const { permission, scheduled, requestPermission, cancelAll, refreshSchedule } =
     useNotifications();
-  const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
+  // Seed sync from MMKV so the toggles render in their persisted state on
+  // frame 1 instead of momentarily showing the defaults and flipping.
+  const [prefs, setPrefs] = useState<NotificationPreferences>(loadNotificationPrefsSync);
   const [pending, setPending] = useState<PendingNotification[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -153,10 +138,6 @@ export default function NotificationsScreen() {
       console.warn('[Notifications] fetch scheduled failed:', e);
       setPending([]);
     }
-  }, []);
-
-  useEffect(() => {
-    loadNotificationPrefs().then((loaded) => setPrefs(loaded));
   }, []);
 
   useEffect(() => {
@@ -213,11 +194,7 @@ export default function NotificationsScreen() {
     hapticsBridge.selection();
     const prev = prefs;
     setPrefs(next);
-    try {
-      await AsyncStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(next));
-    } catch {
-      // best-effort persistence
-    }
+    saveNotificationPrefs(next);
     await refreshNotificationPrefs();
     if (next.dailyDigest && !prev.dailyDigest) {
       await notificationService.scheduleDailyDigest();

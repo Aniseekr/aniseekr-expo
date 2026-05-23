@@ -1,7 +1,7 @@
 import type { PlatformType } from './auth/types';
 import { Logger } from '../utils/logger';
 
-import { kvGet, kvSet, migrateToMMKV } from './storage/app-storage';
+import { kvGet, kvSet } from './storage/app-storage';
 import { ALLOW_R18_STORAGE_KEY, BROWSE_SOURCE_STORAGE_KEY } from './storage/keys';
 
 export { BROWSE_SOURCE_STORAGE_KEY, ALLOW_R18_STORAGE_KEY };
@@ -26,18 +26,43 @@ export function isSupportedBrowseSource(platform: PlatformType): boolean {
   return (BROWSE_SUPPORTED_PLATFORMS as readonly PlatformType[]).includes(platform);
 }
 
+function readBrowseSourceSync(): PlatformType {
+  try {
+    const raw = kvGet(BROWSE_SOURCE_STORAGE_KEY);
+    if (raw && isSupportedBrowseSource(raw as PlatformType)) {
+      return raw as PlatformType;
+    }
+  } catch (err) {
+    Logger.warn('[DataSourceConfig] browseSource read failed', err);
+  }
+  return DEFAULT_BROWSE_SOURCE;
+}
+
+function readAllowR18Sync(): boolean {
+  try {
+    return kvGet(ALLOW_R18_STORAGE_KEY) === 'true';
+  } catch (err) {
+    Logger.warn('[DataSourceConfig] allowR18Content read failed', err);
+    return false;
+  }
+}
+
 /**
  * Singleton storing user-tunable knobs that affect the read pipeline:
  *   - browseSource    → which platform feeds top/seasonal screens
  *   - allowR18Content → whether NSFW results pass through the SFW filter
  *
- * Both values are persisted via AsyncStorage and re-hydrated by `init()`.
+ * Both values are seeded synchronously from MMKV at construction so the very
+ * first read returns the user's persisted choice — no "default for one tick,
+ * then real value" race that fed empty cache rows and skeleton flashes.
+ * `init()` is retained for its `_initialized = true` side effect (which a
+ * few callers gate on) but is otherwise a no-op now.
  */
 export class DataSourceConfig {
   private static instance: DataSourceConfig | null = null;
-  private _browseSource: PlatformType = DEFAULT_BROWSE_SOURCE;
-  private _allowR18Content = false;
-  private _initialized = false;
+  private _browseSource: PlatformType = readBrowseSourceSync();
+  private _allowR18Content = readAllowR18Sync();
+  private _initialized = true;
 
   static getInstance(): DataSourceConfig {
     if (!DataSourceConfig.instance) {
@@ -63,29 +88,15 @@ export class DataSourceConfig {
   }
 
   /**
-   * Hydrate values from MMKV. Idempotent — safe to call from app bootstrap
-   * and again from tests.
+   * Re-read from MMKV. Idempotent and safe to call from bootstrap or tests.
+   * The constructor already seeded values synchronously, so this is mostly
+   * a no-op in production — kept so other surfaces (e.g. backup restore)
+   * can force a re-read after writing to MMKV under us.
    */
   async init(): Promise<void> {
-    try {
-      await migrateToMMKV();
-      const browseRaw = kvGet(BROWSE_SOURCE_STORAGE_KEY);
-      const r18Raw = kvGet(ALLOW_R18_STORAGE_KEY);
-
-      if (browseRaw && isSupportedBrowseSource(browseRaw as PlatformType)) {
-        this._browseSource = browseRaw as PlatformType;
-      } else {
-        this._browseSource = DEFAULT_BROWSE_SOURCE;
-      }
-
-      this._allowR18Content = r18Raw === 'true';
-    } catch (err) {
-      Logger.warn('[DataSourceConfig] init failed, using defaults', err);
-      this._browseSource = DEFAULT_BROWSE_SOURCE;
-      this._allowR18Content = false;
-    } finally {
-      this._initialized = true;
-    }
+    this._browseSource = readBrowseSourceSync();
+    this._allowR18Content = readAllowR18Sync();
+    this._initialized = true;
   }
 
   /**
