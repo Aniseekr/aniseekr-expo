@@ -35,6 +35,8 @@ export interface BackupUserAnimeRow {
   total_episodes: number | null;
   started_at: number | null;
   completed_at: number | null;
+  notes: string | null;
+  rewatch_count: number | null;
   updated_at: number | null;
 }
 
@@ -162,6 +164,8 @@ function normalizeUserAnime(raw: Record<string, unknown>): BackupUserAnimeRow {
     total_episodes: asNullableNumber(raw.total_episodes),
     started_at: asNullableNumber(raw.started_at),
     completed_at: asNullableNumber(raw.completed_at),
+    notes: asNullableString(raw.notes),
+    rewatch_count: asNullableNumber(raw.rewatch_count),
     updated_at: asNullableNumber(raw.updated_at),
   };
 }

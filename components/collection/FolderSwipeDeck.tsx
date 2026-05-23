@@ -38,6 +38,8 @@ export interface FolderSwipeItem {
   total_episodes: number;
   status: string;
   score: number;
+  notes: string;
+  rewatch_count: number;
 }
 
 interface FolderSwipeDeckProps {

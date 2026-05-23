@@ -1,5 +1,5 @@
 import { LocalDB } from '../../db';
-import { AnimeStatus, UniversalAnimeItem } from '../auth/types';
+import { AnimeStatus, PlatformType, UniversalAnimeItem } from '../auth/types';
 import { multiPlatformSyncService } from '../sync/multi-platform-sync-service';
 import { refreshTrackedIdsSafely } from './tracking-refresh';
 
@@ -12,6 +12,8 @@ export interface UserAnimeStatus {
   updatedAt: Date;
   title?: string;
   imageUrl?: string;
+  notes?: string;
+  rewatchCount?: number;
 }
 
 export class TrackingService {
@@ -221,14 +223,24 @@ export class TrackingService {
     title?: string;
     imageUrl?: string;
     folderId?: string;
+    /** Free-form user notes (multi-line). Persisted in user_anime.notes. */
+    notes?: string;
+    /** Number of times the user has rewatched. Persisted in user_anime.rewatch_count. */
+    rewatchCount?: number;
+    /**
+     * Source platform of `animeId`. When provided, remote sync to all connected
+     * writable platforms is kicked off via multiPlatformSyncService.
+     */
+    source?: PlatformType;
   }): Promise<void> {
     const db = await LocalDB.getDatabase();
     const now = Date.now();
 
     await db.runAsync(
       `INSERT INTO user_anime (
-        anime_id, title, image_url, status, score, progress, total_episodes, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        anime_id, title, image_url, status, score, progress, total_episodes,
+        notes, rewatch_count, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(anime_id) DO UPDATE SET
         status = excluded.status,
         score = COALESCE(excluded.score, user_anime.score),
@@ -236,6 +248,8 @@ export class TrackingService {
         total_episodes = COALESCE(excluded.total_episodes, user_anime.total_episodes),
         title = COALESCE(excluded.title, user_anime.title),
         image_url = COALESCE(excluded.image_url, user_anime.image_url),
+        notes = COALESCE(excluded.notes, user_anime.notes),
+        rewatch_count = COALESCE(excluded.rewatch_count, user_anime.rewatch_count),
         updated_at = excluded.updated_at`,
       input.animeId,
       input.title ?? null,
@@ -244,6 +258,8 @@ export class TrackingService {
       input.score ?? null,
       input.progress ?? 0,
       input.totalEpisodes ?? null,
+      input.notes ?? null,
+      input.rewatchCount ?? null,
       now
     );
 
@@ -258,6 +274,27 @@ export class TrackingService {
 
     this.invalidateTrackedIds();
     refreshTrackedIdsSafely(() => this.getTrackedIdSet());
+
+    // Best-effort push to remote platforms. `source` anchors the id-mapping
+    // resolver so other connected platforms can be reached even when only one
+    // platform id is known.
+    if (input.source) {
+      const item: UniversalAnimeItem = {
+        id: input.animeId,
+        platformIds: { [input.source]: input.animeId },
+        title: input.title ?? '',
+        imageUrl: input.imageUrl ?? '',
+        status: input.status,
+        progress: input.progress ?? 0,
+        totalEpisodes: input.totalEpisodes,
+        score: input.score,
+        updatedAt: new Date(now),
+        source: input.source,
+      };
+      multiPlatformSyncService
+        .syncProgressUpdate(item, item.progress, input.status, input.score)
+        .catch(console.error);
+    }
   }
 
   async removeTracking(animeId: string): Promise<void> {
@@ -279,6 +316,8 @@ export class TrackingService {
       updated_at: number;
       title: string;
       image_url: string;
+      notes: string | null;
+      rewatch_count: number | null;
     }>('SELECT * FROM user_anime WHERE anime_id = ?', animeId);
 
     if (!row) return null;
@@ -292,6 +331,8 @@ export class TrackingService {
       updatedAt: new Date(row.updated_at),
       title: row.title,
       imageUrl: row.image_url,
+      notes: row.notes ?? '',
+      rewatchCount: row.rewatch_count ?? 0,
     };
   }
 }

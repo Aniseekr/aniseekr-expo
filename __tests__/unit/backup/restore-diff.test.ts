@@ -33,6 +33,8 @@ describe('backup/backup-service · dryRunRestore', () => {
             total_episodes: null,
             started_at: null,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 1,
           },
         ],
@@ -65,6 +67,8 @@ describe('backup/backup-service · dryRunRestore', () => {
       total_episodes: null,
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: 5,
     });
     const storage = makeFakeStorage();
@@ -89,6 +93,8 @@ describe('backup/backup-service · dryRunRestore', () => {
             total_episodes: null,
             started_at: null,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 5,
           },
         ],
@@ -115,6 +121,8 @@ describe('backup/backup-service · dryRunRestore', () => {
       total_episodes: null,
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: 1,
     });
     const storage = makeFakeStorage();
@@ -139,6 +147,8 @@ describe('backup/backup-service · dryRunRestore', () => {
             total_episodes: 12,
             started_at: null,
             completed_at: 2,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 2,
           },
         ],

@@ -150,51 +150,100 @@ function AnimeProgressViewComponent({
                   })}
                 </View>
 
-                <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>Episodes</Text>
-                <View
-                  style={[
-                    styles.counterRow,
-                    {
-                      backgroundColor: theme.background.tertiary,
-                      borderColor: theme.glassBorder,
-                    },
-                  ]}>
-                  <Pressable
-                    onPress={() => handleEpisodesDelta(-1)}
-                    style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
-                    <MaterialIcons name="remove" size={20} color={theme.text.primary} />
-                  </Pressable>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={[styles.counterValue, { color: theme.text.primary }]}>
-                      {draft.episodesWatched}
-                      {totalEpisodes ? (
-                        <Text style={[styles.counterTotal, { color: theme.text.tertiary }]}>
-                          {' '}
-                          / {totalEpisodes}
-                        </Text>
-                      ) : null}
+                {draft.status !== 'planning' ? (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>
+                      Episodes
                     </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => handleEpisodesDelta(1)}
-                    style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
-                    <MaterialIcons name="add" size={20} color={theme.text.primary} />
-                  </Pressable>
-                </View>
+                    <View
+                      style={[
+                        styles.counterRow,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <Pressable
+                        onPress={() => handleEpisodesDelta(-1)}
+                        style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
+                        <MaterialIcons name="remove" size={20} color={theme.text.primary} />
+                      </Pressable>
+                      <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={[styles.counterValue, { color: theme.text.primary }]}>
+                          {draft.episodesWatched}
+                          {totalEpisodes ? (
+                            <Text style={[styles.counterTotal, { color: theme.text.tertiary }]}>
+                              {' '}
+                              / {totalEpisodes}
+                            </Text>
+                          ) : null}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => handleEpisodesDelta(1)}
+                        style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
+                        <MaterialIcons name="add" size={20} color={theme.text.primary} />
+                      </Pressable>
+                    </View>
+                  </>
+                ) : null}
 
-                <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>Score</Text>
-                <View style={styles.scoreRow}>
-                  <Text style={[styles.scoreValue, { color: theme.accent }]}>
-                    {draft.score.toFixed(1)}
-                  </Text>
-                  <Text style={[styles.scoreMax, { color: theme.text.tertiary }]}>/ 10</Text>
-                </View>
-                <RatingSlider
-                  value={draft.score}
-                  onChange={(v) => update('score', v)}
-                  width={300}
-                  step={0.5}
-                />
+                {draft.status === 'rewatching' ? (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>
+                      Rewatches
+                    </Text>
+                    <View
+                      style={[
+                        styles.counterRow,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <Pressable
+                        onPress={() =>
+                          update(
+                            'rewatchCount',
+                            Math.max(0, (draft.rewatchCount ?? 0) - 1)
+                          )
+                        }
+                        style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
+                        <MaterialIcons name="remove" size={20} color={theme.text.primary} />
+                      </Pressable>
+                      <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={[styles.counterValue, { color: theme.text.primary }]}>
+                          {draft.rewatchCount ?? 0}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => update('rewatchCount', (draft.rewatchCount ?? 0) + 1)}
+                        style={[styles.counterButton, { borderColor: theme.glassBorder }]}>
+                        <MaterialIcons name="add" size={20} color={theme.text.primary} />
+                      </Pressable>
+                    </View>
+                  </>
+                ) : null}
+
+                {draft.status !== 'planning' ? (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>
+                      Score
+                    </Text>
+                    <View style={styles.scoreRow}>
+                      <Text style={[styles.scoreValue, { color: theme.accent }]}>
+                        {draft.score.toFixed(1)}
+                      </Text>
+                      <Text style={[styles.scoreMax, { color: theme.text.tertiary }]}>/ 10</Text>
+                    </View>
+                    <RatingSlider
+                      value={draft.score}
+                      onChange={(v) => update('score', v)}
+                      width={300}
+                      step={0.5}
+                    />
+                  </>
+                ) : null}
 
                 <Text style={[styles.sectionLabel, { color: theme.text.secondary }]}>Notes</Text>
                 <TextInput

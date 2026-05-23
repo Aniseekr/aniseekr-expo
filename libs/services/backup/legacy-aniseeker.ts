@@ -190,6 +190,8 @@ export function importLegacyAniseekerExport(
       total_episodes: r.totalEpisodes ?? null,
       started_at: null,
       completed_at: completed ? createdAtMs : null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: createdAtMs,
     });
 
@@ -227,6 +229,8 @@ export function importLegacyAniseekerExport(
       total_episodes: null,
       started_at: null,
       completed_at: status === 'completed' ? createdAtMs : null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: createdAtMs,
     });
     if (u.ratingType === 'liked') {
@@ -249,6 +253,8 @@ export function importLegacyAniseekerExport(
       total_episodes: t.totalEpisodes ?? null,
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: Date.now(),
     });
   }
@@ -267,6 +273,8 @@ export function importLegacyAniseekerExport(
       total_episodes: w.totalEpisodes ?? null,
       started_at: startedAt,
       completed_at: completedAt,
+      notes: null,
+      rewatch_count: 0,
       updated_at: completedAt ?? startedAt ?? Date.now(),
     });
   }
@@ -284,6 +292,8 @@ export function importLegacyAniseekerExport(
       total_episodes: null,
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: addedAt,
     });
   }

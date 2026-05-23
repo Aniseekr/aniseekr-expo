@@ -97,6 +97,8 @@ describe('backup/backup-service', () => {
             total_episodes: null,
             started_at: null,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 3,
           },
         ],

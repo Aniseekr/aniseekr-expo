@@ -14,6 +14,8 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { collectionService } from '../../../libs/services/collection/collection-service';
 import { pushAnimeDetail } from '../../../libs/utils/navigate-to-anime';
 import { trackingService } from '../../../libs/services/tracking/tracking-service';
+import { UserRepository } from '../../../libs/repositories/user-repository';
+import type { PlatformType } from '../../../libs/services/auth/types';
 import { LocalDB } from '../../../libs/db';
 import { NearbyPilgrimageBadge } from '../../../components/pilgrimage/NearbyPilgrimageBadge';
 import {
@@ -34,6 +36,8 @@ interface FolderItem {
   total_episodes: number;
   status: string;
   score: number;
+  notes: string;
+  rewatch_count: number;
 }
 
 // Sync mirror so re-entering a folder paints frame 1 from memory instead of
@@ -97,7 +101,14 @@ export default function FolderDetailScreen() {
 
         let trackingMap = new Map<
           string,
-          { progress: number; total_episodes: number; status: string; score: number }
+          {
+            progress: number;
+            total_episodes: number;
+            status: string;
+            score: number;
+            notes: string | null;
+            rewatch_count: number | null;
+          }
         >();
         if (favRows.length > 0) {
           const placeholders = favRows.map(() => '?').join(',');
@@ -107,8 +118,10 @@ export default function FolderDetailScreen() {
             total_episodes: number;
             status: string;
             score: number;
+            notes: string | null;
+            rewatch_count: number | null;
           }>(
-            `SELECT anime_id, progress, total_episodes, status, score
+            `SELECT anime_id, progress, total_episodes, status, score, notes, rewatch_count
                FROM user_anime
               WHERE anime_id IN (${placeholders})`,
             ...favRows.map((r) => r.id)
@@ -126,6 +139,8 @@ export default function FolderDetailScreen() {
             total_episodes: t?.total_episodes ?? 0,
             status: t?.status ?? 'favorites',
             score: t?.score ?? 0,
+            notes: t?.notes ?? '',
+            rewatch_count: t?.rewatch_count ?? 0,
           };
         });
         folderSnapshotCache.set(id, mapped);
@@ -149,8 +164,11 @@ export default function FolderDetailScreen() {
         total_episodes: number;
         status: string;
         score: number;
+        notes: string | null;
+        rewatch_count: number | null;
       }>(
-        `SELECT anime_id, title, image_url, progress, total_episodes, status, score
+        `SELECT anime_id, title, image_url, progress, total_episodes, status, score,
+                notes, rewatch_count
            FROM user_anime
           WHERE anime_id IN (${placeholders})`,
         ...animeIds
@@ -169,6 +187,8 @@ export default function FolderDetailScreen() {
             total_episodes: row.total_episodes || 0,
             status: row.status,
             score: row.score,
+            notes: row.notes ?? '',
+            rewatch_count: row.rewatch_count ?? 0,
           });
         }
       }
@@ -214,27 +234,38 @@ export default function FolderDetailScreen() {
 
   const handleSaveProgress = async (animeId: string, progress: AnimeProgress) => {
     try {
-      const db = await LocalDB.getDatabase();
-      const now = Date.now();
-      await db.runAsync(
-        `INSERT INTO user_anime (
-            anime_id, status, score, progress, total_episodes, updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?)
-          ON CONFLICT(anime_id) DO UPDATE SET
-            status = excluded.status,
-            score = excluded.score,
-            progress = excluded.progress,
-            total_episodes = excluded.total_episodes,
-            updated_at = excluded.updated_at`,
+      const existing = items.find((it) => it.id === animeId);
+      // The service-side AnimeStatus has no 'rewatching'; map it onto
+      // 'watching' and bump the rewatch counter instead.
+      const isRewatching = progress.status === 'rewatching';
+      const serviceStatus =
+        progress.status === 'planning'
+          ? 'planned'
+          : isRewatching
+            ? 'watching'
+            : (progress.status as 'watching' | 'completed' | 'on_hold' | 'dropped');
+
+      // Best-effort source: fall back to the user's primary platform so the
+      // sync layer has at least one anchor to resolve cross-platform ids.
+      const primary = UserRepository.getPrimaryPlatformSync();
+      const source =
+        primary && primary !== '__default__' ? (primary as PlatformType) : undefined;
+
+      await trackingService.upsertTracking({
         animeId,
-        progress.status,
-        Math.round(progress.score * 10),
-        progress.episodesWatched,
-        progress.totalEpisodes ?? null,
-        now
-      );
-      trackingService.invalidateTrackingCache();
+        status: serviceStatus,
+        score: Math.round(progress.score * 10),
+        progress: progress.episodesWatched,
+        totalEpisodes: progress.totalEpisodes ?? existing?.total_episodes,
+        title: existing?.title,
+        imageUrl: existing?.image_url,
+        notes: progress.notes,
+        rewatchCount: isRewatching
+          ? Math.max(1, (existing?.rewatch_count ?? 0) + 1)
+          : progress.rewatchCount,
+        source,
+      });
+
       // In swipe mode keep the deck frozen — reloading items would shuffle
       // indices and could yank a card out from under the user. Items refresh
       // when they leave swipe mode.
@@ -246,10 +277,14 @@ export default function FolderDetailScreen() {
             it.id === animeId
               ? {
                   ...it,
-                  status: progress.status,
+                  status: serviceStatus,
                   score: Math.round(progress.score * 10),
                   progress: progress.episodesWatched,
                   total_episodes: progress.totalEpisodes ?? it.total_episodes,
+                  notes: progress.notes,
+                  rewatch_count: isRewatching
+                    ? Math.max(1, (it.rewatch_count ?? 0) + 1)
+                    : progress.rewatchCount,
                 }
               : it
           )
@@ -539,8 +574,8 @@ export default function FolderDetailScreen() {
                 score: (editingItem.score ?? 0) / 10,
                 episodesWatched: editingItem.progress ?? 0,
                 totalEpisodes: editingItem.total_episodes || undefined,
-                rewatchCount: 0,
-                notes: '',
+                rewatchCount: editingItem.rewatch_count ?? 0,
+                notes: editingItem.notes ?? '',
               }
             : undefined
         }

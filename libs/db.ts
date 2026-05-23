@@ -89,6 +89,26 @@ async function initializeOpenedDb(opened: SQLite.SQLiteDatabase): Promise<void> 
     console.warn('[LocalDB] WAL PRAGMA failed, continuing without:', err);
   }
   await opened.execAsync(DDL);
+  await runColumnMigrations(opened);
+}
+
+// SQLite has no `ADD COLUMN IF NOT EXISTS`, so we catch the duplicate-column
+// error and move on. Each entry is safe to attempt every boot.
+async function runColumnMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
+  const migrations: { sql: string }[] = [
+    { sql: 'ALTER TABLE user_anime ADD COLUMN notes TEXT' },
+    { sql: 'ALTER TABLE user_anime ADD COLUMN rewatch_count INTEGER DEFAULT 0' },
+  ];
+  for (const m of migrations) {
+    try {
+      await db.execAsync(m.sql);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/duplicate column/i.test(msg)) continue;
+      if (isStaleHandleError(err)) throw err;
+      console.warn('[LocalDB] migration failed:', m.sql, err);
+    }
+  }
 }
 
 async function closeQuietly(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -288,6 +308,8 @@ const DDL = `
         total_episodes INTEGER,
         started_at INTEGER,
         completed_at INTEGER,
+        notes TEXT,
+        rewatch_count INTEGER DEFAULT 0,
         updated_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_status ON user_anime(status);

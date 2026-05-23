@@ -186,6 +186,8 @@ describe('backup/cloudkit-converter · export (envelope → CloudKit)', () => {
             total_episodes: 26,
             started_at: 1,
             completed_at: 100,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 100,
           },
           {
@@ -198,6 +200,8 @@ describe('backup/cloudkit-converter · export (envelope → CloudKit)', () => {
             total_episodes: 28,
             started_at: null,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 200,
           },
           {
@@ -210,6 +214,8 @@ describe('backup/cloudkit-converter · export (envelope → CloudKit)', () => {
             total_episodes: null,
             started_at: null,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 300,
           },
         ],

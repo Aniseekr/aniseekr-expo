@@ -116,6 +116,8 @@ function animeRowFromRecord(rec: CloudKitRecord): BackupUserAnimeRow | null {
       total_episodes: null,
       started_at: null,
       completed_at: createdAt,
+      notes: null,
+      rewatch_count: 0,
       updated_at: createdAt ?? Date.now(),
     };
   }
@@ -131,6 +133,8 @@ function animeRowFromRecord(rec: CloudKitRecord): BackupUserAnimeRow | null {
       total_episodes: numberOrNull(f.totalEpisodes),
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: parseAnyDate(f.updatedAt) ?? Date.now(),
     };
   }
@@ -149,6 +153,8 @@ function animeRowFromRecord(rec: CloudKitRecord): BackupUserAnimeRow | null {
       total_episodes: numberOrNull(f.totalEpisodes),
       started_at: startedAt,
       completed_at: completedAt,
+      notes: null,
+      rewatch_count: 0,
       updated_at: completedAt ?? startedAt ?? Date.now(),
     };
   }
@@ -165,6 +171,8 @@ function animeRowFromRecord(rec: CloudKitRecord): BackupUserAnimeRow | null {
       total_episodes: null,
       started_at: null,
       completed_at: null,
+      notes: null,
+      rewatch_count: 0,
       updated_at: addedAt ?? Date.now(),
     };
   }

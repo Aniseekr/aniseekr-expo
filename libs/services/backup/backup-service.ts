@@ -303,7 +303,7 @@ async function readRatings(db: SQLiteDatabase): Promise<BackupRatingRow[]> {
 async function readUserAnime(db: SQLiteDatabase): Promise<BackupUserAnimeRow[]> {
   const rows = await db.getAllAsync<BackupUserAnimeRow>(
     `SELECT anime_id, title, image_url, status, score, progress, total_episodes,
-            started_at, completed_at, updated_at
+            started_at, completed_at, notes, rewatch_count, updated_at
        FROM user_anime`
   );
   return rows.map((r) => ({ ...r }));
@@ -346,8 +346,8 @@ async function writeUserAnime(db: SQLiteDatabase, row: BackupUserAnimeRow): Prom
   await db.runAsync(
     `INSERT OR REPLACE INTO user_anime
       (anime_id, title, image_url, status, score, progress, total_episodes,
-       started_at, completed_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       started_at, completed_at, notes, rewatch_count, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.anime_id,
     row.title,
     row.image_url,
@@ -357,6 +357,8 @@ async function writeUserAnime(db: SQLiteDatabase, row: BackupUserAnimeRow): Prom
     row.total_episodes,
     row.started_at,
     row.completed_at,
+    row.notes ?? null,
+    row.rewatch_count ?? 0,
     row.updated_at
   );
 }

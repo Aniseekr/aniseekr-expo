@@ -294,10 +294,69 @@ export default function ProfileScreen() {
 
           {/* Stats Row */}
           <View style={styles.statsRow}>
-            <StatTile value={watchedValue} label="Cards" />
-            <StatTile value={ratedValue} label="Rated" />
-            <StatTile value={likedValue} label="Liked" />
+            <StatTile
+              value={watchedValue}
+              label="Cards"
+              onPress={() => {
+                hapticsBridge.tap();
+                router.push('/collection/stats/year-in-review');
+              }}
+            />
+            <StatTile
+              value={ratedValue}
+              label="Rated"
+              onPress={() => {
+                hapticsBridge.tap();
+                router.push('/collection/stats/top-picks');
+              }}
+            />
+            <StatTile
+              value={likedValue}
+              label="Liked"
+              onPress={() => {
+                hapticsBridge.tap();
+                router.push('/collection/stats/top-favorites');
+              }}
+            />
           </View>
+
+          {/* Library Stats Hero */}
+          <Pressable
+            onPress={() => {
+              hapticsBridge.tap();
+              router.push('/collection/stats');
+            }}
+            style={({ pressed }) => [styles.statsHero, pressed && { opacity: 0.92 }]}>
+            <LinearGradient
+              colors={[theme.accent + 'CC', theme.accentDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.statsHeroContent}>
+              <View
+                style={[
+                  styles.statsHeroIcon,
+                  { backgroundColor: 'rgba(255,255,255,0.18)' },
+                ]}>
+                <MaterialIcons name="bar-chart" size={20} color={ctaFg} />
+              </View>
+              <View style={styles.statsHeroText}>
+                <ThemedText
+                  variant="titleMedium"
+                  weight="700"
+                  style={{ color: ctaFg }}>
+                  View full stats
+                </ThemedText>
+                <ThemedText
+                  variant="bodySmall"
+                  style={{ color: ctaFg, opacity: 0.85 }}>
+                  Persona, year in review, hall of fame
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={ctaFg} />
+            </View>
+          </Pressable>
 
           {/* Premium CTA */}
           <Pressable
@@ -395,9 +454,17 @@ export default function ProfileScreen() {
   );
 }
 
-function StatTile({ value, label }: { value: number; label: string }) {
+function StatTile({
+  value,
+  label,
+  onPress,
+}: {
+  value: number;
+  label: string;
+  onPress?: () => void;
+}) {
   const { theme } = useTheme();
-  return (
+  const Tile = (
     <ThemedSurface
       variant="card"
       radius={Radius.lg}
@@ -409,6 +476,16 @@ function StatTile({ value, label }: { value: number; label: string }) {
         {label}
       </ThemedText>
     </ThemedSurface>
+  );
+  if (!onPress) return Tile;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}. Open stats`}
+      style={({ pressed }) => [styles.statTileWrap, pressed && { opacity: 0.82 }]}>
+      {Tile}
+    </Pressable>
   );
 }
 
@@ -501,12 +578,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm - 2,
   },
+  statTileWrap: {
+    flex: 1,
+  },
   statTile: {
     flex: 1,
     alignItems: 'center',
     gap: 4,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
+  },
+  statsHero: {
+    borderRadius: Radius.card,
+    overflow: 'hidden',
+  },
+  statsHeroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+  },
+  statsHeroIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsHeroText: {
+    flex: 1,
+    gap: 2,
   },
   premiumCta: {
     borderRadius: Radius.card,

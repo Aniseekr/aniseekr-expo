@@ -50,6 +50,8 @@ describe('backup/schema', () => {
             total_episodes: 12,
             started_at: 3,
             completed_at: null,
+            notes: null,
+            rewatch_count: 0,
             updated_at: 4,
           },
         ],
