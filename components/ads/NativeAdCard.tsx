@@ -8,7 +8,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { getAdUnitId } from '../../libs/services/ads/ad-config';
+import { NPA_REQUEST_OPTIONS, getAdUnitId } from '../../libs/services/ads/ad-config';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import {
@@ -20,6 +20,7 @@ import {
 type BannerProps = {
   unitId: string;
   size: string;
+  requestOptions?: { requestNonPersonalizedAdsOnly?: boolean };
   onAdFailedToLoad?: (e: unknown) => void;
 };
 
@@ -187,6 +188,7 @@ export const NativeAdCard = forwardRef<NativeAdCardRef, Props>(
               <BannerAdComponent
                 unitId={unitId}
                 size={BannerSize.MEDIUM_RECTANGLE ?? 'MEDIUM_RECTANGLE'}
+                requestOptions={NPA_REQUEST_OPTIONS}
                 onAdFailedToLoad={() => setErrored(true)}
               />
             </View>

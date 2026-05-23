@@ -1,18 +1,19 @@
-import { getAdUnitId } from './ad-config';
+import { NPA_REQUEST_OPTIONS, getAdUnitId } from './ad-config';
 
 export type { AdSlot } from './ad-config';
 
+type AdRequestOptions = { requestNonPersonalizedAdsOnly?: boolean };
+
 interface AdsModule {
   default: { initialize: () => Promise<unknown> };
-  InterstitialAd: { createForAdRequest: (unitId: string) => InterstitialController };
-  RewardedAd: { createForAdRequest: (unitId: string) => RewardedController };
+  InterstitialAd: {
+    createForAdRequest: (unitId: string, options?: AdRequestOptions) => InterstitialController;
+  };
+  RewardedAd: {
+    createForAdRequest: (unitId: string, options?: AdRequestOptions) => RewardedController;
+  };
   AdEventType: { LOADED: string; ERROR: string; CLOSED: string };
   RewardedAdEventType: { LOADED: string; EARNED_REWARD: string };
-  AdsConsent: {
-    requestInfoUpdate: () => Promise<unknown>;
-    showForm: () => Promise<unknown>;
-    getConsentInfo: () => Promise<{ isConsentFormAvailable?: boolean }>;
-  };
 }
 
 interface InterstitialController {
@@ -71,14 +72,6 @@ export class AdsService {
 
     try {
       await mod.default.initialize();
-      try {
-        const info = await mod.AdsConsent.requestInfoUpdate();
-        if ((info as { isConsentFormAvailable?: boolean })?.isConsentFormAvailable) {
-          await mod.AdsConsent.showForm();
-        }
-      } catch (consentError) {
-        console.warn('[ads] consent flow failed', consentError);
-      }
       this.initialized = true;
     } catch (error) {
       console.error('[ads] initialize failed', error);
@@ -103,7 +96,7 @@ export class AdsService {
     const unitId = getAdUnitId('interstitial');
     if (!unitId) return;
 
-    const controller = mod.InterstitialAd.createForAdRequest(unitId);
+    const controller = mod.InterstitialAd.createForAdRequest(unitId, NPA_REQUEST_OPTIONS);
     controller.addAdEventListener(mod.AdEventType.LOADED, () => {
       this.interstitialReady = true;
     });
@@ -142,7 +135,7 @@ export class AdsService {
     const unitId = getAdUnitId('rewarded');
     if (!unitId) return;
 
-    const controller = mod.RewardedAd.createForAdRequest(unitId);
+    const controller = mod.RewardedAd.createForAdRequest(unitId, NPA_REQUEST_OPTIONS);
     controller.addAdEventListener(mod.RewardedAdEventType.LOADED, () => {
       this.rewardedReady = true;
     });

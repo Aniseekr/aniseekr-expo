@@ -1,11 +1,12 @@
 import { ReactElement, useState } from 'react';
 import { View } from 'react-native';
-import { getAdUnitId } from '../../libs/services/ads/ad-config';
+import { NPA_REQUEST_OPTIONS, getAdUnitId } from '../../libs/services/ads/ad-config';
 import { useSubscription } from '../../context/SubscriptionContext';
 
 type BannerProps = {
   unitId: string;
   size: string;
+  requestOptions?: { requestNonPersonalizedAdsOnly?: boolean };
   onAdFailedToLoad?: (e: unknown) => void;
 };
 
@@ -41,6 +42,7 @@ export function AdBanner({ slot = 'home_banner', fallbackHeight = 0 }: AdBannerP
       <BannerAdComponent
         unitId={unitId}
         size={BannerSize.ANCHORED_ADAPTIVE_BANNER ?? BannerSize.BANNER ?? 'BANNER'}
+        requestOptions={NPA_REQUEST_OPTIONS}
         onAdFailedToLoad={() => setErrored(true)}
       />
     </View>

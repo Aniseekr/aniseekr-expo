@@ -4,10 +4,21 @@
  * MUST guard with `if (!id) return null;`. Set `EXPO_PUBLIC_ADS_DISABLED=1`
  * for a hard kill switch (screenshots, App Store review, dev work).
  * In dev we fall back to Google's documented test IDs.
+ *
+ * NPA-only posture: we never call `requestTrackingAuthorization` (no ATT
+ * prompt) and `app.json` declares `NSPrivacyTracking: false`. To keep AdMob
+ * consistent with that declaration, every ad request MUST spread
+ * `NPA_REQUEST_OPTIONS` so Google serves non-personalized ads and does not
+ * read IDFA. Do not introduce a personalized path without also flipping
+ * `NSPrivacyTracking` and adding `NSUserTrackingUsageDescription`.
  */
 import { Platform } from 'react-native';
 
 export type AdSlot = 'home_banner' | 'detail_banner' | 'rate_native' | 'interstitial' | 'rewarded';
+
+export const NPA_REQUEST_OPTIONS = Object.freeze({
+  requestNonPersonalizedAdsOnly: true,
+});
 
 const TEST_IDS: Partial<Record<AdSlot, string>> = {
   home_banner: 'ca-app-pub-3940256099942544/6300978111',

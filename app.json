@@ -26,7 +26,8 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#000000",
-          "sounds": []
+          "sounds": [],
+          "mode": "production"
         }
       ],
       "expo-sqlite",
@@ -34,6 +35,8 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "AniSeekr uses your location to surface nearby anime pilgrimage spots.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
@@ -133,6 +136,9 @@
       [
         "expo-build-properties",
         {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
           "android": {
             "minSdkVersion": 26
           }
