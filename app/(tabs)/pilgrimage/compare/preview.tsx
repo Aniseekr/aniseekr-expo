@@ -33,6 +33,7 @@ import {
   computeFrameMatch,
   type FrameMatch,
 } from '../../../../libs/services/pilgrimage/frame-match';
+import { resolveFullModeStageHeight } from '../../../../libs/services/pilgrimage/compare-layout';
 import { useCaptureSession, type CaptureSessionShot } from '../../../../hooks/useCaptureSession';
 import { capturedOnWideAngle } from '../../../../libs/services/pilgrimage/capture-lens-gate';
 import { sanitizeCaptureNote } from '../../../../libs/services/pilgrimage/capture-session';
@@ -71,7 +72,7 @@ function snapshotFromShot(shot: CaptureSessionShot | null): SensorSnapshot | nul
   return { distanceMeters, headingDeltaDeg, tilt };
 }
 
-type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider';
+type Mode = 'stacked' | 'sideBySide' | 'overlay' | 'slider' | 'full';
 
 export default function ComparePreviewScreen() {
   const router = useRouter();
@@ -766,7 +767,7 @@ export default function ComparePreviewScreen() {
           ) : null}
 
           <View style={styles.modeRow}>
-            {(['stacked', 'sideBySide', 'overlay', 'slider'] as Mode[]).map((m) => {
+            {(['stacked', 'sideBySide', 'overlay', 'slider', 'full'] as Mode[]).map((m) => {
               const active = m === mode;
               const label =
                 m === 'stacked'
@@ -775,7 +776,9 @@ export default function ComparePreviewScreen() {
                     ? 'Side by side'
                     : m === 'overlay'
                       ? 'Overlay'
-                      : 'Slider';
+                      : m === 'slider'
+                        ? 'Slider'
+                        : 'Full';
               return (
                 <Pressable
                   key={m}
@@ -807,7 +810,17 @@ export default function ComparePreviewScreen() {
               ref={stageRef}
               collapsable={false}
               onLayout={handleStageLayout}
-              style={[styles.stage, { backgroundColor: theme.background.secondary }]}>
+              style={[
+                styles.stage,
+                { backgroundColor: theme.background.secondary },
+                mode === 'full' && {
+                  height: resolveFullModeStageHeight(
+                    stagePx.width,
+                    focusedShot?.width,
+                    focusedShot?.height
+                  ),
+                },
+              ]}>
               {mode === 'stacked' ? (
                 <View style={styles.stackedFlow}>
                   <LabeledImage uri={imageUrl} label="Anime" accent={themeColor} />
@@ -842,7 +855,7 @@ export default function ComparePreviewScreen() {
                     />
                   </View>
                 </View>
-              ) : (
+              ) : mode === 'slider' ? (
                 <GestureDetector gesture={sliderPan}>
                   <View style={styles.sliderFlow}>
                     <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
@@ -875,6 +888,20 @@ export default function ComparePreviewScreen() {
                     </View>
                   </View>
                 </GestureDetector>
+              ) : (
+                // Full: render only the user's shot at its native aspect so the
+                // stage snapshot saves the whole frame — no crop. Stage height
+                // already matches `shot.width / shot.height` (see container
+                // style above), so `contentFit="cover"` and `"contain"` agree.
+                <View style={styles.fullFlow}>
+                  <Image source={{ uri: shotUri }} style={styles.fullImage} contentFit="cover" />
+                  <View style={[styles.fullModeBadge, { borderColor: themeColor }]}>
+                    <View style={[styles.labelDot, { backgroundColor: themeColor }]} />
+                    <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+                      Your shot · Full
+                    </ThemedText>
+                  </View>
+                </View>
               )}
             </View>
           </View>
@@ -1591,6 +1618,20 @@ const styles = StyleSheet.create({
   sideHalf: { flex: 1 },
   overlayFlow: { flex: 1 },
   sliderFlow: { flex: 1 },
+  fullFlow: { flex: 1, position: 'relative' },
+  fullModeBadge: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+  },
   labelWrap: { flex: 1, position: 'relative' },
   fullImage: { width: '100%', height: '100%' },
   labelGradient: {
