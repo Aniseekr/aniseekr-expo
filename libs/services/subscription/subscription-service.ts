@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 
 export type EntitlementId = 'pro';
 
+const NATIVE_PACKAGE = Symbol('rc.nativePackage');
+
 export interface SubscriptionOfferingPackage {
   identifier: string;
   packageType: string;
@@ -12,6 +14,12 @@ export interface SubscriptionOfferingPackage {
     description?: string;
     priceString?: string;
   };
+  // Non-enumerable handle to the original RevenueCat package, attached via
+  // Object.defineProperty in mapPackage. Required because purchasePackage()
+  // on Android expects the full native shape (presentedOfferingContext, etc.)
+  // and crashes the bridge with `ReadableMap.toHashMap() on a null object
+  // reference` when given a stripped DTO.
+  [NATIVE_PACKAGE]?: unknown;
 }
 
 export interface SubscriptionOffering {
@@ -23,6 +31,13 @@ export interface SubscriptionOffering {
   availablePackages: SubscriptionOfferingPackage[];
 }
 
+export type UnsupportedReason =
+  | 'no-module'
+  | 'no-key'
+  | 'billing-unavailable'
+  | 'network'
+  | 'unknown';
+
 export interface SubscriptionState {
   isPro: boolean;
   activeEntitlements: string[];
@@ -30,6 +45,7 @@ export interface SubscriptionState {
   willRenew?: boolean;
   productIdentifier?: string;
   unsupported: boolean;
+  unsupportedReason?: UnsupportedReason;
 }
 
 export const ANONYMOUS_STATE: SubscriptionState = {
@@ -53,8 +69,57 @@ interface PurchasesModule {
     logIn: (uid: string) => Promise<{ customerInfo: unknown }>;
     logOut: () => Promise<unknown>;
     setLogLevel: (level: string) => void;
+    setLogHandler?: (handler: (level: string, message: string) => void) => void;
   };
-  LOG_LEVEL: { DEBUG: string; INFO: string; WARN: string; ERROR: string };
+  LOG_LEVEL: { VERBOSE?: string; DEBUG: string; INFO: string; WARN: string; ERROR: string };
+}
+
+// Quiet the RC log handler so BILLING_UNAVAILABLE and other expected
+// dev-environment errors don't spam Metro with the same stack 6 times per fetch.
+// Defaults forward INFO/WARN/ERROR to console.* — we route everything to
+// console.log in dev, and demote known noisy errors to debug.
+function installQuietLogHandler(mod: PurchasesModule): void {
+  if (typeof mod.default.setLogHandler !== 'function') return;
+  mod.default.setLogHandler((level, message) => {
+    const lower = String(message).toLowerCase();
+    const isExpected =
+      lower.includes('billing is not available') ||
+      lower.includes('billing_unavailable') ||
+      lower.includes('purchasenotallowederror');
+    if (isExpected) {
+      if (__DEV__) console.log('[RevenueCat]', level, message);
+      return;
+    }
+    if (level === 'ERROR') console.warn('[RevenueCat]', message);
+    else if (__DEV__) console.log('[RevenueCat]', level, message);
+  });
+}
+
+function classifyPurchasesError(error: unknown): UnsupportedReason | null {
+  if (!error || typeof error !== 'object') return null;
+  const err = error as {
+    code?: string | number;
+    message?: string;
+    userInfo?: { code?: string | number; readableErrorCode?: string };
+    underlyingErrorMessage?: string;
+  };
+  const codeStr = String(err.userInfo?.code ?? err.code ?? '');
+  const readable = String(err.userInfo?.readableErrorCode ?? '').toUpperCase();
+  const message = String(err.message ?? '').toLowerCase();
+  const underlying = String(err.underlyingErrorMessage ?? '').toLowerCase();
+  const text = `${message} ${underlying}`;
+  if (
+    codeStr === '3' ||
+    readable === 'PURCHASE_NOT_ALLOWED_ERROR' ||
+    text.includes('billing is not available') ||
+    text.includes('billing_unavailable')
+  ) {
+    return 'billing-unavailable';
+  }
+  if (codeStr === '10' || readable === 'NETWORK_ERROR' || text.includes('network')) {
+    return 'network';
+  }
+  return null;
 }
 
 let modulePromise: Promise<PurchasesModule | null> | null = null;
@@ -92,7 +157,7 @@ export class SubscriptionService {
   async configure(appUserID?: string): Promise<void> {
     const mod = await loadPurchases();
     if (!mod) {
-      this.cached = { ...ANONYMOUS_STATE, unsupported: true };
+      this.cached = { ...ANONYMOUS_STATE, unsupported: true, unsupportedReason: 'no-module' };
       this.notify();
       return;
     }
@@ -100,12 +165,13 @@ export class SubscriptionService {
 
     const apiKey = Platform.OS === 'ios' ? RC_KEY_IOS : RC_KEY_ANDROID;
     if (!apiKey) {
-      this.cached = { ...ANONYMOUS_STATE, unsupported: true };
+      this.cached = { ...ANONYMOUS_STATE, unsupported: true, unsupportedReason: 'no-key' };
       this.notify();
       return;
     }
 
-    mod.default.setLogLevel(__DEV__ ? mod.LOG_LEVEL.DEBUG : mod.LOG_LEVEL.WARN);
+    installQuietLogHandler(mod);
+    mod.default.setLogLevel(__DEV__ ? mod.LOG_LEVEL.WARN : mod.LOG_LEVEL.ERROR);
     mod.default.configure({ apiKey, appUserID });
     this.configured = true;
 
@@ -125,7 +191,14 @@ export class SubscriptionService {
       this.cached = mapCustomerInfoToState(info);
       this.notify();
     } catch (error) {
-      console.error('[subscription] refresh failed', error);
+      const reason = classifyPurchasesError(error);
+      if (reason) {
+        this.cached = { ...ANONYMOUS_STATE, unsupported: true, unsupportedReason: reason };
+        this.notify();
+        if (__DEV__) console.log('[subscription] refresh unsupported:', reason);
+      } else {
+        console.warn('[subscription] refresh failed', error);
+      }
     }
     return this.cached;
   }
@@ -137,7 +210,14 @@ export class SubscriptionService {
       const raw = await mod.default.getOfferings();
       return mapOfferings(raw);
     } catch (error) {
-      console.error('[subscription] offerings failed', error);
+      const reason = classifyPurchasesError(error);
+      if (reason) {
+        this.cached = { ...ANONYMOUS_STATE, unsupported: true, unsupportedReason: reason };
+        this.notify();
+        if (__DEV__) console.log('[subscription] offerings unsupported:', reason);
+      } else {
+        console.warn('[subscription] offerings failed', error);
+      }
       return [];
     }
   }
@@ -147,7 +227,11 @@ export class SubscriptionService {
     if (!mod || !this.configured) {
       throw new Error('Subscription service not available');
     }
-    const result = await mod.default.purchasePackage(pkg);
+    const native =
+      pkg && typeof pkg === 'object' && NATIVE_PACKAGE in (pkg as object)
+        ? (pkg as { [NATIVE_PACKAGE]?: unknown })[NATIVE_PACKAGE]
+        : undefined;
+    const result = await mod.default.purchasePackage(native ?? pkg);
     this.cached = mapCustomerInfoToState(result.customerInfo);
     this.notify();
     return this.cached;
@@ -274,7 +358,7 @@ interface RawPackage {
 
 function mapPackage(pkg?: RawPackage | null): SubscriptionOfferingPackage | null {
   if (!pkg) return null;
-  return {
+  const dto: SubscriptionOfferingPackage = {
     identifier: pkg.identifier,
     packageType: pkg.packageType,
     productIdentifier: pkg.product?.identifier ?? pkg.identifier,
@@ -287,6 +371,13 @@ function mapPackage(pkg?: RawPackage | null): SubscriptionOfferingPackage | null
         }
       : undefined,
   };
+  Object.defineProperty(dto, NATIVE_PACKAGE, {
+    value: pkg,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return dto;
 }
 
 export const subscriptionService = SubscriptionService.getInstance();

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,24 @@ import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { useSubscription } from '../../context/SubscriptionContext';
 import type { SubscriptionOfferingPackage } from '../../libs/services/subscription/subscription-service';
+
+function unsupportedMessage(
+  reason: ReturnType<typeof useSubscription>['unsupportedReason']
+): string {
+  switch (reason) {
+    case 'billing-unavailable':
+      return Platform.OS === 'android'
+        ? 'Google Play Billing is unavailable on this device. Sign in to the Play Store, use a Google Play emulator image, and make sure the app is published to at least the Internal Testing track with your tester account allowlisted.'
+        : 'In-app purchases are unavailable on this device. Sign in to the App Store and try again.';
+    case 'network':
+      return 'Could not reach the store. Check your connection and try again.';
+    case 'no-key':
+      return 'In-app purchases are not configured for this build. Provide EXPO_PUBLIC_REVENUECAT_*_KEY env vars.';
+    case 'no-module':
+    default:
+      return 'In-app purchases are not configured for this build. Run with a development client that bundles react-native-purchases and provide EXPO_PUBLIC_REVENUECAT_*_KEY env vars to test purchases.';
+  }
+}
 
 const FEATURES = [
   { icon: 'block' as const, label: 'No ads' },
@@ -139,9 +158,7 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
             {subscription.unsupported ? (
               <View style={[styles.warning, { borderColor: theme.glassBorder }]}>
                 <Text style={[styles.warningText, { color: theme.text.secondary }]}>
-                  In-app purchases are not configured for this build. Run with a development client
-                  that bundles react-native-purchases and provide EXPO_PUBLIC_REVENUECAT_*_KEY env
-                  vars to test purchases.
+                  {unsupportedMessage(subscription.unsupportedReason)}
                 </Text>
               </View>
             ) : null}
