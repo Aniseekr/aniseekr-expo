@@ -1,0 +1,56 @@
+Aniseekr
+Copyright 2026 Aniseekr (contact: gm@aniseekr.moe)
+
+This product includes software developed by the Aniseekr project
+and contributors, licensed under the Apache License, Version 2.0.
+
+================================================================================
+Third-party software
+================================================================================
+
+This product bundles third-party open-source packages. A full list, including
+their licenses, can be generated from the lockfile:
+
+    npx license-checker --production --summary
+    npx license-checker --production --out THIRD_PARTY_LICENSES.txt
+
+Notable redistributed components and their upstream licenses:
+
+  - React Native               (MIT)   Copyright (c) Meta Platforms, Inc.
+  - Expo SDK                   (MIT)   Copyright (c) 650 Industries, Inc.
+  - react-native-google-mobile-ads (Apache-2.0) Copyright (c) Invertase Limited
+  - TypeScript                 (Apache-2.0) Copyright (c) Microsoft Corporation
+  - Leaflet                    (BSD-2-Clause) Copyright (c) Volodymyr Agafonkin
+  - Leaflet.markercluster      (MIT)
+  - Reanimated                 (MIT)
+  - react-native-vision-camera (MIT)   Copyright (c) Marc Rousavy
+  - @noble/ciphers, @noble/hashes (MIT) Copyright (c) Paul Miller
+  - Microsoft Clarity (RN SDK) (MIT)   Copyright (c) Microsoft Corporation
+  - RevenueCat (react-native-purchases) (MIT) Copyright (c) RevenueCat, Inc.
+
+================================================================================
+Third-party data (runtime only — NOT covered by this Apache-2.0 license)
+================================================================================
+
+Aniseekr is a client that queries third-party catalogues at runtime. The
+catalogue content (titles, posters, synopses, tags, scene coordinates, etc.)
+belongs to its respective providers and is governed by their own terms.
+
+  - Anitabi (聖地巡礼 scene coordinates and screenshots)
+      Licensed under CC BY-NC-SA 4.0 by the Anitabi community.
+      https://anitabi.cn  ·  https://creativecommons.org/licenses/by-nc-sa/4.0/
+      The Aniseekr app surfaces Anitabi attribution on every screen that
+      renders Anitabi-sourced data (detail, sheet, scene tiles, compare flow).
+
+  - Bangumi (bgm.tv)            https://bangumi.github.io/api/
+  - AniList                     https://docs.anilist.co/
+  - MyAnimeList (via Jikan)     https://jikan.moe/
+  - Kitsu                       https://kitsu.docs.apiary.io/
+  - Annict                      https://developers.annict.com/
+  - Simkl                       https://simkl.docs.apiary.io/
+  - Shikimori                   https://shikimori.one/api/doc
+  - Anime Tourism 88            https://animetourism88.com/
+
+These are queried at runtime; their data is not redistributed inside this
+repository. If you fork Aniseekr and ship it under a different brand, you are
+responsible for honouring each upstream provider's terms of service.
