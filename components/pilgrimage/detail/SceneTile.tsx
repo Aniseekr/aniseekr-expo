@@ -17,6 +17,7 @@ import type { AnitabiPoint } from '../../../libs/services/pilgrimage/types';
 import { getPilgrimageSpotTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { formatDistanceKm, getPointSourceLabel } from './_helpers';
 import { sceneTilePropsEqual } from './_equality';
+import { AnitabiOriginCredit } from '../common/AnitabiOriginCredit';
 
 export interface SceneTileProps {
   /** Representative scene of the location (its first cut). */
@@ -128,7 +129,7 @@ function SceneTileImpl({
           />
         </View>
       ) : null}
-      <View style={styles.captionWrap} pointerEvents="none">
+      <View style={styles.captionWrap} pointerEvents="box-none">
         <ThemedText variant="bodySmall" weight="700" numberOfLines={1} style={styles.captionTitle}>
           {titles.primary}
         </ThemedText>
@@ -139,6 +140,15 @@ function SceneTileImpl({
           style={styles.captionMeta}>
           {metaLine}
         </ThemedText>
+        {flipped ? null : (
+          <AnitabiOriginCredit
+            source={spot}
+            variant="inline"
+            textVariant="captionSmall"
+            color="rgba(255,255,255,0.78)"
+            style={styles.originCredit}
+          />
+        )}
       </View>
       <Pressable
         onPress={handleFlip}
@@ -230,6 +240,9 @@ function makeTileStyles(theme: ThemePalette) {
       color: 'rgba(255,255,255,0.85)',
       textShadowColor: 'rgba(0,0,0,0.45)',
       textShadowRadius: 3,
+    },
+    originCredit: {
+      marginTop: 1,
     },
     flipBtn: {
       position: 'absolute',

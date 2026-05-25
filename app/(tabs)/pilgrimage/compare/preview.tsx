@@ -38,6 +38,7 @@ import { useCaptureSession, type CaptureSessionShot } from '../../../../hooks/us
 import { capturedOnWideAngle } from '../../../../libs/services/pilgrimage/capture-lens-gate';
 import { sanitizeCaptureNote } from '../../../../libs/services/pilgrimage/capture-session';
 import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
+import { AnitabiOriginCredit } from '../../../../components/pilgrimage/common/AnitabiOriginCredit';
 
 function getRetakeTip(s: SensorSnapshot | null): string | null {
   if (!s) return null;
@@ -110,6 +111,10 @@ export default function ComparePreviewScreen() {
   const userLatParam = getStringParam(params, 'userLat');
   const userLngParam = getStringParam(params, 'userLng');
   const noteParam = getStringParam(params, 'note');
+  // CC BY-NC-SA 4.0 attribution for the reference scene image — surfaced as
+  // a small "via {origin}" credit below the comparison stage.
+  const sceneOrigin = (getStringParam(params, 'sceneOrigin') ?? '').trim();
+  const sceneOriginURL = (getStringParam(params, 'sceneOriginURL') ?? '').trim();
   const routeShot = useMemo(
     () =>
       buildCaptureSessionShotFromRoute({
@@ -906,6 +911,17 @@ export default function ComparePreviewScreen() {
             </View>
           </View>
 
+          {sceneOrigin ? (
+            <View style={styles.originRow}>
+              <AnitabiOriginCredit
+                source={{ origin: sceneOrigin, originURL: sceneOriginURL || null }}
+                variant="compact"
+                tone="tertiary"
+                textVariant="captionSmall"
+              />
+            </View>
+          ) : null}
+
           {sensorSnapshot && positionScore ? (
             <View
               style={[
@@ -1528,6 +1544,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     gap: 10,
+  },
+  originRow: {
+    marginHorizontal: 16,
+    marginTop: -4,
+    alignItems: 'flex-start',
   },
   analysisHeader: {
     flexDirection: 'row',

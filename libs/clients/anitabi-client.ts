@@ -2,7 +2,11 @@
 // Domain logic (caching, fallback, ID resolution) lives in
 // libs/services/pilgrimage/ — this module only knows how to make requests.
 
-import type { AnitabiBangumi, RawAnitabiBangumiPoints } from '../services/pilgrimage/types';
+import type {
+  AnitabiBangumi,
+  RawAnitabiBangumiPoints,
+  RawAnitabiPointsDetail,
+} from '../services/pilgrimage/types';
 
 const ANITABI_BASE_URL = 'https://api.anitabi.cn';
 const USER_AGENT = 'Aniseekr/1.0';
@@ -71,6 +75,25 @@ export class AnitabiClient {
     opts: FetchOptions = {}
   ): Promise<RawAnitabiBangumiPoints | null> {
     return AnitabiClient.request<RawAnitabiBangumiPoints>(`/bangumi/${bangumiId}/points`, opts);
+  }
+
+  /**
+   * GET /bangumi/{id}/points/detail?haveImage=true — server-deduplicated point
+   * subset that, unlike `/points`, includes per-point `originURL` (the Google
+   * Maps / blog link of the screenshot's source). Used as a side-channel to
+   * enrich the `/points` payload with attribution links for CC BY-NC-SA 4.0
+   * compliance.
+   *
+   * Returns null when the anime has no pilgrimage entry (HTTP 404).
+   */
+  static async getPointsDetail(
+    bangumiId: number,
+    opts: FetchOptions = {}
+  ): Promise<RawAnitabiPointsDetail | null> {
+    return AnitabiClient.request<RawAnitabiPointsDetail>(
+      `/bangumi/${bangumiId}/points/detail?haveImage=true`,
+      opts
+    );
   }
 
   private static async request<T>(path: string, opts: FetchOptions): Promise<T | null> {

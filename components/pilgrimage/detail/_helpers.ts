@@ -11,7 +11,28 @@ import type {
 } from '../../../libs/services/pilgrimage/types';
 import type { PilgrimageSeriesPoint } from '../../../libs/services/pilgrimage/pilgrimage-series';
 
-const ANITABI_BASE_PAGE = 'https://anitabi.cn/bangumi/';
+// Use the `www.` subdomain for all anitabi.cn links. The apex domain issues a
+// 301 redirect that silently STRIPS the `/map` segment from the path
+// (`anitabi.cn/map?bangumiId=297` → `www.anitabi.cn/?bangumiId=297`), which
+// drops users onto the homepage instead of the anime map. Hitting `www.`
+// directly returns 200 with the map preserved.
+const ANITABI_BASE_PAGE = 'https://www.anitabi.cn/bangumi/';
+const ANITABI_MAP_PAGE = 'https://www.anitabi.cn/map?bangumiId=';
+const ANITABI_SITE_HOME = 'https://www.anitabi.cn/';
+
+/**
+ * URL of the Anitabi web map for a given anime — the entry point we link
+ * users to when they want to see every landmark (more than we fetch via the
+ * /points API), or to contribute a new spot by clicking an empty coordinate.
+ */
+export function buildAnitabiMapUrl(bangumiId: number): string {
+  return `${ANITABI_MAP_PAGE}${bangumiId}`;
+}
+
+/** URL of the Anitabi homepage — used for the global "data by Anitabi" credit. */
+export function getAnitabiSiteUrl(): string {
+  return ANITABI_SITE_HOME;
+}
 
 export function buildMapsURL(lat: number, lng: number, name?: string): string {
   const encoded = name ? encodeURIComponent(name) : '';

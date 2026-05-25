@@ -31,6 +31,19 @@ export interface AnitabiPoint {
   fid?: string;
   /** True when this point is itself an Anitabi folder head (groups other cuts). */
   isFolder?: boolean;
+  /**
+   * Free-text attribution for the scene screenshot's contributor or source
+   * (e.g. "日々是妄想", "Google Maps"). Required to honour Anitabi's
+   * CC BY-NC-SA 4.0 licence when we render the image. Undefined when
+   * Anitabi has no attribution on file.
+   */
+  origin?: string;
+  /**
+   * Canonical URL the screenshot's originator should link to (Google Maps
+   * viewer link, blog post, etc.). Only present for points returned via
+   * `/points/detail`; merged onto `/points` rows by id during fetch.
+   */
+  originURL?: string;
 }
 
 /**
@@ -102,9 +115,18 @@ export interface RawAnitabiPoint {
   geo?: unknown;
   fid?: unknown;
   isFolder?: unknown;
+  origin?: unknown;
+  originURL?: unknown;
 }
 
 /** `GET /bangumi/{id}/points` response wrapper (the full, complete point list). */
 export interface RawAnitabiBangumiPoints {
   points?: RawAnitabiPoint[];
 }
+
+/**
+ * `GET /bangumi/{id}/points/detail` response — a flat array, NOT wrapped in
+ * `{ points: [...] }`. Server-side deduplicated (smaller than `/points`),
+ * but the only endpoint that includes `originURL` per point.
+ */
+export type RawAnitabiPointsDetail = RawAnitabiPoint[];

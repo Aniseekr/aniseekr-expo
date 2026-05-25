@@ -332,6 +332,11 @@ export default function PilgrimageDetailScreen() {
         themeColor,
         ...(lat ? { spotLat: lat } : {}),
         ...(lng ? { spotLng: lng } : {}),
+        // CC BY-NC-SA 4.0 attribution for the reference screenshot. Both
+        // fields are optional; the compare screen reads them via
+        // useLocalSearchParams and only renders the credit when origin is set.
+        ...(spot.origin ? { sceneOrigin: spot.origin } : {}),
+        ...(spot.originURL ? { sceneOriginURL: spot.originURL } : {}),
       };
     },
     [bangumiId, animeTitles?.primary, themeColor]
@@ -761,6 +766,7 @@ export default function PilgrimageDetailScreen() {
           saved={activeSpotSaved}
           planned={activeSpotPlanned}
           hasCapture={activeSpotHasCapture}
+          anitabiBangumiId={anime?.id ?? bangumiId ?? null}
           theme={theme}
           onClose={closeSheet}
           onToggleVisited={toggleVisitedPoint}

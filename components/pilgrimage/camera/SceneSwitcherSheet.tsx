@@ -25,6 +25,7 @@ import { ThemedText, readableTextOn } from '../../themed';
 import { getPilgrimageSpotTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { toFullResImageUrl } from '../../../libs/services/pilgrimage/anitabi-image';
 import type { AnitabiPoint } from '../../../libs/services/pilgrimage/types';
+import { AnitabiOriginCredit } from '../common/AnitabiOriginCredit';
 
 interface SceneSwitcherSheetProps {
   visible: boolean;
@@ -217,6 +218,12 @@ function SceneTile({ spot, isActive, themeColor, onPress }: SceneTileProps) {
           style={{ color: 'rgba(255,255,255,0.78)' }}>
           {`EP ${spot.ep}`}
         </ThemedText>
+        <AnitabiOriginCredit
+          source={spot}
+          variant="inline"
+          textVariant="captionSmall"
+          color="rgba(255,255,255,0.7)"
+        />
       </View>
     </Pressable>
   );

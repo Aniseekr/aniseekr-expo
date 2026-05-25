@@ -54,7 +54,7 @@ const DATA_SOURCES: Source[] = [
   },
   {
     name: 'Anitabi',
-    url: 'https://anitabi.cn/',
+    url: 'https://www.anitabi.cn/',
     description: 'Real-world anime pilgrimage spots',
     icon: 'place',
   },

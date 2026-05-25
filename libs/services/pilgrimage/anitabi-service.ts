@@ -5,7 +5,12 @@ import { LocalDB, type PilgrimageRow, type PilgrimageSaveInput } from '../../db'
 import { AnitabiClient, DataSourceError } from '../../clients/anitabi-client';
 import { CacheService } from '../cache-service';
 import { normalizeRawPoints } from './anitabi-points';
-import type { AnitabiBangumi, AnitabiPoint, RawAnitabiBangumiPoints } from './types';
+import type {
+  AnitabiBangumi,
+  AnitabiPoint,
+  RawAnitabiBangumiPoints,
+  RawAnitabiPointsDetail,
+} from './types';
 
 /** Default lite-cache TTL (7 days) in milliseconds. */
 export const PILGRIMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -15,6 +20,14 @@ export const PILGRIMAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * deliberate cache-bust: builds <= 1.1.5 cached the truncated `/points/detail`
  * payload under `anitabi_detail_`; bumping the prefix forces every device to
  * refetch the complete `/points` data instead of serving stale partial data.
+ *
+ * NOTE: do NOT bump this casually. A bump invalidates every device's cached
+ * pilgrimage data simultaneously, and a single user scrolling through the
+ * pilgrimage list can fan out into 10+ parallel SQLite writes — enough to
+ * trigger expo-sqlite's "database is locked" path. The `origin` / `originURL`
+ * additions added in 1.1.6 are additive (optional fields with safe fallbacks
+ * in the UI), so old cached entries simply lack attribution data and pick it
+ * up naturally as the 7-day TTL expires — no cache-bust required.
  */
 const DETAIL_CACHE_KEY_PREFIX = 'anitabi_points_v2_';
 
@@ -197,10 +210,34 @@ export class AnitabiService {
         console.warn('[AnitabiService] points cache read failed:', err);
       }
 
-      // 4. Network.
+      // 4. Network. `/points` carries the complete payload (every scene-cut)
+      // but no `originURL`; `/points/detail` is server-deduped (~22–80% subset)
+      // but is the only endpoint that exposes the originator URL. Fire both in
+      // parallel and merge the URLs onto the full point list by id, so we keep
+      // /points' breadth and pick up /points/detail's attribution links.
       let raw: RawAnitabiBangumiPoints | null;
+      let detail: RawAnitabiPointsDetail | null = null;
       try {
-        raw = await this.client.getPoints(bangumiId);
+        const [pointsResult, detailResult] = await Promise.allSettled([
+          this.client.getPoints(bangumiId),
+          this.client.getPointsDetail(bangumiId),
+        ]);
+
+        if (pointsResult.status === 'rejected') {
+          const err = pointsResult.reason;
+          if (err instanceof DataSourceError && err.code === 'NOT_FOUND') {
+            this.detailMemCache.set(bangumiId, { kind: 'miss' });
+            return [];
+          }
+          throw err;
+        }
+        raw = pointsResult.value;
+        // /points/detail failing is non-fatal — we still render points without
+        // an originURL link. The `origin` text label still comes through from
+        // /points itself.
+        if (detailResult.status === 'fulfilled') {
+          detail = detailResult.value;
+        }
       } catch (err) {
         if (err instanceof DataSourceError && err.code === 'NOT_FOUND') {
           this.detailMemCache.set(bangumiId, { kind: 'miss' });
@@ -210,6 +247,24 @@ export class AnitabiService {
       }
 
       const fresh = raw === null ? [] : normalizeRawPoints(raw.points, bangumiId);
+      if (fresh.length > 0 && detail && detail.length > 0) {
+        const urlById = new Map<string, string>();
+        for (const item of detail) {
+          if (!item || typeof item !== 'object') continue;
+          const id = typeof item.id === 'string' ? item.id.trim() : '';
+          const url = typeof item.originURL === 'string' ? item.originURL.trim() : '';
+          if (id.length > 0 && url.length > 0) urlById.set(id, url);
+        }
+        if (urlById.size > 0) {
+          for (let i = 0; i < fresh.length; i++) {
+            const url = urlById.get(fresh[i].id);
+            if (url && !fresh[i].originURL) {
+              fresh[i] = { ...fresh[i], originURL: url };
+            }
+          }
+        }
+      }
+
       if (fresh.length === 0) {
         this.detailMemCache.set(bangumiId, { kind: 'miss' });
         return [];

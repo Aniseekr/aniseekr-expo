@@ -43,6 +43,7 @@ import { SceneTile } from './SceneTile';
 import { SpotRow } from './SpotRow';
 import { StatCell } from './StatCell';
 import { formatDistanceKm } from './_helpers';
+import { AnitabiAttributionFooter } from '../common/AnitabiAttributionFooter';
 
 export interface PilgrimageDetailSheetProps {
   anime: AnitabiBangumi | null;
@@ -342,6 +343,8 @@ function PilgrimageDetailSheetImpl(props: PilgrimageDetailSheetProps) {
         </View>
       ) : null}
 
+      <AnitabiAttributionFooter bangumiId={anime?.id ?? null} variant="footer" />
+
       <View style={styles.sectionTitleRow}>
         <ThemedText variant="titleMedium" weight="800">
           Scene spots
@@ -354,13 +357,20 @@ function PilgrimageDetailSheetImpl(props: PilgrimageDetailSheetProps) {
   );
 
   const emptyNode = (
-    <View style={styles.emptyCard}>
-      <MaterialIcons name="explore-off" size={32} color={theme.text.tertiary} />
-      <ThemedText variant="bodyMedium" tone="secondary" align="center">
-        {emptyMessage}
-      </ThemedText>
+    <View>
+      <View style={styles.emptyCard}>
+        <MaterialIcons name="explore-off" size={32} color={theme.text.tertiary} />
+        <ThemedText variant="bodyMedium" tone="secondary" align="center">
+          {emptyMessage}
+        </ThemedText>
+      </View>
+      <AnitabiAttributionFooter bangumiId={anime?.id ?? null} variant="empty" />
     </View>
   );
+
+  const footerNode = filteredGroupedSpots.length > 0 ? (
+    <AnitabiAttributionFooter bangumiId={anime?.id ?? null} variant="footer" />
+  ) : null;
 
   return (
     <BottomSheet
@@ -381,6 +391,7 @@ function PilgrimageDetailSheetImpl(props: PilgrimageDetailSheetProps) {
         numColumns={numColumns}
         ListHeaderComponent={headerNode}
         ListEmptyComponent={emptyNode}
+        ListFooterComponent={footerNode}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.sheetContent}
         columnWrapperStyle={listLayout === 'grid' ? styles.gridRow : undefined}

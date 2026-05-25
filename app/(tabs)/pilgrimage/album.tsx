@@ -280,6 +280,9 @@ export default function PilgrimageAlbumScreen() {
         params.headingDeltaDeg = String(snapshot.headingDeltaDeg);
       }
       if (snapshot?.tilt != null) params.tilt = String(snapshot.tilt);
+      // CC BY-NC-SA 4.0 attribution for the saved reference scene.
+      if (entry.spot.origin) params.sceneOrigin = entry.spot.origin;
+      if (entry.spot.originURL) params.sceneOriginURL = entry.spot.originURL;
       router.push({
         pathname: '/pilgrimage/compare/preview',
         params,

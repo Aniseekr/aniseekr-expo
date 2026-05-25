@@ -47,6 +47,27 @@ describe('normalizeRawPoints', () => {
     expect(out.map((p) => p.id)).toEqual(['a']);
   });
 
+  it('carries origin and originURL through, trimming and dropping empties', () => {
+    const raw: RawAnitabiPoint[] = [
+      {
+        id: 'a',
+        name: 'A',
+        image: '/x.jpg',
+        geo: [1, 2],
+        origin: '  Google Maps  ',
+        originURL: '  https://example.com/x  ',
+      },
+      { id: 'b', name: 'B', image: '/x.jpg', geo: [1, 2], origin: '' },
+      { id: 'c', name: 'C', image: '/x.jpg', geo: [1, 2] },
+    ];
+    const out = normalizeRawPoints(raw, BANGUMI_ID);
+    expect(out[0].origin).toBe('Google Maps');
+    expect(out[0].originURL).toBe('https://example.com/x');
+    expect(out[1].origin).toBeUndefined();
+    expect(out[1].originURL).toBeUndefined();
+    expect(out[2].origin).toBeUndefined();
+  });
+
   it('carries fid and isFolder through', () => {
     const raw: RawAnitabiPoint[] = [
       { id: 'parent', name: 'Shrine', image: '/x.jpg', geo: [1, 2], isFolder: true },

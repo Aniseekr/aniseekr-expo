@@ -51,6 +51,12 @@ export function normalizeRawPoints(
       geo: coerceGeo(p.geo),
       fid: typeof p.fid === 'string' && p.fid.trim().length > 0 ? p.fid.trim() : undefined,
       isFolder: p.isFolder === true ? true : undefined,
+      origin:
+        typeof p.origin === 'string' && p.origin.trim().length > 0 ? p.origin.trim() : undefined,
+      originURL:
+        typeof p.originURL === 'string' && p.originURL.trim().length > 0
+          ? p.originURL.trim()
+          : undefined,
     });
   }
   return out;

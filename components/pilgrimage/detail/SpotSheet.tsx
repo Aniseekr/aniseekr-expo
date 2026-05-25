@@ -6,7 +6,7 @@
 // drag-to-dismiss + early-close UX.
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,7 +20,14 @@ import { ON_DARK, ThemedText, readableTextOn } from '../../themed';
 import type { ThemePalette } from '../../../context/ThemeContext';
 import type { AnitabiPoint } from '../../../libs/services/pilgrimage/types';
 import { getPilgrimageSpotTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
-import { formatDistanceKm, getPointSourceLabel, hasValidGeo } from './_helpers';
+import {
+  buildAnitabiMapUrl,
+  formatDistanceKm,
+  getPointSourceBangumiId,
+  getPointSourceLabel,
+  hasValidGeo,
+} from './_helpers';
+import { AnitabiOriginCredit } from '../common/AnitabiOriginCredit';
 
 export interface SpotSheetProps {
   /** When null the sheet is closed. Setting it open animates the sheet up. */
@@ -35,6 +42,13 @@ export interface SpotSheetProps {
   saved: boolean;
   planned: boolean;
   hasCapture: boolean;
+  /**
+   * Bangumi subject id used to build the Anitabi "view on Anitabi" link at
+   * the bottom of the sheet (CC BY-NC-SA 4.0 attribution for the spot data).
+   * Pass the parent anime's id; the sheet falls back to the spot's own
+   * `sourceBangumiId` (series cross-link) when this is null.
+   */
+  anitabiBangumiId?: number | null;
   theme: ThemePalette;
   onClose: () => void;
   onToggleVisited: (spot: AnitabiPoint) => void;
@@ -58,6 +72,7 @@ function SpotSheetImpl({
   saved,
   planned,
   hasCapture,
+  anitabiBangumiId = null,
   theme,
   onClose,
   onToggleVisited,
@@ -124,6 +139,25 @@ function SpotSheetImpl({
   const handleFrameShot = useCallback(() => {
     if (spot) onFrameShot(spot);
   }, [onFrameShot, spot]);
+
+  // Build the Anitabi map URL for the spot. Prefer the parent-supplied
+  // bangumiId (the anime detail), fall back to the spot's own series source
+  // id (set when this spot was pulled in from a related anime). Returns null
+  // when neither is available, in which case we link to the Anitabi homepage
+  // rather than a broken `?bangumiId=` query.
+  const anitabiUrl = useMemo(() => {
+    if (anitabiBangumiId && Number.isFinite(anitabiBangumiId) && anitabiBangumiId > 0) {
+      return buildAnitabiMapUrl(anitabiBangumiId);
+    }
+    if (spot) {
+      const sourceId = getPointSourceBangumiId(spot);
+      if (sourceId && sourceId > 0) return buildAnitabiMapUrl(sourceId);
+    }
+    return 'https://www.anitabi.cn/';
+  }, [anitabiBangumiId, spot]);
+  const handleOpenAnitabi = useCallback(() => {
+    Linking.openURL(anitabiUrl).catch(() => undefined);
+  }, [anitabiUrl]);
 
   // The BottomSheet element is rendered EXACTLY ONCE per parent mount: swapping
   // between a "closed" and "open" instance based on whether `spot` is null was
@@ -250,6 +284,14 @@ function SpotSheetImpl({
           </ThemedText>
         </View>
 
+        <AnitabiOriginCredit
+          source={spot}
+          variant="compact"
+          tone="tertiary"
+          textVariant="captionSmall"
+          style={styles.originRow}
+        />
+
         <View style={styles.intentActions}>
           <Pressable
             onPress={handleToggleVisited}
@@ -357,19 +399,32 @@ function SpotSheetImpl({
           </ThemedText>
         </Pressable>
 
-        <Pressable
-          onPress={handleOpenMaps}
-          disabled={!hasGeo}
-          style={({ pressed }) => [
-            styles.openMapBtn,
-            !hasGeo && { opacity: 0.45 },
-            pressed && hasGeo && { opacity: 0.72 },
-          ]}>
-          <Ionicons name="location-outline" size={15} color={theme.text.tertiary} />
-          <ThemedText variant="bodySmall" weight="700" tone="secondary">
-            Open in Maps
-          </ThemedText>
-        </Pressable>
+        <View style={styles.linkRow}>
+          <Pressable
+            onPress={handleOpenMaps}
+            disabled={!hasGeo}
+            style={({ pressed }) => [
+              styles.linkBtn,
+              !hasGeo && { opacity: 0.45 },
+              pressed && hasGeo && { opacity: 0.72 },
+            ]}>
+            <Ionicons name="location-outline" size={15} color={theme.text.tertiary} />
+            <ThemedText variant="bodySmall" weight="700" tone="secondary">
+              Open in Maps
+            </ThemedText>
+          </Pressable>
+          <View style={[styles.linkDivider, { backgroundColor: theme.glassBorder }]} />
+          <Pressable
+            onPress={handleOpenAnitabi}
+            accessibilityRole="link"
+            accessibilityLabel="Attribute and view on Anitabi"
+            style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.72 }]}>
+            <Ionicons name="open-outline" size={15} color={theme.text.tertiary} />
+            <ThemedText variant="bodySmall" weight="700" tone="secondary">
+              Attribute to Anitabi
+            </ThemedText>
+          </Pressable>
+        </View>
           </>
         )}
       </BottomSheetView>
@@ -390,6 +445,7 @@ function areEqual(prev: SpotSheetProps, next: SpotSheetProps): boolean {
     prev.saved === next.saved &&
     prev.planned === next.planned &&
     prev.hasCapture === next.hasCapture &&
+    prev.anitabiBangumiId === next.anitabiBangumiId &&
     prev.theme === next.theme &&
     prev.onClose === next.onClose &&
     prev.onToggleVisited === next.onToggleVisited &&
@@ -496,6 +552,9 @@ function makeSheetStyles(theme: ThemePalette) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      marginBottom: 4,
+    },
+    originRow: {
       marginBottom: Spacing.md,
     },
     intentActions: {
@@ -532,13 +591,22 @@ function makeSheetStyles(theme: ThemePalette) {
       backgroundColor: theme.background.secondary,
       borderWidth: 1,
     },
-    openMapBtn: {
+    linkRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      marginTop: 8,
       height: 44,
+    },
+    linkBtn: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      marginTop: 8,
+    },
+    linkDivider: {
+      width: StyleSheet.hairlineWidth,
+      marginVertical: 8,
     },
   });
 }

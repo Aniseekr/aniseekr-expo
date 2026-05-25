@@ -108,6 +108,7 @@ import SceneSwitcherSheet from '../../../../components/pilgrimage/camera/SceneSw
 import CaptureModeToast from '../../../../components/pilgrimage/camera/CaptureModeToast';
 
 import AutoCaptureToast from '../../../../components/pilgrimage/camera/AutoCaptureToast';
+import { AnitabiOriginCredit } from '../../../../components/pilgrimage/common/AnitabiOriginCredit';
 
 type CameraRouteParams = {
   spotId: string;
@@ -119,6 +120,10 @@ type CameraRouteParams = {
   themeColor: string;
   spotLat: string;
   spotLng: string;
+  /** Anitabi `origin` attribution for the reference scene (CC BY-NC-SA). */
+  sceneOrigin?: string;
+  /** Anitabi `originURL` link for the reference scene contributor. */
+  sceneOriginURL?: string;
 };
 
 // Flash lives as a top-bar icon button. The icon mirrors the live mode; the
@@ -188,6 +193,8 @@ export default function CompareCaptureScreen() {
   const params = useLocalSearchParams<CameraRouteParams>();
   const { spotId = '', imageUrl = '', name = 'Scene', ep, animeId, animeTitle = '' } = params;
   const themeColor = params.themeColor || theme.accent;
+  const sceneOrigin = (params.sceneOrigin ?? '').trim();
+  const sceneOriginURL = (params.sceneOriginURL ?? '').trim();
   // Anitabi `?plan=h160` is a 284×160 thumb; upgrade to full 1920×1080 for the
   // overlay + Skia edge/sketch source.
   const hiResImageUrl = useMemo(() => toFullResImageUrl(imageUrl), [imageUrl]);
@@ -643,6 +650,8 @@ export default function CompareCaptureScreen() {
           themeColor,
           spotLat: hasGeo ? String(spot.geo[0]) : '',
           spotLng: hasGeo ? String(spot.geo[1]) : '',
+          ...(spot.origin ? { sceneOrigin: spot.origin } : {}),
+          ...(spot.originURL ? { sceneOriginURL: spot.originURL } : {}),
         },
       });
     },
@@ -683,6 +692,8 @@ export default function CompareCaptureScreen() {
           burstTotal: shot.burstTotal != null ? String(shot.burstTotal) : '',
           burstUris: shot.burstUris ? JSON.stringify(shot.burstUris) : '',
           burstBestIndex: shot.burstBestIndex != null ? String(shot.burstBestIndex) : '',
+          ...(sceneOrigin ? { sceneOrigin } : {}),
+          ...(sceneOriginURL ? { sceneOriginURL } : {}),
         },
       });
     },
@@ -701,6 +712,8 @@ export default function CompareCaptureScreen() {
       sensors.tilt,
       params.spotLat,
       params.spotLng,
+      sceneOrigin,
+      sceneOriginURL,
     ]
   );
 
@@ -1407,6 +1420,16 @@ export default function CompareCaptureScreen() {
             isLandscape={isLandscape}
             onPress={() => setHud({ sceneSwitcherOpen: true })}
           />
+          {sceneOrigin ? (
+            <View style={styles.refThumbCredit} pointerEvents="box-none">
+              <AnitabiOriginCredit
+                source={{ origin: sceneOrigin, originURL: sceneOriginURL || null }}
+                variant="inline"
+                textVariant="captionSmall"
+                color="rgba(255,255,255,0.85)"
+              />
+            </View>
+          ) : null}
         </View>
 
         {/* Persistent AUTO chip when the user picked auto mode — flips to
@@ -1659,6 +1682,14 @@ const styles = StyleSheet.create({
   },
   permBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 999, marginTop: 12 },
   refThumbWrap: { position: 'absolute', zIndex: 66 },
+  refThumbCredit: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
   focalDock: { position: 'absolute', zIndex: 58 },
   autoBadgeWrap: { position: 'absolute', alignItems: 'center', zIndex: 60 },
   autoModeBadgeWrap: { position: 'absolute', zIndex: 66 },

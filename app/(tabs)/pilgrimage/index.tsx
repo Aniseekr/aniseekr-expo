@@ -47,6 +47,7 @@ import {
 } from '../../../libs/services/pilgrimage/pilgrimage-hub-cache';
 import { Skeleton, ThemedText, readableTextOn } from '../../../components/themed';
 import { Tourism88Rail } from '../../../components/pilgrimage/Tourism88Rail';
+import { AnitabiAttributionFooter } from '../../../components/pilgrimage/common/AnitabiAttributionFooter';
 import { getUnique88AnimeByPopularity } from '../../../libs/services/pilgrimage/anime88-repository';
 import {
   getAllIndexed,
@@ -604,6 +605,8 @@ export default function PilgrimageHubScreen() {
               </View>
             </View>
           ) : null}
+
+          <AnitabiAttributionFooter bangumiId={null} variant="footer" />
         </ScrollView>
       </SafeAreaView>
     </View>
