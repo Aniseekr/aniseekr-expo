@@ -14,13 +14,13 @@
       "./plugins/with-vibration-bridge.js",
       "./plugins/with-clarity-proguard.js",
       "./plugins/with-storekit-config.js",
+      "./plugins/with-cloudkit-bridge.js",
       [
         "react-native-cloud-storage",
         {
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "./plugins/with-cloudkit-bridge.js",
       [
         "expo-notifications",
         {

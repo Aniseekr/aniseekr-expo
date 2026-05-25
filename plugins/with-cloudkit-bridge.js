@@ -9,11 +9,17 @@
 //   1. Copies AniseekrCloudKitBridge.swift / .m from plugins/templates/ into
 //      ios/AniSeekr/CloudKitBridge/, substituting the iCloud container id.
 //   2. Adds those files to the Xcode project (via @expo/config-plugins).
-//   3. (No entitlements changes needed — react-native-cloud-storage's plugin
-//      already grants the iCloud container + CloudDocuments capability.)
+//   3. Adds the `CloudKit` iCloud service to entitlements alongside
+//      CloudDocuments (react-native-cloud-storage's plugin only grants
+//      CloudDocuments, but the bridge calls CKContainer.privateCloudDatabase
+//      which requires the CloudKit service to be enabled).
 //   4. Updates the bridging-header so Swift sees the React Native classes.
 //
-const { withDangerousMod, withXcodeProject } = require('@expo/config-plugins');
+const {
+  withDangerousMod,
+  withEntitlementsPlist,
+  withXcodeProject,
+} = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -65,7 +71,26 @@ const withCloudKitBridge = (config, options = {}) => {
     },
   ]);
 
-  // Step 2: register the new files with the Xcode project so they're compiled.
+  // Step 2: ensure `CloudKit` service is enabled. The bridge calls
+  // CKContainer.privateCloudDatabase, which requires the CloudKit service.
+  //
+  // Ordering matters: react-native-cloud-storage's entitlements mod
+  // hard-replaces `com.apple.developer.icloud-services` with
+  // `['CloudDocuments']` (its plugin/ios.js:30). The @expo/config-plugins
+  // mod chain runs LATEST-REGISTERED mods FIRST, so for our addition to
+  // survive, this plugin must be listed in app.json BEFORE
+  // `react-native-cloud-storage` — that way our mod runs LAST and adds
+  // CloudKit on top of CloudDocuments instead of getting clobbered.
+  config = withEntitlementsPlist(config, (cfg) => {
+    const key = 'com.apple.developer.icloud-services';
+    const services = Array.isArray(cfg.modResults[key]) ? cfg.modResults[key] : [];
+    if (!services.includes('CloudKit')) services.push('CloudKit');
+    if (!services.includes('CloudDocuments')) services.push('CloudDocuments');
+    cfg.modResults[key] = services;
+    return cfg;
+  });
+
+  // Step 3: register the new files with the Xcode project so they're compiled.
   config = withXcodeProject(config, (cfg) => {
     const project = cfg.modResults;
     const projectName = cfg.modRequest.projectName || 'AniSeekr';
