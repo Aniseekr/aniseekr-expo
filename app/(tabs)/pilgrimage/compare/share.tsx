@@ -31,6 +31,13 @@ import {
   type ShareRatio,
   type ShareTemplate,
 } from '../../../../components/pilgrimage/ShareCard';
+import { ShareComposerControls } from '../../../../components/pilgrimage/ShareComposerControls';
+import {
+  getExportDimensions,
+  normalizeWatermarkText,
+  type ExportResolution,
+  type WatermarkPosition,
+} from '../../../../libs/services/pilgrimage/share-composer';
 import {
   buildShareCaption,
   saveShareImage,
@@ -68,6 +75,19 @@ export default function ShareComparisonScreen() {
   const [showLocation, setShowLocation] = useState(true);
   const [showDate, setShowDate] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  // Composer state — Track A (background color, image swap, watermark, export resolution).
+  const [swapOrder, setSwapOrder] = useState(false);
+  const [customBg, setCustomBg] = useState<string | null>(null);
+  const [watermarkInput, setWatermarkInput] = useState('');
+  const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>('bottomRight');
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.85);
+  const [exportResolution, setExportResolution] = useState<ExportResolution>('1080p');
+
+  const watermarkText = useMemo(() => normalizeWatermarkText(watermarkInput), [watermarkInput]);
+  const exportDims = useMemo(
+    () => getExportDimensions(ratio, exportResolution),
+    [ratio, exportResolution]
+  );
 
   const cardRef = useRef<View>(null);
   const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions({
@@ -96,12 +116,14 @@ export default function ShareComparisonScreen() {
         format: 'png',
         quality: 0.95,
         result: 'tmpfile',
+        width: exportDims.width,
+        height: exportDims.height,
       });
     } catch (err) {
       console.warn('share snapshot failed', err);
       return null;
     }
-  }, []);
+  }, [exportDims.width, exportDims.height]);
 
   const flashToast = useCallback((text: string) => {
     setToast(text);
@@ -228,6 +250,11 @@ export default function ShareComparisonScreen() {
                 showScore={showScore}
                 showLocation={showLocation}
                 showDate={showDate}
+                swapOrder={swapOrder}
+                customBg={customBg}
+                watermarkText={watermarkText}
+                watermarkPosition={watermarkPosition}
+                watermarkOpacity={watermarkOpacity}
               />
             </View>
           </View>
@@ -307,6 +334,23 @@ export default function ShareComparisonScreen() {
               );
             })}
           </ScrollView>
+
+          <ShareComposerControls
+            theme={theme}
+            accent={accent}
+            swapOrder={swapOrder}
+            onSwapOrderChange={setSwapOrder}
+            customBg={customBg}
+            onCustomBgChange={setCustomBg}
+            watermarkInput={watermarkInput}
+            onWatermarkInputChange={setWatermarkInput}
+            watermarkPosition={watermarkPosition}
+            onWatermarkPositionChange={setWatermarkPosition}
+            watermarkOpacity={watermarkOpacity}
+            onWatermarkOpacityChange={setWatermarkOpacity}
+            exportResolution={exportResolution}
+            onExportResolutionChange={setExportResolution}
+          />
 
           <View style={styles.toggleGroup}>
             <ToggleRow

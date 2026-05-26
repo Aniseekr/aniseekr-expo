@@ -14,6 +14,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText, readableTextOn } from '../themed';
 import type { ThemePalette } from '../../context/ThemeContext';
+import {
+  getWatermarkAlignment,
+  resolveBackgroundColor,
+  resolveImagePairOrder,
+  type WatermarkPosition,
+} from '../../libs/services/pilgrimage/share-composer';
 
 export type ShareTemplate = 'polaroid' | 'classic' | 'minimal' | 'comic' | 'manga';
 export type ShareRatio = '1:1' | '9:16' | '16:9';
@@ -42,6 +48,15 @@ export type ShareCardProps = {
   showScore: boolean;
   showLocation: boolean;
   showDate: boolean;
+  /** When true, the user shot renders before the anime reference. */
+  swapOrder?: boolean;
+  /** Hex override for the template canvas (#1 background-color picker). */
+  customBg?: string | null;
+  /** Sanitised free-text watermark (#3). Pass through `normalizeWatermarkText` first. */
+  watermarkText?: string | null;
+  watermarkPosition?: WatermarkPosition;
+  /** 0–1; the helper clamps anything outside that range. */
+  watermarkOpacity?: number;
 };
 
 const RATIO_VALUES: Record<ShareRatio, number> = {
@@ -51,28 +66,38 @@ const RATIO_VALUES: Record<ShareRatio, number> = {
 };
 
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(props, ref) {
-  const { template, ratio, width } = props;
+  const { template, ratio, width, watermarkText, watermarkPosition, watermarkOpacity, theme } =
+    props;
   const aspect = RATIO_VALUES[ratio];
   const height = Math.round(width / aspect);
+  const canvasBg = resolveBackgroundColor(template, props.customBg, theme.background.secondary);
 
   return (
-    <View ref={ref} collapsable={false} style={{ width, height }}>
+    <View ref={ref} collapsable={false} style={{ width, height, overflow: 'hidden' }}>
       {template === 'polaroid' ? (
-        <PolaroidTemplate {...props} height={height} />
+        <PolaroidTemplate {...props} height={height} canvasBg={canvasBg} />
       ) : template === 'classic' ? (
-        <ClassicTemplate {...props} height={height} />
+        <ClassicTemplate {...props} height={height} canvasBg={canvasBg} />
       ) : template === 'minimal' ? (
-        <MinimalTemplate {...props} height={height} />
+        <MinimalTemplate {...props} height={height} canvasBg={canvasBg} />
       ) : template === 'comic' ? (
-        <ComicTemplate {...props} height={height} />
+        <ComicTemplate {...props} height={height} canvasBg={canvasBg} />
       ) : (
-        <MangaTemplate {...props} height={height} />
+        <MangaTemplate {...props} height={height} canvasBg={canvasBg} />
       )}
+      {watermarkText ? (
+        <WatermarkOverlay
+          text={watermarkText}
+          position={watermarkPosition ?? 'bottomRight'}
+          opacity={watermarkOpacity ?? 0.85}
+          canvasBg={canvasBg}
+        />
+      ) : null}
     </View>
   );
 });
 
-type TemplateProps = ShareCardProps & { height: number };
+type TemplateProps = ShareCardProps & { height: number; canvasBg: string };
 
 // ----- shared image layout -----
 
@@ -82,6 +107,7 @@ function ImagePair({
   shotUri,
   accent,
   successColor,
+  swapOrder = false,
   badgeStyle = 'pill',
   borderRadius = 8,
   gap = 6,
@@ -91,11 +117,35 @@ function ImagePair({
   shotUri: string;
   accent: string;
   successColor: string;
+  swapOrder?: boolean;
   badgeStyle?: 'pill' | 'square' | 'sticker';
   borderRadius?: number;
   gap?: number;
 }) {
   const isPortrait = ratio === '9:16';
+  const order = resolveImagePairOrder(swapOrder);
+  const cells = {
+    anime: (
+      <ImageCell
+        key="anime"
+        uri={imageUrl}
+        badge="ANIME"
+        color={accent}
+        radius={borderRadius}
+        style={badgeStyle}
+      />
+    ),
+    real: (
+      <ImageCell
+        key="real"
+        uri={shotUri}
+        badge="REAL"
+        color={successColor}
+        radius={borderRadius}
+        style={badgeStyle}
+      />
+    ),
+  };
   return (
     <View
       style={{
@@ -103,20 +153,45 @@ function ImagePair({
         flexDirection: isPortrait ? 'column' : 'row',
         gap,
       }}>
-      <ImageCell
-        uri={imageUrl}
-        badge="ANIME"
-        color={accent}
-        radius={borderRadius}
-        style={badgeStyle}
-      />
-      <ImageCell
-        uri={shotUri}
-        badge="REAL"
-        color={successColor}
-        radius={borderRadius}
-        style={badgeStyle}
-      />
+      {cells[order.first]}
+      {cells[order.second]}
+    </View>
+  );
+}
+
+function WatermarkOverlay({
+  text,
+  position,
+  opacity,
+  canvasBg,
+}: {
+  text: string;
+  position: WatermarkPosition;
+  opacity: number;
+  canvasBg: string;
+}) {
+  const alignment = getWatermarkAlignment(position, 14);
+  const clampedOpacity = Math.max(0, Math.min(1, opacity));
+  const ink = readableTextOn(canvasBg);
+  const shadow = ink === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
+  return (
+    <View pointerEvents="none" style={alignment}>
+      <ThemedText
+        variant="bodySmall"
+        weight="700"
+        numberOfLines={2}
+        style={{
+          color: ink,
+          opacity: clampedOpacity,
+          letterSpacing: 0.5,
+          maxWidth: 260,
+          textShadowColor: shadow,
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 2,
+          textAlign: position === 'center' ? 'center' : 'left',
+        }}>
+        {text}
+      </ThemedText>
     </View>
   );
 }
@@ -225,14 +300,17 @@ function PolaroidTemplate(props: TemplateProps) {
     showLocation,
     locationText,
     matchScore,
+    swapOrder,
+    canvasBg,
   } = props;
   const successColor = theme.status.success;
   const captionHeight = ratio === '9:16' ? 110 : 80;
+  const captionInk = readableTextOn(canvasBg);
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: '#F5F1E8',
+        backgroundColor: canvasBg,
         padding: 12,
         paddingBottom: captionHeight,
         position: 'relative',
@@ -268,6 +346,7 @@ function PolaroidTemplate(props: TemplateProps) {
           shotUri={shotUri}
           accent={accent}
           successColor={successColor}
+          swapOrder={swapOrder}
           badgeStyle="pill"
           borderRadius={4}
           gap={6}
@@ -289,12 +368,15 @@ function PolaroidTemplate(props: TemplateProps) {
           variant="titleSmall"
           weight="700"
           numberOfLines={1}
-          style={{ color: '#2A2823', fontStyle: 'italic' }}>
+          style={{ color: captionInk, fontStyle: 'italic' }}>
           {sceneName}
         </ThemedText>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
           {episode ? (
-            <ThemedText variant="captionSmall" weight="600" style={{ color: '#6A655A' }}>
+            <ThemedText
+              variant="captionSmall"
+              weight="600"
+              style={{ color: captionInk, opacity: 0.7 }}>
               EP {episode}
             </ThemedText>
           ) : null}
@@ -302,7 +384,7 @@ function PolaroidTemplate(props: TemplateProps) {
             <ThemedText
               variant="captionSmall"
               weight="600"
-              style={{ color: '#6A655A', fontStyle: 'italic' }}>
+              style={{ color: captionInk, opacity: 0.7, fontStyle: 'italic' }}>
               · {date}
             </ThemedText>
           ) : null}
@@ -314,7 +396,7 @@ function PolaroidTemplate(props: TemplateProps) {
               variant="captionSmall"
               weight="600"
               numberOfLines={1}
-              style={{ color: '#6A655A' }}>
+              style={{ color: captionInk, opacity: 0.7 }}>
               {locationText}
             </ThemedText>
           </View>
@@ -374,6 +456,8 @@ function ClassicTemplate(props: TemplateProps) {
     showLocation,
     locationText,
     matchScore,
+    swapOrder,
+    canvasBg,
   } = props;
   const accentFg = readableTextOn(accent);
   const successColor = theme.status.success;
@@ -381,7 +465,7 @@ function ClassicTemplate(props: TemplateProps) {
     <View
       style={{
         flex: 1,
-        backgroundColor: theme.background.secondary,
+        backgroundColor: canvasBg,
         borderWidth: 1,
         borderColor: theme.glassBorder,
         padding: 14,
@@ -433,6 +517,7 @@ function ClassicTemplate(props: TemplateProps) {
           shotUri={shotUri}
           accent={accent}
           successColor={successColor}
+          swapOrder={swapOrder}
           badgeStyle="pill"
           borderRadius={12}
           gap={8}
@@ -508,10 +593,16 @@ function MinimalTemplate(props: TemplateProps) {
     showLocation,
     locationText,
     matchScore,
+    swapOrder,
+    canvasBg,
   } = props;
   const successColor = theme.status.success;
+  const isDarkBg = readableTextOn(canvasBg) === '#FFFFFF';
+  const titleInk = isDarkBg ? '#fff' : '#0E0A06';
+  const subInk = isDarkBg ? 'rgba(255,255,255,0.6)' : 'rgba(14,10,6,0.6)';
+  const gradientFade = isDarkBg ? ['transparent', 'rgba(0,0,0,0.85)'] : ['transparent', 'rgba(245,241,232,0.9)'];
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: canvasBg }}>
       <View style={{ flex: 1 }}>
         <ImagePair
           ratio={ratio}
@@ -519,13 +610,14 @@ function MinimalTemplate(props: TemplateProps) {
           shotUri={shotUri}
           accent={accent}
           successColor={successColor}
+          swapOrder={swapOrder}
           badgeStyle="square"
           borderRadius={0}
           gap={2}
         />
       </View>
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.85)']}
+        colors={gradientFade as [string, string]}
         style={{
           position: 'absolute',
           left: 0,
@@ -546,7 +638,7 @@ function MinimalTemplate(props: TemplateProps) {
             variant="titleSmall"
             weight="700"
             numberOfLines={1}
-            style={{ color: '#fff', flex: 1 }}>
+            style={{ color: titleInk, flex: 1 }}>
             {sceneName}
           </ThemedText>
           {showScore && frameValid !== false && matchScore !== null && matchScore !== undefined ? (
@@ -560,18 +652,12 @@ function MinimalTemplate(props: TemplateProps) {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
           {episode ? (
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <ThemedText variant="captionSmall" weight="600" style={{ color: subInk }}>
               EP {episode}
             </ThemedText>
           ) : null}
           {showDate ? (
-            <ThemedText
-              variant="captionSmall"
-              weight="600"
-              style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <ThemedText variant="captionSmall" weight="600" style={{ color: subInk }}>
               {date}
             </ThemedText>
           ) : null}
@@ -580,7 +666,7 @@ function MinimalTemplate(props: TemplateProps) {
               variant="captionSmall"
               weight="600"
               numberOfLines={1}
-              style={{ color: 'rgba(255,255,255,0.6)', flex: 1 }}>
+              style={{ color: subInk, flex: 1 }}>
               {locationText}
             </ThemedText>
           ) : null}
@@ -608,13 +694,15 @@ function ComicTemplate(props: TemplateProps) {
     showLocation,
     locationText,
     matchScore,
+    swapOrder,
+    canvasBg,
   } = props;
   const successColor = theme.status.success;
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: '#FFE45C',
+        backgroundColor: canvasBg,
         borderWidth: 4,
         borderColor: '#000',
         padding: 10,
@@ -664,6 +752,7 @@ function ComicTemplate(props: TemplateProps) {
           shotUri={shotUri}
           accent={accent}
           successColor={successColor}
+          swapOrder={swapOrder}
           badgeStyle="sticker"
           borderRadius={0}
           gap={3}
@@ -773,13 +862,66 @@ function MangaTemplate(props: TemplateProps) {
     showLocation,
     locationText,
     matchScore,
+    swapOrder,
+    canvasBg,
   } = props;
   const successColor = theme.status.success;
+  const order = resolveImagePairOrder(!!swapOrder);
+  const cells = {
+    anime: (
+      <View key="anime" style={{ flex: 1, position: 'relative' }}>
+        <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+        <SpeedLines side={ratio === '9:16' ? 'top' : 'left'} />
+        <View
+          style={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            backgroundColor: '#fff',
+            borderWidth: 1,
+            borderColor: '#000',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+          }}>
+          <ThemedText
+            variant="captionSmall"
+            weight="700"
+            style={{ color: '#000', letterSpacing: 1 }}>
+            Anime
+          </ThemedText>
+        </View>
+      </View>
+    ),
+    real: (
+      <View key="real" style={{ flex: 1, position: 'relative' }}>
+        <Image source={{ uri: shotUri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+        <SpeedLines side={ratio === '9:16' ? 'bottom' : 'right'} />
+        <View
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            backgroundColor: successColor,
+            borderWidth: 1,
+            borderColor: '#000',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+          }}>
+          <ThemedText
+            variant="captionSmall"
+            weight="700"
+            style={{ color: readableTextOn(successColor), letterSpacing: 1 }}>
+            Real
+          </ThemedText>
+        </View>
+      </View>
+    ),
+  };
   return (
     <View
       style={{
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: canvasBg,
         borderWidth: 3,
         borderColor: '#000',
         padding: 8,
@@ -846,64 +988,14 @@ function MangaTemplate(props: TemplateProps) {
           flexDirection: ratio === '9:16' ? 'column' : 'row',
           gap: 0,
         }}>
-        <View style={{ flex: 1, position: 'relative' }}>
-          <Image
-            source={{ uri: imageUrl }}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-          />
-          <SpeedLines side={ratio === '9:16' ? 'top' : 'left'} />
-          <View
-            style={{
-              position: 'absolute',
-              top: 6,
-              left: 6,
-              backgroundColor: '#fff',
-              borderWidth: 1,
-              borderColor: '#000',
-              paddingHorizontal: 6,
-              paddingVertical: 2,
-            }}>
-            <ThemedText
-              variant="captionSmall"
-              weight="700"
-              style={{ color: '#000', letterSpacing: 1 }}>
-              Anime
-            </ThemedText>
-          </View>
-        </View>
+        {cells[order.first]}
         <View
           style={{
             backgroundColor: '#000',
             ...(ratio === '9:16' ? { height: 3 } : { width: 3 }),
           }}
         />
-        <View style={{ flex: 1, position: 'relative' }}>
-          <Image
-            source={{ uri: shotUri }}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-          />
-          <SpeedLines side={ratio === '9:16' ? 'bottom' : 'right'} />
-          <View
-            style={{
-              position: 'absolute',
-              top: 6,
-              right: 6,
-              backgroundColor: successColor,
-              borderWidth: 1,
-              borderColor: '#000',
-              paddingHorizontal: 6,
-              paddingVertical: 2,
-            }}>
-            <ThemedText
-              variant="captionSmall"
-              weight="700"
-              style={{ color: readableTextOn(successColor), letterSpacing: 1 }}>
-              Real
-            </ThemedText>
-          </View>
-        </View>
+        {cells[order.second]}
       </View>
 
       <View
