@@ -200,7 +200,8 @@
 ### Track D：角色疊圖 Companion（新功能線，可獨立進行）
 9. ✅ **Companion Phase 1 MVP + 1B compare integration** (2026-05-27) — SubjectLifter TS spec + JS fallback；MMKV character library + 20-entry quota；`<CharacterLayer/>` (Pan/Pinch/Rotation/Double-tap flip/Long-press swap)；`<CharacterPickerSheet/>`；`/companion` standalone route；`<CompanionOverlay/>` chip 已掛到 compare/[spotId] 做即時 positioning guide；12 單元測試。待後續：(a) Phase 1C 捕獲合成（Skia compositor 把 character bake 進 takePhoto 結果）；(b) native subject-lifter Nitro module
 10. ✅ **Companion Phase 2** (2026-05-27) — `deriveCharacterTint(bgAnalysis, charAnalysis)` 透過 Skia `analyzeImage` 抓兩張的 avgRGB，再 lerp 0.45 到 `applyAutoColorMatrix` 結果；`<CharacterLayer/>` Phase 2 加 Skia `<Oval>` + `<BlurMask>` 腳底陰影 + `<FilteredImage>` tint pipeline；companion route 加 Tint/Shadow toggle chips；6 個新單元測試（含 identity edge cases + ellipse geometry）。Live-camera lighting probe (frame processor worklet) 留作 Phase 2B
-11. **Companion Phase 3**（4–6 週，待 Phase 1+2 收 feedback 後決定）— 深度遮擋
+11. ✅ **Nitro subject-lifter spec scaffolding** (2026-05-27) — `subject-lifter.nitro.ts` 宣告 `HybridObject<{ ios:'swift', android:'kotlin' }>` interface（讓 `bunx nitrogen --paths libs/services/companion` 可以直接 codegen）；`subject-lifter.ts` runtime 動態 require Nitro module，找不到時 fallback 到 `jsSubjectLifter`；測試環境完全不會 trip 到 turbomodule install。Native Swift (VisionKit) / Kotlin (MLKit) 實作仍待後續
+12. **Companion Phase 3**（4–6 週，待 Phase 1+2 收 feedback 後決定）— 深度遮擋
 
 ---
 
