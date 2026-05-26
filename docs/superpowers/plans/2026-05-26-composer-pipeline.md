@@ -76,10 +76,10 @@
 | 2 | **照片/截圖順序選項** | Reference vs user photo order (which on top) | ✅ Track A 完成 (2026-05-26)：`swapOrder` prop + `resolveImagePairOrder` 純函式；ANIME-first ↔ REAL-first chip | — | 低 | 0.5 天 |
 | 3 | **文字水印選項** | Custom text watermark on output | ✅ Track A 完成 (2026-05-26)：80 字上限、HTML 防注入 (`normalizeWatermarkText`)、5 種位置、opacity slider、自動 text-shadow | (Phase 2) 字體選擇、顏色 picker | 中 | 1 週 |
 | 4 | **照片濾鏡調整選項** | Color filter presets on user photo | ✅ Track B 完成 (2026-05-26)：6 種預設 (`cinematic/soft/anime/contrast/warm/cool`) + intensity slider；`<FilteredImage/>` 自動切 Skia ColorMatrix 路徑、identity 走 expo-image fast path | — | 中 | 1.5 週 |
-| 5 | **分析截圖自動調整** | Auto-apply reference's lighting/color to user photo | 🟡 半套：`frame-match.ts` 已分析動漫場景的 histogram + lighting，但結果只用來「打分」，沒拿去調整自拍。`applyAutoColorMatrix()` helper 已就位 (Track B) — Track C 接到 UI | (Track C) 串接到 share 畫面 toggle，從 EXIF/分析快取讀 RGB mean | 中高 | 2 週 |
+| 5 | **分析截圖自動調整** | Auto-apply reference's lighting/color to user photo | ✅ Track C 完成 (2026-05-26)：`loadAutoColorMatrix(refUri, shotUri)` 跑 Skia 64×64 downsample → `reducePixels` 拿 avgR/G/B → `applyAutoColorMatrix` 推 ColorMatrix；UI toggle 含 loading + 不可用態 | — | 中高 | 2 週 |
 | 6 | **濾鏡分辨率調整** | Export resolution control | ✅ Track A 完成 (2026-05-26)：`getExportDimensions(ratio, '720p'\|'1080p'\|'4k')` 推導出 captureRef pixel size；短邊基準 | — | 低中 | 0.5 週 |
 | 7 | **照片裁切選項** | Crop user photo (post-capture) | ✅ Track B 完成 (2026-05-26)：`<CropSheet/>` 全螢幕 modal + Pan gesture (Reanimated SharedValue) + rule-of-thirds grid + 5 aspect chips (Free/1:1/9:16/16:9/Match anime) + `expo-image-manipulator` apply | (Phase 2) Pinch zoom | 中 | 1 週 |
-| 8 | **透視拉伸選項** | Perspective warp to match reference | ❌ 無：`alignment-scoring` 只用來提示，不會 warp 圖 | 4 角拖拉 corner-pin 透視變換；自動候選用對齊 sensor 數據反推 | 高 | 2-3 週 |
+| 8 | **透視拉伸選項** | Perspective warp to match reference | ✅ Track C 完成 (Phase 1) (2026-05-26)：`computeHomography()` 8-DOF DLT solver + `tiltCorrectionTransform()` 從 capture sensor (tiltDeg / headingDeltaDeg) 推出 RN perspective transform；UI toggle (auto-from-sensor) | (Phase 2) 4 角手動 corner-pin gesture 編輯器 — 走 `homographyToCss()` apply 到 Skia | 高 | 2-3 週 |
 
 ### 圖示說明
 - ✅ 已完成（在生產代碼裡可用）
@@ -190,11 +190,12 @@
 6. ✅ **#7 裁切** — `<CropSheet/>` Modal + Reanimated Pan gesture + `panToCropRegion()` 純函式（測試覆蓋邊界 clamp）+ `expo-image-manipulator` Apply；croppedShotUri 取代原 shotUri 給 ShareCard
 7. ✅ TDD — 22 個單元測試 (`__tests__/unit/pilgrimage/share-filters.test.ts`)：preset shape、intensity blend、auto color match clamp、center/pan crop region
 
-### Track C：智能匹配（重型，總計 ~5 週）
+### Track C：智能匹配（重型，總計 ~5 週）✅ Done Phase 1 (2026-05-26)
 > 目標：分析資料不再只是裝飾，真的能用來改畫面。
 
-7. **#5 自動色調匹配**（2 週）— 把 `frame-match.ts` 的 histogram + lighting 結果轉成自拍 ColorMatrix
-8. **#8 透視拉伸**（3 週）— 4 角 corner-pin + alignment-sensor 自動候選
+7. ✅ **#5 自動色調匹配** — `loadAutoColorMatrix(refUri, shotUri)` async pipeline + UI toggle (auto/loading/disabled)；overrides preset filter when active
+8. ✅ **#8 透視拉伸 Phase 1** — DLT homography solver + `tiltCorrectionTransform({tiltDeg, headingDeltaDeg})` ±15° clamp；auto-from-sensor toggle (依 route params 顯示／停用)；下游 capture flow 還沒傳 sensor params → toggle 預設 disabled。Phase 2 4 角手動 editor pending
+9. ✅ TDD — 12 個單元測試 (`__tests__/unit/pilgrimage/share-auto-match.test.ts`)：safe-band clamp、identity edge cases、DLT degenerate input、sensor zero-state
 
 ### Track D：角色疊圖 Companion（新功能線，可獨立進行）
 9. **Companion Phase 1**（1.5–2 週）— MVP，能匯入/疊/拍

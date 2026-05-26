@@ -6,7 +6,15 @@
 // resolution.
 
 import { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextInput,
+  View,
+} from 'react-native';
 import Slider from '@react-native-community/slider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText, readableTextOn } from '../themed';
@@ -64,6 +72,14 @@ export type ShareComposerControlsProps = {
   onFilterIntensityChange: (next: number) => void;
   onOpenCrop: () => void;
   cropApplied: boolean;
+  // Track C — smart adjustments.
+  autoMatchEnabled: boolean;
+  autoMatchLoading: boolean;
+  autoMatchAvailable: boolean;
+  onAutoMatchChange: (next: boolean) => void;
+  autoWarpEnabled: boolean;
+  autoWarpAvailable: boolean;
+  onAutoWarpChange: (next: boolean) => void;
 };
 
 const POSITION_LABELS: Record<WatermarkPosition, string> = {
@@ -96,6 +112,13 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
     onFilterIntensityChange,
     onOpenCrop,
     cropApplied,
+    autoMatchEnabled,
+    autoMatchLoading,
+    autoMatchAvailable,
+    onAutoMatchChange,
+    autoWarpEnabled,
+    autoWarpAvailable,
+    onAutoWarpChange,
   } = props;
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const accentFg = readableTextOn(accent);
@@ -266,6 +289,42 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         ) : null}
       </View>
 
+      {/* --- Smart adjustments (Track C) --- */}
+      <View style={styles.smartGroup}>
+        <SmartToggle
+          theme={theme}
+          accent={accent}
+          icon="color-wand-outline"
+          label="Auto color match"
+          subtitle={
+            !autoMatchAvailable
+              ? 'Needs both photos loaded'
+              : autoMatchLoading
+                ? 'Analysing…'
+                : 'Match user shot to anime palette'
+          }
+          value={autoMatchEnabled}
+          disabled={!autoMatchAvailable || autoMatchLoading}
+          loading={autoMatchLoading}
+          onChange={onAutoMatchChange}
+        />
+        <SmartToggle
+          theme={theme}
+          accent={accent}
+          icon="scan-outline"
+          label="Auto perspective"
+          subtitle={
+            autoWarpAvailable
+              ? 'Correct tilt from capture sensors'
+              : 'No sensor data on this capture'
+          }
+          value={autoWarpEnabled}
+          disabled={!autoWarpAvailable}
+          loading={false}
+          onChange={onAutoWarpChange}
+        />
+      </View>
+
       {/* --- Background color swatches --- */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -393,6 +452,85 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
   );
 }
 
+function SmartToggle({
+  theme,
+  accent,
+  icon,
+  label,
+  subtitle,
+  value,
+  disabled,
+  loading,
+  onChange,
+}: {
+  theme: ThemePalette;
+  accent: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  subtitle: string;
+  value: boolean;
+  disabled: boolean;
+  loading: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <View style={[smartStyles.row, { borderBottomColor: theme.glassBorder }]}>
+      <View
+        style={[
+          smartStyles.icon,
+          {
+            backgroundColor: `${accent}26`,
+            borderColor: `${accent}55`,
+            opacity: disabled ? 0.5 : 1,
+          },
+        ]}>
+        {loading ? (
+          <ActivityIndicator size="small" color={accent} />
+        ) : (
+          <Ionicons name={icon} size={16} color={accent} />
+        )}
+      </View>
+      <View style={{ flex: 1, opacity: disabled ? 0.5 : 1 }}>
+        <ThemedText variant="bodyMedium" weight="600">
+          {label}
+        </ThemedText>
+        <ThemedText variant="captionSmall" tone="secondary">
+          {subtitle}
+        </ThemedText>
+      </View>
+      <Switch
+        value={value}
+        disabled={disabled}
+        onValueChange={(v) => {
+          hapticsBridge.selection();
+          onChange(v);
+        }}
+        trackColor={{ false: theme.background.tertiary, true: accent }}
+        thumbColor={theme.text.primary}
+      />
+    </View>
+  );
+}
+
+const smartStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  icon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+});
+
 function makeStyles(theme: ThemePalette) {
   return StyleSheet.create({
     root: {
@@ -449,6 +587,13 @@ function makeStyles(theme: ThemePalette) {
       paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
+    },
+    smartGroup: {
+      borderRadius: Radius.sm,
+      borderWidth: 1,
+      borderColor: theme.glassBorder,
+      backgroundColor: theme.background.tertiary,
+      paddingHorizontal: 8,
     },
     sectionHeader: {
       flexDirection: 'row',

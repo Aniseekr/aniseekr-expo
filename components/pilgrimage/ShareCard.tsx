@@ -21,6 +21,7 @@ import {
   type WatermarkPosition,
 } from '../../libs/services/pilgrimage/share-composer';
 import { FilteredImage } from './FilteredImage';
+import type { RNPerspectiveTransform } from '../../libs/services/pilgrimage/share-perspective';
 
 export type ShareTemplate = 'polaroid' | 'classic' | 'minimal' | 'comic' | 'manga';
 export type ShareRatio = '1:1' | '9:16' | '16:9';
@@ -65,6 +66,12 @@ export type ShareCardProps = {
    * fast path with no Skia overhead.
    */
   shotFilterMatrix?: number[] | null;
+  /**
+   * RN 3-D transform tokens (perspective + rotateX/rotateY) applied to the
+   * user-shot cell only (#8 perspective warp / auto-from-sensor). Empty or
+   * undefined → no transform.
+   */
+  shotPerspectiveTransform?: RNPerspectiveTransform;
 };
 
 const RATIO_VALUES: Record<ShareRatio, number> = {
@@ -120,6 +127,7 @@ function ImagePair({
   borderRadius = 8,
   gap = 6,
   shotFilterMatrix = null,
+  shotPerspectiveTransform,
 }: {
   ratio: ShareRatio;
   imageUrl: string;
@@ -131,6 +139,7 @@ function ImagePair({
   borderRadius?: number;
   gap?: number;
   shotFilterMatrix?: number[] | null;
+  shotPerspectiveTransform?: RNPerspectiveTransform;
 }) {
   const isPortrait = ratio === '9:16';
   const order = resolveImagePairOrder(swapOrder);
@@ -154,6 +163,7 @@ function ImagePair({
         radius={borderRadius}
         style={badgeStyle}
         filterMatrix={shotFilterMatrix}
+        perspectiveTransform={shotPerspectiveTransform}
       />
     ),
   };
@@ -214,6 +224,7 @@ function ImageCell({
   radius,
   style,
   filterMatrix = null,
+  perspectiveTransform,
 }: {
   uri: string;
   badge: string;
@@ -221,7 +232,9 @@ function ImageCell({
   radius: number;
   style: 'pill' | 'square' | 'sticker';
   filterMatrix?: number[] | null;
+  perspectiveTransform?: RNPerspectiveTransform;
 }) {
+  const hasTransform = perspectiveTransform && perspectiveTransform.length > 0;
   return (
     <View
       style={{
@@ -231,7 +244,17 @@ function ImageCell({
         backgroundColor: '#0a0a0a',
         position: 'relative',
       }}>
-      <FilteredImage uri={uri} matrix={filterMatrix} contentFit="cover" />
+      {hasTransform ? (
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            { transform: perspectiveTransform as RNPerspectiveTransform },
+          ]}>
+          <FilteredImage uri={uri} matrix={filterMatrix} contentFit="cover" />
+        </View>
+      ) : (
+        <FilteredImage uri={uri} matrix={filterMatrix} contentFit="cover" />
+      )}
       {style === 'sticker' ? (
         <View
           style={{
@@ -364,6 +387,7 @@ function PolaroidTemplate(props: TemplateProps) {
           borderRadius={4}
           gap={6}
           shotFilterMatrix={props.shotFilterMatrix}
+          shotPerspectiveTransform={props.shotPerspectiveTransform}
         />
       </View>
 
@@ -536,6 +560,7 @@ function ClassicTemplate(props: TemplateProps) {
           borderRadius={12}
           gap={8}
           shotFilterMatrix={props.shotFilterMatrix}
+          shotPerspectiveTransform={props.shotPerspectiveTransform}
         />
       </View>
 
@@ -630,6 +655,7 @@ function MinimalTemplate(props: TemplateProps) {
           borderRadius={0}
           gap={2}
           shotFilterMatrix={props.shotFilterMatrix}
+          shotPerspectiveTransform={props.shotPerspectiveTransform}
         />
       </View>
       <LinearGradient
@@ -773,6 +799,7 @@ function ComicTemplate(props: TemplateProps) {
           borderRadius={0}
           gap={3}
           shotFilterMatrix={props.shotFilterMatrix}
+          shotPerspectiveTransform={props.shotPerspectiveTransform}
         />
       </View>
 
@@ -910,8 +937,26 @@ function MangaTemplate(props: TemplateProps) {
       </View>
     ),
     real: (
-      <View key="real" style={{ flex: 1, position: 'relative' }}>
-        <FilteredImage uri={shotUri} matrix={props.shotFilterMatrix ?? null} contentFit="cover" />
+      <View key="real" style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {props.shotPerspectiveTransform && props.shotPerspectiveTransform.length > 0 ? (
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { transform: props.shotPerspectiveTransform as RNPerspectiveTransform },
+            ]}>
+            <FilteredImage
+              uri={shotUri}
+              matrix={props.shotFilterMatrix ?? null}
+              contentFit="cover"
+            />
+          </View>
+        ) : (
+          <FilteredImage
+            uri={shotUri}
+            matrix={props.shotFilterMatrix ?? null}
+            contentFit="cover"
+          />
+        )}
         <SpeedLines side={ratio === '9:16' ? 'bottom' : 'right'} />
         <View
           style={{

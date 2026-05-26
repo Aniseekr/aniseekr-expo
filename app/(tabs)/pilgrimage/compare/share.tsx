@@ -3,7 +3,7 @@
 // react-native-view-shot captures the rendered card into a PNG that the
 // platform-specific share intent (or the OS share sheet) delivers.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,7 +22,7 @@ import {
   getShareMatchScore,
   getShareSceneName,
 } from '../../../../libs/services/pilgrimage/share-card';
-import { getStringParam } from '../../../../libs/utils/route-params';
+import { getNumberParam, getStringParam } from '../../../../libs/utils/route-params';
 import {
   ShareCard,
   SHARE_TEMPLATES,
@@ -41,8 +41,14 @@ import {
 } from '../../../../libs/services/pilgrimage/share-composer';
 import {
   getFilterMatrix,
+  IDENTITY_COLOR_MATRIX,
   type FilterPresetId,
 } from '../../../../libs/services/pilgrimage/share-filters';
+import { loadAutoColorMatrix } from '../../../../libs/services/pilgrimage/share-auto-match';
+import {
+  tiltCorrectionTransform,
+  type RNPerspectiveTransform,
+} from '../../../../libs/services/pilgrimage/share-perspective';
 import {
   buildShareCaption,
   saveShareImage,
@@ -101,11 +107,55 @@ export default function ShareComparisonScreen() {
   const [croppedShotUri, setCroppedShotUri] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
 
-  const filterMatrix = useMemo(
+  const presetMatrix = useMemo(
     () => (filterPreset === 'none' ? null : getFilterMatrix(filterPreset, filterIntensity)),
     [filterPreset, filterIntensity]
   );
   const effectiveShotUri = croppedShotUri ?? shotUri;
+
+  // Track C #5 — auto color match.
+  const [autoMatchEnabled, setAutoMatchEnabled] = useState(false);
+  const [autoMatchMatrix, setAutoMatchMatrix] = useState<number[] | null>(null);
+  const [autoMatchLoading, setAutoMatchLoading] = useState(false);
+
+  useEffect(() => {
+    if (!autoMatchEnabled || !imageUrl || !effectiveShotUri) {
+      setAutoMatchMatrix(null);
+      return;
+    }
+    let cancelled = false;
+    setAutoMatchLoading(true);
+    loadAutoColorMatrix(imageUrl, effectiveShotUri)
+      .then((res) => {
+        if (cancelled) return;
+        setAutoMatchMatrix(res.matrix === IDENTITY_COLOR_MATRIX ? null : res.matrix);
+      })
+      .catch(() => {
+        if (!cancelled) setAutoMatchMatrix(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAutoMatchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [autoMatchEnabled, imageUrl, effectiveShotUri]);
+
+  // Track C #8 — auto perspective from capture sensors.
+  const tiltDeg = getNumberParam(params, 'tiltDeg');
+  const headingDeltaDeg = getNumberParam(params, 'headingDeltaDeg');
+  const autoWarpAvailable = tiltDeg !== null && headingDeltaDeg !== null;
+  const [autoWarpEnabled, setAutoWarpEnabled] = useState(false);
+  const perspectiveTransform: RNPerspectiveTransform = useMemo(
+    () =>
+      autoWarpEnabled
+        ? tiltCorrectionTransform({ tiltDeg, headingDeltaDeg })
+        : [],
+    [autoWarpEnabled, tiltDeg, headingDeltaDeg]
+  );
+
+  // Final matrix priority: auto match (when ready) overrides preset filter.
+  const filterMatrix = autoMatchEnabled && autoMatchMatrix ? autoMatchMatrix : presetMatrix;
 
   const cardRef = useRef<View>(null);
   const [mediaPerm, requestMediaPerm] = MediaLibrary.usePermissions({
@@ -274,6 +324,7 @@ export default function ShareComparisonScreen() {
                 watermarkPosition={watermarkPosition}
                 watermarkOpacity={watermarkOpacity}
                 shotFilterMatrix={filterMatrix}
+                shotPerspectiveTransform={perspectiveTransform}
               />
             </View>
           </View>
@@ -375,6 +426,13 @@ export default function ShareComparisonScreen() {
             onFilterIntensityChange={setFilterIntensity}
             onOpenCrop={() => setCropOpen(true)}
             cropApplied={!!croppedShotUri}
+            autoMatchEnabled={autoMatchEnabled}
+            autoMatchLoading={autoMatchLoading}
+            autoMatchAvailable={!!(imageUrl && effectiveShotUri)}
+            onAutoMatchChange={setAutoMatchEnabled}
+            autoWarpEnabled={autoWarpEnabled}
+            autoWarpAvailable={autoWarpAvailable}
+            onAutoWarpChange={setAutoWarpEnabled}
           />
 
           <View style={styles.toggleGroup}>
