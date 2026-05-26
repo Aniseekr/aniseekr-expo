@@ -79,6 +79,110 @@ mock.module('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+// react-native-mmkv synchronous in-memory mock.
+// MMKV ships a Jest/Vitest auto-mock, but this project runs `bun test`, which
+// neither — and the real module is a Nitro native binding that cannot load in
+// Node. We provide a Map-backed implementation of the surface app-storage uses.
+//
+// Stores are keyed by instance `id` (same id === same file, like real MMKV).
+// `reset()` clears each store *in place* so instances created at module-load
+// time keep their captured Map reference valid across test resets.
+type MmkvValue = string | number | boolean | ArrayBuffer;
+const mmkvStores = new Map<string, Map<string, MmkvValue>>();
+
+function getMmkvStore(id: string): Map<string, MmkvValue> {
+  let store = mmkvStores.get(id);
+  if (!store) {
+    store = new Map();
+    mmkvStores.set(id, store);
+  }
+  return store;
+}
+
+function createMockMMKV(config?: { id?: string }) {
+  const id = config?.id ?? 'mmkv.default';
+  const store = getMmkvStore(id);
+  const listeners = new Set<(key: string) => void>();
+  const notify = (key: string) => listeners.forEach((fn) => fn(key));
+  return {
+    get id() {
+      return id;
+    },
+    get length() {
+      return store.size;
+    },
+    get size() {
+      return 0;
+    },
+    get byteSize() {
+      return 0;
+    },
+    get isReadOnly() {
+      return false;
+    },
+    get isEncrypted() {
+      return false;
+    },
+    set(key: string, value: MmkvValue) {
+      store.set(key, value);
+      notify(key);
+    },
+    getString(key: string): string | undefined {
+      const v = store.get(key);
+      return typeof v === 'string' ? v : undefined;
+    },
+    getNumber(key: string): number | undefined {
+      const v = store.get(key);
+      return typeof v === 'number' ? v : undefined;
+    },
+    getBoolean(key: string): boolean | undefined {
+      const v = store.get(key);
+      return typeof v === 'boolean' ? v : undefined;
+    },
+    getBuffer(key: string): ArrayBuffer | undefined {
+      const v = store.get(key);
+      return v instanceof ArrayBuffer ? v : undefined;
+    },
+    contains(key: string): boolean {
+      return store.has(key);
+    },
+    getAllKeys(): string[] {
+      return [...store.keys()];
+    },
+    remove(key: string): boolean {
+      return store.delete(key);
+    },
+    delete(key: string): boolean {
+      return store.delete(key);
+    },
+    clearAll(): void {
+      store.clear();
+    },
+    trim(): void {},
+    encrypt(): void {},
+    decrypt(): void {},
+    recrypt(): void {},
+    importAllFrom(): number {
+      return 0;
+    },
+    addOnValueChangedListener(cb: (key: string) => void) {
+      listeners.add(cb);
+      return { remove: () => listeners.delete(cb) };
+    },
+  };
+}
+
+mock.module('react-native-mmkv', () => ({
+  createMMKV: createMockMMKV,
+  existsMMKV: (id: string) => mmkvStores.has(id),
+  deleteMMKV: (id: string) => mmkvStores.delete(id),
+  __mmkvTestHooks: {
+    reset() {
+      for (const store of mmkvStores.values()) store.clear();
+    },
+  },
+}));
+
 // expo-sqlite minimal in-memory shim
 type Row = Record<string, unknown>;
 type FakeSqliteMethod =
