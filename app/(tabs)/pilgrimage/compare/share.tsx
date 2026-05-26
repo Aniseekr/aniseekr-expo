@@ -37,6 +37,7 @@ import {
   getExportDimensions,
   normalizeWatermarkText,
   type ExportResolution,
+  type WatermarkFontId,
   type WatermarkPosition,
 } from '../../../../libs/services/pilgrimage/share-composer';
 import {
@@ -92,6 +93,8 @@ export default function ShareComparisonScreen() {
   const [watermarkInput, setWatermarkInput] = useState('');
   const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>('bottomRight');
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.85);
+  const [watermarkColor, setWatermarkColor] = useState<string | null>(null);
+  const [watermarkFont, setWatermarkFont] = useState<WatermarkFontId>('system');
   const [exportResolution, setExportResolution] = useState<ExportResolution>('1080p');
 
   const watermarkText = useMemo(() => normalizeWatermarkText(watermarkInput), [watermarkInput]);
@@ -323,6 +326,8 @@ export default function ShareComparisonScreen() {
                 watermarkText={watermarkText}
                 watermarkPosition={watermarkPosition}
                 watermarkOpacity={watermarkOpacity}
+                watermarkColor={watermarkColor}
+                watermarkFont={watermarkFont}
                 shotFilterMatrix={filterMatrix}
                 shotPerspectiveTransform={perspectiveTransform}
               />
@@ -418,6 +423,10 @@ export default function ShareComparisonScreen() {
             onWatermarkPositionChange={setWatermarkPosition}
             watermarkOpacity={watermarkOpacity}
             onWatermarkOpacityChange={setWatermarkOpacity}
+            watermarkColor={watermarkColor}
+            onWatermarkColorChange={setWatermarkColor}
+            watermarkFont={watermarkFont}
+            onWatermarkFontChange={setWatermarkFont}
             exportResolution={exportResolution}
             onExportResolutionChange={setExportResolution}
             filterPreset={filterPreset}

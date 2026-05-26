@@ -74,7 +74,7 @@
 |---|------|-----|------|--------|------|------|
 | 1 | **底色選項** | Background color picker for share card | ✅ Track A 完成 (2026-05-26)：`customBg` prop + 12 色 swatch palette + reset；自動 contrast watermark/caption ink | — | 低 | 0.5 週 |
 | 2 | **照片/截圖順序選項** | Reference vs user photo order (which on top) | ✅ Track A 完成 (2026-05-26)：`swapOrder` prop + `resolveImagePairOrder` 純函式；ANIME-first ↔ REAL-first chip | — | 低 | 0.5 天 |
-| 3 | **文字水印選項** | Custom text watermark on output | ✅ Track A 完成 (2026-05-26)：80 字上限、HTML 防注入 (`normalizeWatermarkText`)、5 種位置、opacity slider、自動 text-shadow | (Phase 2) 字體選擇、顏色 picker | 中 | 1 週 |
+| 3 | **文字水印選項** | Custom text watermark on output | ✅ Track A + Phase 2 完成：80 字上限 + HTML 防注入、5 種位置、opacity slider、5 種字體（system/serif/mono/bold/cursive）、8 色 swatch（含 auto-contrast）、自動 text-shadow | — | 中 | 1 週 |
 | 4 | **照片濾鏡調整選項** | Color filter presets on user photo | ✅ Track B 完成 (2026-05-26)：6 種預設 (`cinematic/soft/anime/contrast/warm/cool`) + intensity slider；`<FilteredImage/>` 自動切 Skia ColorMatrix 路徑、identity 走 expo-image fast path | — | 中 | 1.5 週 |
 | 5 | **分析截圖自動調整** | Auto-apply reference's lighting/color to user photo | ✅ Track C 完成 (2026-05-26)：`loadAutoColorMatrix(refUri, shotUri)` 跑 Skia 64×64 downsample → `reducePixels` 拿 avgR/G/B → `applyAutoColorMatrix` 推 ColorMatrix；UI toggle 含 loading + 不可用態 | — | 中高 | 2 週 |
 | 6 | **濾鏡分辨率調整** | Export resolution control | ✅ Track A 完成 (2026-05-26)：`getExportDimensions(ratio, '720p'\|'1080p'\|'4k')` 推導出 captureRef pixel size；短邊基準 | — | 低中 | 0.5 週 |

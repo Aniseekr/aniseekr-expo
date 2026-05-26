@@ -23,15 +23,29 @@ import { Radius, Spacing } from '../../constants/DesignSystem';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import {
   EXPORT_RESOLUTIONS,
+  WATERMARK_FONTS,
   WATERMARK_MAX_LENGTH,
   WATERMARK_POSITIONS,
   type ExportResolution,
+  type WatermarkFontId,
   type WatermarkPosition,
 } from '../../libs/services/pilgrimage/share-composer';
 import {
   FILTER_PRESETS,
   type FilterPresetId,
 } from '../../libs/services/pilgrimage/share-filters';
+
+// Watermark ink swatches. `null` means "auto" — derive from canvas contrast.
+export const WATERMARK_COLORS: { id: string; hex: string | null; label: string }[] = [
+  { id: 'auto', hex: null, label: 'Auto' },
+  { id: 'white', hex: '#FFFFFF', label: 'White' },
+  { id: 'black', hex: '#0E0A06', label: 'Black' },
+  { id: 'gold', hex: '#FFB44C', label: 'Gold' },
+  { id: 'red', hex: '#FF4F5E', label: 'Red' },
+  { id: 'sky', hex: '#4FB6FF', label: 'Sky' },
+  { id: 'lime', hex: '#9BE34A', label: 'Lime' },
+  { id: 'magenta', hex: '#FF4F8F', label: 'Magenta' },
+];
 
 // Curated palette: keeps callers from having to know hex codes. The first
 // entry is "reset to template default"; the rest cover warm/cool/neutral so
@@ -64,6 +78,10 @@ export type ShareComposerControlsProps = {
   onWatermarkPositionChange: (next: WatermarkPosition) => void;
   watermarkOpacity: number;
   onWatermarkOpacityChange: (next: number) => void;
+  watermarkColor: string | null;
+  onWatermarkColorChange: (next: string | null) => void;
+  watermarkFont: WatermarkFontId;
+  onWatermarkFontChange: (next: WatermarkFontId) => void;
   exportResolution: ExportResolution;
   onExportResolutionChange: (next: ExportResolution) => void;
   filterPreset: FilterPresetId;
@@ -104,6 +122,10 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
     onWatermarkPositionChange,
     watermarkOpacity,
     onWatermarkOpacityChange,
+    watermarkColor,
+    onWatermarkColorChange,
+    watermarkFont,
+    onWatermarkFontChange,
     exportResolution,
     onExportResolutionChange,
     filterPreset,
@@ -445,6 +467,86 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                 onValueChange={onWatermarkOpacityChange}
               />
             </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.fontRow}>
+              {WATERMARK_FONTS.map((f) => {
+                const active = f.id === watermarkFont;
+                return (
+                  <Pressable
+                    key={f.id}
+                    onPress={() => {
+                      hapticsBridge.selection();
+                      onWatermarkFontChange(f.id);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Watermark font ${f.label}`}
+                    accessibilityState={{ selected: active }}
+                    style={({ pressed }) => [
+                      styles.fontChip,
+                      {
+                        backgroundColor: active ? accent : theme.background.secondary,
+                        borderColor: active ? accent : theme.glassBorder,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}>
+                    <ThemedText
+                      variant="captionSmall"
+                      weight="700"
+                      style={{
+                        color: active ? accentFg : theme.text.primary,
+                        fontFamily: f.fontFamily,
+                        letterSpacing: f.letterSpacing,
+                      }}>
+                      {f.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.swatchRow}>
+              {WATERMARK_COLORS.map((c) => {
+                const active = c.hex === watermarkColor || (c.hex === null && watermarkColor === null);
+                return (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => {
+                      hapticsBridge.selection();
+                      onWatermarkColorChange(c.hex);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Watermark color ${c.label}`}
+                    accessibilityState={{ selected: active }}
+                    style={({ pressed }) => [
+                      styles.swatch,
+                      {
+                        borderColor: active ? accent : theme.glassBorder,
+                        borderWidth: active ? 2 : 1,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}>
+                    {c.hex === null ? (
+                      <View
+                        style={[
+                          styles.swatchFill,
+                          { backgroundColor: theme.background.tertiary },
+                        ]}>
+                        <Ionicons name="contrast" size={12} color={theme.text.secondary} />
+                      </View>
+                    ) : (
+                      <View style={[styles.swatchFill, { backgroundColor: c.hex }]} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         ) : null}
       </View>
@@ -594,6 +696,16 @@ function makeStyles(theme: ThemePalette) {
       borderColor: theme.glassBorder,
       backgroundColor: theme.background.tertiary,
       paddingHorizontal: 8,
+    },
+    fontRow: {
+      gap: 6,
+      paddingRight: 4,
+    },
+    fontChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: Radius.sm,
+      borderWidth: 1,
     },
     sectionHeader: {
       flexDirection: 'row',

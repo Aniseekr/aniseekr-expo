@@ -16,8 +16,11 @@ import { ThemedText, readableTextOn } from '../themed';
 import type { ThemePalette } from '../../context/ThemeContext';
 import {
   getWatermarkAlignment,
+  getWatermarkFontStyle,
   resolveBackgroundColor,
   resolveImagePairOrder,
+  resolveWatermarkColor,
+  type WatermarkFontId,
   type WatermarkPosition,
 } from '../../libs/services/pilgrimage/share-composer';
 import { FilteredImage } from './FilteredImage';
@@ -59,6 +62,10 @@ export type ShareCardProps = {
   watermarkPosition?: WatermarkPosition;
   /** 0–1; the helper clamps anything outside that range. */
   watermarkOpacity?: number;
+  /** Hex override; falls back to auto-contrast against the canvas. */
+  watermarkColor?: string | null;
+  /** Font family identifier; defaults to the system face. */
+  watermarkFont?: WatermarkFontId;
   /**
    * 4×5 Skia ColorMatrix applied to the user-shot cell only (#4 filter
    * presets / #5 auto color match). Anime reference stays untouched so the
@@ -81,8 +88,17 @@ const RATIO_VALUES: Record<ShareRatio, number> = {
 };
 
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(props, ref) {
-  const { template, ratio, width, watermarkText, watermarkPosition, watermarkOpacity, theme } =
-    props;
+  const {
+    template,
+    ratio,
+    width,
+    watermarkText,
+    watermarkPosition,
+    watermarkOpacity,
+    watermarkColor,
+    watermarkFont,
+    theme,
+  } = props;
   const aspect = RATIO_VALUES[ratio];
   const height = Math.round(width / aspect);
   const canvasBg = resolveBackgroundColor(template, props.customBg, theme.background.secondary);
@@ -106,6 +122,8 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(pro
           position={watermarkPosition ?? 'bottomRight'}
           opacity={watermarkOpacity ?? 0.85}
           canvasBg={canvasBg}
+          color={watermarkColor}
+          fontId={watermarkFont ?? 'system'}
         />
       ) : null}
     </View>
@@ -185,26 +203,34 @@ function WatermarkOverlay({
   position,
   opacity,
   canvasBg,
+  color,
+  fontId,
 }: {
   text: string;
   position: WatermarkPosition;
   opacity: number;
   canvasBg: string;
+  color: string | null | undefined;
+  fontId: WatermarkFontId;
 }) {
   const alignment = getWatermarkAlignment(position, 14);
   const clampedOpacity = Math.max(0, Math.min(1, opacity));
-  const ink = readableTextOn(canvasBg);
-  const shadow = ink === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
+  const ink = resolveWatermarkColor(color, canvasBg);
+  // Use the contrast helper purely to pick a shadow direction that stays
+  // legible regardless of which way the auto ink leans.
+  const shadow = readableTextOn(canvasBg) === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
+  const fontStyle = getWatermarkFontStyle(fontId);
   return (
     <View pointerEvents="none" style={alignment}>
       <ThemedText
         variant="bodySmall"
-        weight="700"
+        weight={fontStyle.fontWeight ?? '700'}
         numberOfLines={2}
         style={{
           color: ink,
           opacity: clampedOpacity,
-          letterSpacing: 0.5,
+          letterSpacing: fontStyle.letterSpacing,
+          fontFamily: fontStyle.fontFamily,
           maxWidth: 260,
           textShadowColor: shadow,
           textShadowOffset: { width: 0, height: 1 },

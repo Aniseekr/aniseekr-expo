@@ -9,13 +9,16 @@ import { describe, expect, it } from 'bun:test';
 import {
   EXPORT_RESOLUTIONS,
   TEMPLATE_DEFAULT_BG,
+  WATERMARK_FONTS,
   WATERMARK_MAX_LENGTH,
   WATERMARK_POSITIONS,
   getExportDimensions,
   getWatermarkAlignment,
+  getWatermarkFontStyle,
   normalizeWatermarkText,
   resolveBackgroundColor,
   resolveImagePairOrder,
+  resolveWatermarkColor,
 } from '../../../libs/services/pilgrimage/share-composer';
 
 describe('share composer · background color', () => {
@@ -107,6 +110,41 @@ describe('share composer · watermark alignment', () => {
     expect(out.bottom).toBe(0);
     expect(out.alignItems).toBe('center');
     expect(out.justifyContent).toBe('center');
+  });
+});
+
+describe('share composer · watermark font + color (Phase 2)', () => {
+  it('ships at least four font families', () => {
+    const ids = WATERMARK_FONTS.map((f) => f.id);
+    expect(ids).toContain('system');
+    expect(ids).toContain('serif');
+    expect(ids).toContain('mono');
+    expect(ids.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('returns a fontFamily + letterSpacing style for the requested font', () => {
+    const sys = getWatermarkFontStyle('system');
+    expect(sys.fontFamily).toBeUndefined();
+    expect(sys.letterSpacing).toBeDefined();
+    const serif = getWatermarkFontStyle('serif');
+    expect(typeof serif.fontFamily).toBe('string');
+  });
+
+  it('falls back to system when an unknown id is passed', () => {
+    // Runtime guard for stale persisted prefs — pass string-typed arg.
+    const out = getWatermarkFontStyle('bogus-font' as never);
+    expect(out.fontFamily).toBeUndefined();
+  });
+
+  it('resolveWatermarkColor honours a user override over the auto-contrast ink', () => {
+    expect(resolveWatermarkColor('#FF0000', '#FFFFFF')).toBe('#FF0000');
+    expect(resolveWatermarkColor('#abc', '#FFFFFF')).toBe('#abc');
+  });
+
+  it('resolveWatermarkColor falls back to auto-contrast ink when override is missing/invalid', () => {
+    expect(resolveWatermarkColor(null, '#FFFFFF')).toBe('#0E0A06');
+    expect(resolveWatermarkColor(undefined, '#000000')).toBe('#FFFFFF');
+    expect(resolveWatermarkColor('not-a-color', '#FFFFFF')).toBe('#0E0A06');
   });
 });
 
