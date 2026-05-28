@@ -51,7 +51,7 @@ export const SHORTCUT_CATALOG: Record<ShortcutId, ShortcutSpec> = {
     label: 'Language',
     icon: 'language-outline',
     tint: '#0A84FF',
-    route: '/(setting)/language-priority',
+    route: '/(setting)/language',
   },
   privacy: {
     id: 'privacy',

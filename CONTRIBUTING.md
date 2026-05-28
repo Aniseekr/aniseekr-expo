@@ -7,7 +7,7 @@ By submitting a contribution you agree that your work is licensed under the proj
 ## Ways to contribute
 
 - **Bug reports** — open a [GitHub issue](https://github.com/Aniseekr/aniseekr-expo/issues) with reproduction steps, device + OS, and a build number (Settings → About).
-- **Translations** — strings live alongside their feature folders; PRs welcome for `zh-Hant`, `zh-Hans`, `ja`, `en`, `ko`. Don't translate brand names or anime titles.
+- **Translations** — UI strings live in [`libs/i18n/locales/*.json`](./libs/i18n/locales) (one file per language; `en.json` is canonical). Anime-data dictionaries (genres, etc.) live in [`libs/i18n/data/`](./libs/i18n/data). **Adding or improving a translation is a one-file PR — no codegen, no build step.** Full guide in [`libs/i18n/README.md`](./libs/i18n/README.md). PRs welcome for `zh-Hant`, `zh-Hans`, `ja`, `ko`, and new languages. Don't translate brand names (Aniseekr, AniList, Bangumi, MAL…) or anime titles.
 - **Pilgrimage spot data** — Anitabi is the source of truth. Submit corrections upstream at [github.com/anitabi/anitabi.cn-document](https://github.com/anitabi/anitabi.cn-document); we re-pull on every release.
 - **Code** — features, fixes, refactors. Read the rules below before opening a PR.
 - **Security** — see [README → Security](./README.md#security). Do **not** file public issues for vulnerabilities.

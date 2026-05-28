@@ -117,6 +117,8 @@ The Aniseekr name and logo are trademarks of the Aniseekr project. The Apache-2.
 
 PRs, bug reports, and translations are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow, code style, and the architectural rules every change has to satisfy (themed primitives only, no hardcoded hex, no fake placeholder data, etc.).
 
+Aniseekr is **localized in English, 繁體中文, 简体中文, 日本語, 한국어** and partial translations are welcome for any other language. Translation files live in [`libs/i18n/locales/`](./libs/i18n/locales) as plain JSON — see the [i18n guide](./libs/i18n/README.md) for the 3-minute contribution flow.
+
 ## Security
 
 Found a security issue? Please **do not** open a public GitHub issue. Email [gm@aniseekr.moe](mailto:gm@aniseekr.moe) with details and we will respond within 72 hours.

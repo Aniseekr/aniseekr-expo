@@ -13,6 +13,7 @@ Anime tracking app built with Expo Router + React Native. Local-first storage, m
 | `context/ThemeContext.tsx` | Single source of truth for theme palette, mode, custom accent, tint intensity, contrast. |
 | `constants/DesignSystem.ts` | `Colors`, `Spacing`, `Radius`, `Typography`, `IconSize`, `Size`, `Shadow`. Static tokens. |
 | `libs/services/` | Data layer (data sources, cache, user prefs, onboarding). |
+| `libs/i18n/` | JSON catalogs (`locales/*.json`) + curated dictionaries (`data/genres.json`). `useT()` → fixed UI strings. `useTranslatedGenre()` / `<TranslatedText>` → anime data. See `libs/i18n/README.md`. |
 | `modules/haptics/hapticsBridge.ts` | Haptic feedback bridge. |
 | `__tests__/unit/` | Bun unit tests. Run with `bun test`. |
 
@@ -210,6 +211,48 @@ Skeletons are for **cold** loads only. If a skeleton flashes when the data is al
 - [ ] `loading` initial value derives from sync cache miss, not `true`
 - [ ] List that links here calls prefetch on press-in
 
+### 11. UI strings → `useT()`. Anime data → `<TranslatedText>` / `translateGenre` / etc. No raw English in JSX.
+
+User-facing strings come from `libs/i18n`. Two distinct surfaces:
+
+**(a) Fixed UI chrome** — `useT()` returns `t(key)` against the JSON catalog:
+
+```tsx
+import { useT } from '@/libs/i18n';
+
+function Screen() {
+  const t = useT();
+  return <Text>{t('settings.title')}</Text>;
+}
+```
+
+- **Add new keys to `libs/i18n/locales/en.json` first.** TypeScript infers `TranslationKey` from `typeof en.json` automatically — no codegen, no `postinstall`. `t('typo')` is a compile error.
+- Translate in `zh-Hant.json` (primary Chinese). `zh-Hans.json` auto-falls-back via OpenCC, only override there when vocabulary actually differs (影片 vs 视频).
+- `ja.json` / `ko.json` are partial — missing keys fall back to English with a dev warning.
+- For tab / stack titles, call `useT()` inside the layout component and pass `t('...')` into `options.title`.
+
+**(b) Anime data** (titles, genres, tags, synopsis) — value comes from an API at runtime, not a fixed catalog. Use the runtime translator + `<TranslatedText>`:
+
+```tsx
+import { TranslatedText } from '@/components/themed';
+import { useTranslatedGenre } from '@/libs/i18n/data-translator';
+
+function GenreChip({ genre }: { genre: string }) {
+  const { value, source } = useTranslatedGenre(genre);  // 'Action' → '動作'
+  return <TranslatedText original={genre} translated={value} source={source} variant="caption" />;
+}
+```
+
+`<TranslatedText>` renders the translation, optionally renders the original underneath (long-press to toggle, or always-on via Settings → Language), and shows a `machine-translated` badge when `source === 'mt'`. The four sources are `'native' | 'curated' | 'mt' | 'original'` — never lie about which is which.
+
+**Don't**:
+- Write `<Text>Continue</Text>` in a new screen, or pass an English literal into `ThemedButton label="…"`. Route through `t()`.
+- Translate brand names (`Aniseekr`, `AniList`, `Bangumi`, `MAL`) or anime titles.
+- Render a translated value without `<TranslatedText>` when the user might want to verify the original (anything from `data-translator`).
+- Add a new locale's `.json` file without registering it in `engine.ts`'s `LANGUAGES` map.
+
+The parity test (`__tests__/unit/i18n.test.ts`) fails the build when a locale has stale or mis-shaped keys.
+
 ## Anti-patterns I've seen — don't repeat these
 
 - **`color: '#FFFFFF'` on `backgroundColor: theme.accent`** → invisible on light accents. Use `ThemedButton` or `readableTextOn()`.
@@ -223,6 +266,7 @@ Skeletons are for **cold** loads only. If a skeleton flashes when the data is al
 - **Top-level screen as a state dumping ground** (`20+ useState` plus many effects in one route file) → every small UI change risks re-rendering the whole screen. Split feature hooks/components or use a reducer/store.
 - **Mirroring derived data into state** (`filtered`, `selected`, `ready` values that can be computed from existing inputs) → extra effects, stale closures, and redundant renders. Derive it unless an async boundary truly owns it.
 - **Sensor/gesture/WebView updates through React state at live frequency** → JS-thread churn and jank. Use `SharedValue`, refs, throttling, or bridge commands.
+- **Raw English in `label="…"` / `<Text>...</Text>`** → screen never gets localized; the user's App language pick has no effect. Use `t('key')` from `useT()`. See Rule 11.
 - **`setLoading(true)` + `await CacheService.get()` on mount** → skeleton flashes on warm hits. Use `CacheService.getSync()` to seed `useState`. See Rule 10.
 - **`useFocusEffect` that unconditionally refetches** → tab switch feels cold. Guard with `lastLoadedKey`. See Rule 10.
 - **`InteractionManager.runAfterInteractions` around a fetch** → cache hits wait for the push animation. Defer the state setter, not the I/O. See Rule 10.
