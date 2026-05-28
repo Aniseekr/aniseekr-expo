@@ -28,6 +28,7 @@ import {
 import { PLATFORM_CONFIGS, type PlatformType } from '../libs/services/auth/types';
 import { patchUserPrefs } from '../libs/services/user-prefs';
 import { markOnboardingComplete } from '../libs/services/onboarding-service';
+import { useT } from '../libs/i18n';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -46,6 +47,7 @@ const BROWSE_OPTIONS: PlatformType[] = ['anilist', 'myanimelist', 'bangumi', 'ki
 export default function OnboardingScreen() {
   const router = useRouter();
   const { theme } = useTheme();
+  const t = useT();
   const scrollRef = useRef<ScrollView>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const [stepIndex, setStepIndex] = useState(0);
@@ -140,8 +142,8 @@ export default function OnboardingScreen() {
               onPress={skipToLast}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel="Skip onboarding">
-              <Text style={styles.skipText}>Skip</Text>
+              accessibilityLabel={t('onboarding.skipA11y')}>
+              <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
             </Pressable>
           ) : (
             <View />
@@ -160,25 +162,28 @@ export default function OnboardingScreen() {
           scrollEventThrottle={16}
           bounces={false}
           style={styles.pager}>
-          <WelcomeStep onContinue={() => goToStep(1)} />
+          <WelcomeStep onContinue={() => goToStep(1)} t={t} />
           <BrowseSourceStep
             selected={browseSource}
             onSelect={handleSelectBrowseSource}
             onContinue={() => goToStep(2)}
+            t={t}
           />
           <NotificationsStep
             granted={notifGranted}
             busy={notifBusy}
             onAllow={handleAllowNotifications}
             onSkip={handleSkipNotifications}
+            t={t}
           />
           <AdultContentStep
             value={allowAdult}
             onToggle={handleToggleAdult}
             onContinue={() => goToStep(4)}
             accent={theme.accent}
+            t={t}
           />
-          <DoneStep onFinish={handleFinish} busy={completing} />
+          <DoneStep onFinish={handleFinish} busy={completing} t={t} />
         </Animated.ScrollView>
 
         <DotIndicator count={STEPS.length} active={stepIndex} accent={theme.accent} />
@@ -187,16 +192,18 @@ export default function OnboardingScreen() {
   );
 }
 
-function WelcomeStep({ onContinue }: { onContinue: () => void }) {
+type T = ReturnType<typeof useT>;
+
+function WelcomeStep({ onContinue, t }: { onContinue: () => void; t: T }) {
   return (
     <View style={styles.page}>
       <View style={styles.iconHalo}>
         <MaterialIcons name="remove-red-eye" size={96} color="#FFFFFF" />
       </View>
       <Text style={styles.wordmark}>Aniseekr</Text>
-      <Text style={styles.tagline}>Discover, rate, collect. Locally on your device.</Text>
-      <Text style={styles.subtitle}>No account needed.</Text>
-      <ThemedButton label="Continue" onPress={onContinue} size="lg" fullWidth />
+      <Text style={styles.tagline}>{t('onboarding.welcome.tagline')}</Text>
+      <Text style={styles.subtitle}>{t('onboarding.welcome.subtitle')}</Text>
+      <ThemedButton label={t('onboarding.welcome.cta')} onPress={onContinue} size="lg" fullWidth />
     </View>
   );
 }
@@ -205,19 +212,18 @@ function BrowseSourceStep({
   selected,
   onSelect,
   onContinue,
+  t,
 }: {
   selected: PlatformType;
   onSelect: (p: PlatformType) => void;
   onContinue: () => void;
+  t: T;
 }) {
   return (
     <View style={styles.page}>
       <MaterialIcons name="travel-explore" size={96} color="#FFFFFF" />
-      <Text style={styles.title}>Pick your browse source</Text>
-      <Text style={styles.body}>
-        Aniseekr pulls top, seasonal, and search results from the platform you choose. You can
-        change this later in Settings.
-      </Text>
+      <Text style={styles.title}>{t('onboarding.browseSource.title')}</Text>
+      <Text style={styles.body}>{t('onboarding.browseSource.body')}</Text>
       <View style={styles.cardGrid}>
         {BROWSE_OPTIONS.filter((p) =>
           (BROWSE_SUPPORTED_PLATFORMS as readonly PlatformType[]).includes(p)
@@ -249,7 +255,7 @@ function BrowseSourceStep({
           );
         })}
       </View>
-      <ThemedButton label="Continue" onPress={onContinue} size="lg" fullWidth />
+      <ThemedButton label={t('onboarding.browseSource.cta')} onPress={onContinue} size="lg" fullWidth />
     </View>
   );
 }
@@ -259,31 +265,30 @@ function NotificationsStep({
   busy,
   onAllow,
   onSkip,
+  t,
 }: {
   granted: boolean | null;
   busy: boolean;
   onAllow: () => void;
   onSkip: () => void;
+  t: T;
 }) {
   return (
     <View style={styles.page}>
       <MaterialIcons name="notifications-active" size={96} color="#FFFFFF" />
-      <Text style={styles.title}>Get airing reminders?</Text>
-      <Text style={styles.body}>
-        We can ping you a few minutes before tracked shows go live. Stays local — no third party
-        involved.
-      </Text>
+      <Text style={styles.title}>{t('onboarding.notifications.title')}</Text>
+      <Text style={styles.body}>{t('onboarding.notifications.body')}</Text>
       {granted === true ? (
         <View style={styles.statusPill}>
           <MaterialIcons name="check-circle" size={16} color={Colors.success} />
-          <Text style={styles.statusPillText}>Notifications allowed</Text>
+          <Text style={styles.statusPillText}>{t('onboarding.notifications.allowed')}</Text>
         </View>
       ) : null}
       <View style={styles.buttonRow}>
         <View style={styles.buttonRowItem}>
           <ThemedButton
             variant="secondary"
-            label="Maybe later"
+            label={t('onboarding.notifications.maybeLater')}
             onPress={onSkip}
             disabled={busy}
             size="lg"
@@ -292,7 +297,7 @@ function NotificationsStep({
         </View>
         <View style={styles.buttonRowItem}>
           <ThemedButton
-            label={busy ? 'Asking…' : 'Allow'}
+            label={busy ? t('onboarding.notifications.asking') : t('onboarding.notifications.allow')}
             onPress={onAllow}
             loading={busy}
             size="lg"
@@ -309,24 +314,23 @@ function AdultContentStep({
   onToggle,
   onContinue,
   accent,
+  t,
 }: {
   value: boolean;
   onToggle: (v: boolean) => void;
   onContinue: () => void;
   accent: string;
+  t: T;
 }) {
   return (
     <View style={styles.page}>
       <MaterialIcons name="explicit" size={96} color="#FFFFFF" />
-      <Text style={styles.title}>Show R18 entries?</Text>
-      <Text style={styles.body}>
-        When off, adult-rated entries are hidden across lists and search. You can flip this any time
-        from Settings.
-      </Text>
+      <Text style={styles.title}>{t('onboarding.adult.title')}</Text>
+      <Text style={styles.body}>{t('onboarding.adult.body')}</Text>
       <View style={styles.toggleRow}>
         <View style={styles.toggleCopy}>
-          <Text style={styles.toggleTitle}>Show adult content</Text>
-          <Text style={styles.toggleSubtitle}>Default: off</Text>
+          <Text style={styles.toggleTitle}>{t('onboarding.adult.toggleTitle')}</Text>
+          <Text style={styles.toggleSubtitle}>{t('onboarding.adult.toggleSubtitle')}</Text>
         </View>
         <Switch
           value={value}
@@ -335,19 +339,19 @@ function AdultContentStep({
           thumbColor="#FFFFFF"
         />
       </View>
-      <ThemedButton label="Continue" onPress={onContinue} size="lg" fullWidth />
+      <ThemedButton label={t('onboarding.adult.cta')} onPress={onContinue} size="lg" fullWidth />
     </View>
   );
 }
 
-function DoneStep({ onFinish, busy }: { onFinish: () => void; busy: boolean }) {
+function DoneStep({ onFinish, busy, t }: { onFinish: () => void; busy: boolean; t: T }) {
   return (
     <View style={styles.page}>
       <MaterialIcons name="celebration" size={96} color="#FFFFFF" />
-      <Text style={styles.title}>You&apos;re ready</Text>
-      <Text style={styles.body}>Start rating, collecting, and exploring.</Text>
+      <Text style={styles.title}>{t('onboarding.done.title')}</Text>
+      <Text style={styles.body}>{t('onboarding.done.body')}</Text>
       <ThemedButton
-        label={busy ? 'Loading…' : 'Get started'}
+        label={busy ? t('onboarding.done.busy') : t('onboarding.done.cta')}
         onPress={onFinish}
         loading={busy}
         size="lg"

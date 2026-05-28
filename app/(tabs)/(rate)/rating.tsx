@@ -43,6 +43,7 @@ import {
   persistSwipeJob,
   type SwipePersistenceJob,
 } from '../../../libs/services/rate/swipe-persistence';
+import { useT } from '../../../libs/i18n';
 
 // Trigger and refill from remaining-card pressure, not source page length.
 // AniList pages are 20 upstream, but R18/seen/image filters can leave any
@@ -132,11 +133,6 @@ const PLAN_COLOR = '#0A84FF';
 const LIKE_COLOR = '#FF4F5E';
 const SKIP_COLOR = '#FF6F60';
 
-const MODE_OPTIONS: readonly ModeOption[] = [
-  { value: 'plan', label: 'Plan', icon: 'bookmark', color: PLAN_COLOR },
-  { value: 'like', label: 'Like', icon: 'heart', color: LIKE_COLOR },
-];
-
 const SKIP_INDICATOR = { icon: 'close', color: SKIP_COLOR } as const;
 const RIGHT_INDICATOR_BY_MODE: Record<SwipeMode, { icon: 'bookmark' | 'heart'; color: string }> = {
   plan: { icon: 'bookmark', color: PLAN_COLOR },
@@ -150,6 +146,14 @@ export default function RatingScreen() {
   const params = useLocalSearchParams<{ genreId?: string; genreName?: string; animeId?: string }>();
   const { theme } = useTheme();
   const subscription = useSubscription();
+  const t = useT();
+  const MODE_OPTIONS: readonly ModeOption[] = useMemo(
+    () => [
+      { value: 'plan', label: t('tabs.ratingScreen.mode.plan'), icon: 'bookmark', color: PLAN_COLOR },
+      { value: 'like', label: t('tabs.ratingScreen.mode.like'), icon: 'heart', color: LIKE_COLOR },
+    ],
+    [t]
+  );
 
   useEffect(() => {
     const parent = navigation.getParent();
@@ -607,7 +611,7 @@ export default function RatingScreen() {
       <View style={[styles.headerContainer, { paddingTop: top + 10 }]}>
         <View style={styles.topBar}>
           <View style={styles.headerLeftCluster}>
-            <Pressable onPress={handleClose} style={styles.closeButton} accessibilityLabel="Close">
+            <Pressable onPress={handleClose} style={styles.closeButton} accessibilityLabel={t('tabs.ratingScreen.closeA11y')}>
               <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
             <ModePill
@@ -620,7 +624,7 @@ export default function RatingScreen() {
 
           <Pressable
             style={styles.actionButton}
-            accessibilityLabel="Rating preferences"
+            accessibilityLabel={t('tabs.ratingScreen.preferencesA11y')}
             onPress={() => {
               hapticsBridge.tap();
               setShowSettings(true);
@@ -642,18 +646,18 @@ export default function RatingScreen() {
           hasMore || loadingMore ? (
             <View style={styles.loadingContainer}>
               <Ionicons name="planet" size={48} color="#666" />
-              <Text style={styles.loadingText}>Loading more…</Text>
+              <Text style={styles.loadingText}>{t('tabs.ratingScreen.loadingMore')}</Text>
             </View>
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="images-outline" size={64} color="#666" />
-              <Text style={styles.emptyText}>No photos available</Text>
+              <Text style={styles.emptyText}>{t('tabs.ratingScreen.noPhotos')}</Text>
               <View style={styles.emptyActions}>
                 {showEmptyRestart ? (
                   <Pressable
                     onPress={confirmRestart}
                     style={[styles.restartButton, { backgroundColor: theme.accent }]}
-                    accessibilityLabel="Restart deck">
+                    accessibilityLabel={t('tabs.ratingScreen.restartConfirm.deckA11y')}>
                     <Ionicons
                       name="refresh"
                       size={16}
@@ -662,12 +666,12 @@ export default function RatingScreen() {
                     />
                     <Text
                       style={[styles.restartButtonText, { color: readableTextOn(theme.accent) }]}>
-                      Restart
+                      {t('tabs.ratingScreen.restart')}
                     </Text>
                   </Pressable>
                 ) : null}
                 <Pressable onPress={handleClose} style={styles.goBackButton}>
-                  <Text style={styles.goBackButtonText}>Go Back</Text>
+                  <Text style={styles.goBackButtonText}>{t('tabs.ratingScreen.goBack')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -695,18 +699,18 @@ export default function RatingScreen() {
           hasMore || loadingMore ? (
             <View style={styles.loadingContainer}>
               <Ionicons name="planet" size={48} color="#666" />
-              <Text style={styles.loadingText}>Loading more…</Text>
+              <Text style={styles.loadingText}>{t('tabs.ratingScreen.loadingMore')}</Text>
             </View>
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="checkmark-done-circle-outline" size={64} color="#666" />
-              <Text style={styles.emptyText}>{"You're all caught up"}</Text>
+              <Text style={styles.emptyText}>{t('tabs.ratingScreen.allCaughtUp')}</Text>
               <View style={styles.emptyActions}>
                 {canRestartCurrentGenre ? (
                   <Pressable
                     onPress={confirmRestart}
                     style={[styles.restartButton, { backgroundColor: theme.accent }]}
-                    accessibilityLabel="Restart deck">
+                    accessibilityLabel={t('tabs.ratingScreen.restartConfirm.deckA11y')}>
                     <Ionicons
                       name="refresh"
                       size={16}
@@ -715,12 +719,12 @@ export default function RatingScreen() {
                     />
                     <Text
                       style={[styles.restartButtonText, { color: readableTextOn(theme.accent) }]}>
-                      Restart
+                      {t('tabs.ratingScreen.restart')}
                     </Text>
                   </Pressable>
                 ) : null}
                 <Pressable onPress={handleClose} style={styles.goBackButton}>
-                  <Text style={styles.goBackButtonText}>Go Back</Text>
+                  <Text style={styles.goBackButtonText}>{t('tabs.ratingScreen.goBack')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -739,7 +743,7 @@ export default function RatingScreen() {
               <Pressable
                 onPress={() => triggerSwipe('left')}
                 style={styles.planSideButton}
-                accessibilityLabel="Skip">
+                accessibilityLabel={t('tabs.ratingScreen.skipA11y')}>
                 <Ionicons name="close" size={26} color="#FF6F60" />
               </Pressable>
 
@@ -750,7 +754,7 @@ export default function RatingScreen() {
                   styles.planSidePrimary,
                   { borderColor: theme.accent },
                 ]}
-                accessibilityLabel="Add to Plan to Watch">
+                accessibilityLabel={t('tabs.ratingScreen.addToPlanA11y')}>
                 <Ionicons name="bookmark" size={24} color={theme.accent} />
               </Pressable>
             </View>

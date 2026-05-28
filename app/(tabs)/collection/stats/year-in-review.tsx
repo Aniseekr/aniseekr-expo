@@ -7,6 +7,7 @@ import { ThemedText, readableTextOn, Skeleton } from '../../../../components/the
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
 import { MonthlyHoursBar } from '../../../../components/collection/stats/MonthlyHoursBar';
+import { useT } from '../../../../libs/i18n';
 import {
   loadUserAnimeRows,
   longestStreakDays,
@@ -20,6 +21,7 @@ const HERO_TO = '#FF8E1E';
 
 export default function YearInReviewExhibit() {
   const { theme } = useTheme();
+  const t = useT();
   const [year] = useState(() => new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
@@ -48,7 +50,7 @@ export default function YearInReviewExhibit() {
           monthly,
           topAnime: topRow
             ? {
-                title: topRow.title ?? 'Untitled',
+                title: topRow.title ?? '',
                 score: topRow.score ?? null,
                 episodes: topRow.total_episodes ?? topRow.progress ?? 0,
               }
@@ -69,16 +71,20 @@ export default function YearInReviewExhibit() {
       data
         ? async () => {
             await Share.share({
-              message: `My ${year} in Anime — ${data.yearRowsCount} shows, ${data.hours}h watched.`,
+              message: t('collectionStats.yearInReview.shareMessage', {
+                year,
+                shows: data.yearRowsCount,
+                hours: data.hours,
+              }),
             });
           }
         : undefined,
-    [data, year]
+    [data, year, t]
   );
 
   if (loading) {
     return (
-      <StatsExhibitFrame title="Year in Review">
+      <StatsExhibitFrame title={t('collectionStats.yearInReview.title')}>
         <Skeleton.StatsDashboard />
       </StatsExhibitFrame>
     );
@@ -86,11 +92,11 @@ export default function YearInReviewExhibit() {
 
   if (!data || data.yearRowsCount === 0) {
     return (
-      <StatsExhibitFrame title="Year in Review">
+      <StatsExhibitFrame title={t('collectionStats.yearInReview.title')}>
         <EmptyStateView
           icon="auto-stories"
-          title={`Nothing finished in ${year} yet`}
-          description="Once you complete anime this year, your recap will appear here."
+          title={t('collectionStats.yearInReview.emptyTitle', { year })}
+          description={t('collectionStats.yearInReview.emptyBody')}
         />
       </StatsExhibitFrame>
     );
@@ -99,7 +105,7 @@ export default function YearInReviewExhibit() {
   const onHero = readableTextOn(HERO_FROM);
 
   return (
-    <StatsExhibitFrame title="Year in Review" onShare={handleShare}>
+    <StatsExhibitFrame title={t('collectionStats.yearInReview.title')} onShare={handleShare}>
       <LinearGradient
         colors={[HERO_FROM, HERO_TO]}
         start={{ x: 0, y: 0 }}
@@ -111,19 +117,25 @@ export default function YearInReviewExhibit() {
           weight="700"
           style={{ color: `${onHero}CC`, letterSpacing: 2 }}
         >
-          # YEAR IN REVIEW
+          {t('collectionStats.yearInReview.eyebrow')}
         </ThemedText>
         <ThemedText style={[styles.heroTitle, { color: onHero }]}>
-          Your {year} in Anime
+          {t('collectionStats.yearInReview.heroTitle', { year })}
         </ThemedText>
         <ThemedText variant="bodyMedium" style={{ color: `${onHero}DD` }}>
-          A year of stories, scores, and late nights.
+          {t('collectionStats.yearInReview.heroSubtitle')}
         </ThemedText>
         <View style={styles.heroStats}>
-          <Stat label="Shows" value={String(data.yearRowsCount)} color={onHero} />
-          {data.hours > 0 ? <Stat label="Hours" value={String(data.hours)} color={onHero} /> : null}
+          <Stat label={t('collectionStats.yearInReview.statShows')} value={String(data.yearRowsCount)} color={onHero} />
+          {data.hours > 0 ? (
+            <Stat label={t('collectionStats.yearInReview.statHours')} value={String(data.hours)} color={onHero} />
+          ) : null}
           {data.longestStreak > 1 ? (
-            <Stat label="Longest streak" value={`${data.longestStreak}d`} color={onHero} />
+            <Stat
+              label={t('collectionStats.yearInReview.statLongestStreak')}
+              value={t('collectionStats.yearInReview.daysShort', { count: data.longestStreak })}
+              color={onHero}
+            />
           ) : null}
         </View>
       </LinearGradient>
@@ -139,20 +151,20 @@ export default function YearInReviewExhibit() {
           ]}
         >
           <ThemedText variant="captionSmall" tone="secondary" weight="700" style={{ letterSpacing: 2 }}>
-            #1 TOP ANIME
+            {t('collectionStats.yearInReview.topAnimeBadge')}
           </ThemedText>
           <ThemedText variant="titleLarge" weight="800" style={{ marginTop: 6 }}>
-            {data.topAnime.title}
+            {data.topAnime.title || t('collectionStats.yearInReview.untitled')}
           </ThemedText>
           <View style={styles.cardMetaRow}>
             {data.topAnime.episodes > 0 ? (
               <ThemedText variant="captionSmall" tone="tertiary">
-                {data.topAnime.episodes} eps
+                {t('collectionStats.yearInReview.epsShort', { count: data.topAnime.episodes })}
               </ThemedText>
             ) : null}
             {data.topAnime.score ? (
               <ThemedText variant="captionSmall" tone="tertiary">
-                · score {data.topAnime.score}
+                {t('collectionStats.yearInReview.scoreLabel', { score: data.topAnime.score })}
               </ThemedText>
             ) : null}
           </View>
@@ -160,7 +172,7 @@ export default function YearInReviewExhibit() {
       ) : null}
 
       {data.monthly.some((b) => b.hours > 0) ? (
-        <MonthlyHoursBar data={data.monthly} year={year} title="Hours by month" />
+        <MonthlyHoursBar data={data.monthly} year={year} title={t('collectionStats.yearInReview.monthlyTitle')} />
       ) : null}
     </StatsExhibitFrame>
   );

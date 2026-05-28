@@ -30,6 +30,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Radius, Spacing } from '../../constants/DesignSystem';
 import { FeatureFlags } from '../../constants/FeatureFlags';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { useT } from '../../libs/i18n';
 
 const PLATFORM_INITIAL: Record<PlatformType, string> = {
   anilist: 'A',
@@ -48,6 +49,7 @@ export default function ProfileScreen() {
   const { top } = useSafeAreaInsets();
   const { theme } = useTheme();
   const subscription = useSubscription();
+  const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [cardsCount, setCardsCount] = useState(0);
@@ -148,7 +150,7 @@ export default function ProfileScreen() {
     return switcherPlatforms.find((p) => p.id === selectedPlatform) ?? switcherPlatforms[0];
   }, [switcherPlatforms, selectedPlatform]);
 
-  const headerUsername = activePlatform?.username || user?.username || 'Anime fan';
+  const headerUsername = activePlatform?.username || user?.username || t('tabs.profileScreen.anonName');
   const headerAvatar = activePlatform?.avatarUrl || user?.avatarUrl || '';
   const isEditable = selectedPlatform === DEFAULT_PLATFORM_ID;
 
@@ -187,7 +189,7 @@ export default function ProfileScreen() {
     <View style={[styles.container, { backgroundColor: theme.background.primary }]}>
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.headerRow, { paddingTop: Math.max(top * 0.25, Spacing.xs) }]}>
-          <ThemedText variant="headlineLarge">Profile</ThemedText>
+          <ThemedText variant="headlineLarge">{t('tabs.profileScreen.title')}</ThemedText>
         </View>
 
         <ScrollView
@@ -297,7 +299,7 @@ export default function ProfileScreen() {
           <View style={styles.statsRow}>
             <StatTile
               value={watchedValue}
-              label="Cards"
+              label={t('tabs.profileScreen.statLabel.cards')}
               onPress={() => {
                 hapticsBridge.tap();
                 router.push('/collection/stats/year-in-review');
@@ -305,7 +307,7 @@ export default function ProfileScreen() {
             />
             <StatTile
               value={ratedValue}
-              label="Rated"
+              label={t('tabs.profileScreen.statLabel.rated')}
               onPress={() => {
                 hapticsBridge.tap();
                 router.push('/collection/stats/top-picks');
@@ -313,7 +315,7 @@ export default function ProfileScreen() {
             />
             <StatTile
               value={likedValue}
-              label="Liked"
+              label={t('tabs.profileScreen.statLabel.liked')}
               onPress={() => {
                 hapticsBridge.tap();
                 router.push('/collection/stats/top-favorites');
@@ -347,12 +349,12 @@ export default function ProfileScreen() {
                   variant="titleMedium"
                   weight="700"
                   style={{ color: ctaFg }}>
-                  View full stats
+                  {t('tabs.profileScreen.statsHero.title')}
                 </ThemedText>
                 <ThemedText
                   variant="bodySmall"
                   style={{ color: ctaFg, opacity: 0.85 }}>
-                  Persona, year in review, hall of fame
+                  {t('tabs.profileScreen.statsHero.subtitle')}
                 </ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={20} color={ctaFg} />
@@ -378,15 +380,15 @@ export default function ProfileScreen() {
                       variant="titleMedium"
                       weight="700"
                       style={[styles.premiumTitle, { color: ctaFg }]}>
-                      {isPro ? 'Premium active' : 'Unlock Premium'}
+                      {isPro ? t('tabs.profileScreen.premium.active') : t('tabs.profileScreen.premium.unlock')}
                     </ThemedText>
                   </View>
                   <ThemedText
                     variant="bodySmall"
                     style={[styles.premiumSubtitle, { color: ctaFg, opacity: 0.85 }]}>
                     {isPro
-                      ? 'Manage your subscription and benefits'
-                      : 'No ads, all themes, unlimited sync'}
+                      ? t('tabs.profileScreen.premium.manageSubtitle')
+                      : t('tabs.profileScreen.premium.unlockSubtitle')}
                   </ThemedText>
                 </View>
                 <View style={[styles.upgradePill, { backgroundColor: upgradeBtnBg }]}>
@@ -394,7 +396,7 @@ export default function ProfileScreen() {
                     variant="titleSmall"
                     weight="700"
                     style={{ color: theme.text.primary }}>
-                    {isPro ? 'Manage' : 'Upgrade'}
+                    {isPro ? t('tabs.profileScreen.premium.manage') : t('tabs.profileScreen.premium.upgrade')}
                   </ThemedText>
                 </View>
               </View>
@@ -421,10 +423,10 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.settingsLabel}>
                 <ThemedText variant="titleSmall" weight="600">
-                  Settings
+                  {t('tabs.profileScreen.settings')}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="tertiary">
-                  Preferences, account, more
+                  {t('tabs.profileScreen.settingsSubtitle')}
                 </ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={20} color={theme.text.secondary} />

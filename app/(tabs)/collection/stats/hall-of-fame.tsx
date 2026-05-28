@@ -7,6 +7,7 @@ import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem'
 import { ThemedText, readableTextOn, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
+import { useT } from '../../../../libs/i18n';
 import {
   achievementService,
   AchievementWithProgress,
@@ -17,6 +18,7 @@ const TROPHY_TO = '#F2C94C';
 
 export default function HallOfFameExhibit() {
   const { theme } = useTheme();
+  const t = useT();
   const [items, setItems] = useState<AchievementWithProgress[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +54,10 @@ export default function HallOfFameExhibit() {
       featured
         ? async () => {
             await Share.share({
-              message: `Unlocked "${featured.title}" — ${featured.description}`,
+              message: t('collectionStats.hallOfFame.shareMessage', {
+                title: featured.title,
+                description: featured.description,
+              }),
             });
           }
         : undefined,
@@ -61,7 +66,7 @@ export default function HallOfFameExhibit() {
 
   if (loading) {
     return (
-      <StatsExhibitFrame title="Hall of Fame">
+      <StatsExhibitFrame title={t('collectionStats.hallOfFame.title')}>
         <Skeleton.ListRow count={8} avatarShape="square" />
       </StatsExhibitFrame>
     );
@@ -69,11 +74,11 @@ export default function HallOfFameExhibit() {
 
   if (!items || items.length === 0) {
     return (
-      <StatsExhibitFrame title="Hall of Fame">
+      <StatsExhibitFrame title={t('collectionStats.hallOfFame.title')}>
         <EmptyStateView
           icon="emoji-events"
-          title="No achievements yet"
-          description="Earn your first achievement by rating or syncing anime."
+          title={t('collectionStats.hallOfFame.emptyTitle')}
+          description={t('collectionStats.hallOfFame.emptyBody')}
         />
       </StatsExhibitFrame>
     );
@@ -83,7 +88,7 @@ export default function HallOfFameExhibit() {
   const unlockedRatio = items.length > 0 ? Math.round((earned.length / items.length) * 100) : 0;
 
   return (
-    <StatsExhibitFrame title="Hall of Fame" onShare={handleShare}>
+    <StatsExhibitFrame title={t('collectionStats.hallOfFame.title')} onShare={handleShare}>
       {featured ? (
         <LinearGradient
           colors={[TROPHY_FROM, TROPHY_TO]}
@@ -99,7 +104,7 @@ export default function HallOfFameExhibit() {
           </View>
           <View style={styles.featuredBadge}>
             <ThemedText variant="captionSmall" weight="700" style={{ color: TROPHY_FROM }}>
-              LEGENDARY
+              {t('collectionStats.hallOfFame.legendary')}
             </ThemedText>
           </View>
           <ThemedText style={[styles.featuredTitle, { color: onTrophy }]}>
@@ -109,29 +114,35 @@ export default function HallOfFameExhibit() {
             {featured.description}
           </ThemedText>
           <ThemedText variant="captionSmall" style={{ color: `${onTrophy}AA`, marginTop: 6 }}>
-            Earned {featured.unlockedAt
-              ? new Date(featured.unlockedAt).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : '—'}
+            {t('collectionStats.hallOfFame.earnedOn', {
+              date: featured.unlockedAt
+                ? new Date(featured.unlockedAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : '—',
+            })}
           </ThemedText>
         </LinearGradient>
       ) : null}
 
       <View style={styles.sectionHeader}>
         <ThemedText variant="captionSmall" tone="secondary" weight="700" style={{ letterSpacing: 2 }}>
-          RARE MEDALLIONS
+          {t('collectionStats.hallOfFame.rareMedallions')}
         </ThemedText>
         <ThemedText variant="captionSmall" tone="tertiary">
-          {earned.length} of {items.length} · {unlockedRatio}%
+          {t('collectionStats.hallOfFame.earnedCounter', {
+            earned: earned.length,
+            total: items.length,
+            ratio: unlockedRatio,
+          })}
         </ThemedText>
       </View>
 
       {earned.length === 0 ? (
         <ThemedText variant="bodySmall" tone="tertiary">
-          No trophies yet — your earned ones will appear here.
+          {t('collectionStats.hallOfFame.noTrophies')}
         </ThemedText>
       ) : (
         <View style={styles.grid}>
@@ -170,7 +181,7 @@ export default function HallOfFameExhibit() {
         <>
           <View style={[styles.sectionHeader, { marginTop: Spacing.md }]}>
             <ThemedText variant="captionSmall" tone="secondary" weight="700" style={{ letterSpacing: 2 }}>
-              IN PROGRESS
+              {t('collectionStats.hallOfFame.inProgress')}
             </ThemedText>
           </View>
           <View style={styles.list}>

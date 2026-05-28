@@ -57,6 +57,7 @@ import { ShimmerEffect } from '../../components/common/ShimmerEffect';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { setFloatingTabBarHidden } from '../../libs/navigation/floating-tab-bar-visibility';
 import { sameArrayBy } from '../../libs/utils/state-array';
+import { useT } from '../../libs/i18n';
 
 // Module-level snapshot of the most-recent successful fetch per season key.
 // Survives screen unmount/remount (tab switch), so re-entering the page (or
@@ -168,6 +169,7 @@ export default function BangumiScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const retryFg = useMemo(() => readableTextOn(theme.accent), [theme.accent]);
+  const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { season: currentSeason, year: currentYear } = getCurrentSeason();
@@ -270,9 +272,9 @@ export default function BangumiScreen() {
       hapticsBridge.success();
       setSnackbar({
         key: Date.now(),
-        message: `Added "${anime.title}" to Wishlist`,
+        message: t('tabs.bangumiScreen.snackbar.addedToWishlist', { title: anime.title }),
         icon: 'bookmark-added',
-        actionLabel: 'Undo',
+        actionLabel: t('tabs.bangumiScreen.snackbar.undo'),
         onAction: () => {
           void trackingService.removeTracking(anime.id);
         },
@@ -282,11 +284,11 @@ export default function BangumiScreen() {
       hapticsBridge.warning();
       setSnackbar({
         key: Date.now(),
-        message: "Couldn't add to Wishlist",
+        message: t('tabs.bangumiScreen.snackbar.couldntAddToWishlist'),
         icon: 'error-outline',
       });
     }
-  }, []);
+  }, [t]);
 
   const handleToggleReminder = useCallback(async (anime: Anime, currentlyScheduled: boolean) => {
     try {
@@ -294,7 +296,7 @@ export default function BangumiScreen() {
         await animeNotificationService.cancelAnimeNotification(anime.id);
         setSnackbar({
           key: Date.now(),
-          message: `Reminder cancelled`,
+          message: t('tabs.bangumiScreen.snackbar.reminderCancelled'),
           icon: 'notifications-off',
         });
       } else {
@@ -302,8 +304,8 @@ export default function BangumiScreen() {
         setSnackbar({
           key: Date.now(),
           message: id
-            ? `Reminder set for "${anime.title}"`
-            : `No upcoming episode scheduled for "${anime.title}"`,
+            ? t('tabs.bangumiScreen.snackbar.reminderSet', { title: anime.title })
+            : t('tabs.bangumiScreen.snackbar.noUpcomingEpisode', { title: anime.title }),
           icon: id ? 'notifications-active' : 'info',
         });
       }
@@ -312,7 +314,7 @@ export default function BangumiScreen() {
       console.warn('[bangumi] reminder toggle failed', e);
       hapticsBridge.warning();
     }
-  }, []);
+  }, [t]);
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
   const openYearPicker = useCallback(() => setShowYearPicker(true), []);
@@ -431,18 +433,15 @@ export default function BangumiScreen() {
       } catch (e) {
         if (myVersion !== fetchVersionRef.current) return;
         console.error('Failed to fetch bangumi', e);
-        setError((prev) =>
-          prev === "Couldn't load this season. Pull to retry."
-            ? prev
-            : "Couldn't load this season. Pull to retry."
-        );
+        const errMsg = t('tabs.bangumiScreen.errorLoadFailed');
+        setError((prev) => (prev === errMsg ? prev : errMsg));
       } finally {
         if (myVersion === fetchVersionRef.current) {
           setIsLoading((prev) => (prev ? false : prev));
         }
       }
     },
-    [selectedSeason, selectedYear]
+    [selectedSeason, selectedYear, t]
   );
 
   const onRefresh = useCallback(async () => {
@@ -632,13 +631,13 @@ export default function BangumiScreen() {
     if (specialAnime.length === 0) return null;
     return (
       <SpecialContentSection
-        title="Movies & specials"
-        subtitle={`${specialAnime.length} releases this season`}
+        title={t('tabs.bangumiScreen.movieAndSpecialsTitle')}
+        subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', { count: String(specialAnime.length) })}
         icon="movie-creation"
         anime={specialAnime}
       />
     );
-  }, [specialAnime]);
+  }, [specialAnime, t]);
 
   const scrollToTodayKey = `${selectedSeason}-${selectedYear}-${typeFilter ?? 'all'}`;
 
@@ -696,7 +695,7 @@ export default function BangumiScreen() {
                 },
               ]}
               hitSlop={8}>
-              <Text style={[styles.retryText, { color: retryFg }]}>Retry</Text>
+              <Text style={[styles.retryText, { color: retryFg }]}>{t('tabs.bangumiScreen.retry')}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -779,8 +778,8 @@ export default function BangumiScreen() {
                 </View>
                 {specialAnime.length > 0 ? (
                   <SpecialContentSection
-                    title="Movies & specials"
-                    subtitle={`${specialAnime.length} releases this season`}
+                    title={t('tabs.bangumiScreen.movieAndSpecialsTitle')}
+                    subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', { count: String(specialAnime.length) })}
                     icon="movie-creation"
                     anime={specialAnime}
                   />

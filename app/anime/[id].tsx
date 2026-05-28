@@ -54,6 +54,7 @@ import {
   animeNotificationService,
   useIsAnimeScheduled,
 } from '../../modules/notifications/animeNotificationService';
+import { useT } from '../../libs/i18n';
 
 type RatingEntry = { platform: PlatformType; data: PlatformRatingData };
 
@@ -120,6 +121,7 @@ export default function AnimeDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const t = useT();
 
   useEffect(() => {
     const parent = navigation.getParent();
@@ -461,11 +463,14 @@ export default function AnimeDetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const url = `https://anilist.co/anime/${anime.id}`;
-      await Share.share({ message: `${anime.title} — ${url}`, url });
+      await Share.share({
+        message: t('anime.detail.shareMessage', { title: anime.title, url }),
+        url,
+      });
     } catch {
       // user dismissed
     }
-  }, [anime]);
+  }, [anime, t]);
 
   // Rule 10: only show the blocking skeleton when frame 1 has nothing — cache
   // hit or route-seeded chrome both render the real layout below.
@@ -480,7 +485,7 @@ export default function AnimeDetailScreen() {
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('common.back')}
           style={{
             top: insets.top + 10,
             left: 20,
@@ -523,7 +528,7 @@ export default function AnimeDetailScreen() {
             onPress={() => router.back()}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('common.back')}
             style={{
               top: insets.top + 10,
               left: 20,
@@ -575,7 +580,7 @@ export default function AnimeDetailScreen() {
                 </GlassCard>
                 <GlassCard intensity={20} className="rounded px-2 py-1">
                   <Text className="text-xs font-bold text-white/90">
-                    {anime.status || 'Unknown'}
+                    {anime.status || t('anime.detail.statusUnknown')}
                   </Text>
                 </GlassCard>
               </View>
@@ -587,8 +592,8 @@ export default function AnimeDetailScreen() {
               onPress={handleWatch}
               accessibilityLabel={
                 primaryOption
-                  ? `Watch on ${primaryOption.displayName}`
-                  : 'Open AniList page (no streaming platform configured)'
+                  ? t('anime.detail.watchOn', { platform: primaryOption.displayName })
+                  : t('anime.detail.watchOpenAniListA11y')
               }
               className="flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white py-3">
               {primaryOption ? (
@@ -604,15 +609,17 @@ export default function AnimeDetailScreen() {
                 <Ionicons name="play" size={20} color="black" />
               )}
               <Text className="text-base font-bold text-black" numberOfLines={1}>
-                {primaryOption ? `Watch on ${primaryOption.displayName}` : 'Watch Now'}
+                {primaryOption
+                  ? t('anime.detail.watchOn', { platform: primaryOption.displayName })
+                  : t('anime.detail.watchNow')}
               </Text>
             </Pressable>
             <Pressable
               onPress={openSheet}
               onLongPress={handleQuickAdd}
               delayLongPress={320}
-              accessibilityLabel="Add to collection"
-              accessibilityHint="Long press to add to your last-used folder"
+              accessibilityLabel={t('anime.detail.addToCollection')}
+              accessibilityHint={t('anime.detail.addToCollectionHint')}
               className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-zinc-800">
               <Ionicons
                 name={inCollection ? 'checkmark' : 'add'}
@@ -624,7 +631,9 @@ export default function AnimeDetailScreen() {
               <Pressable
                 onPress={handleToggleReminder}
                 accessibilityLabel={
-                  reminderScheduled ? 'Cancel episode reminder' : 'Set episode reminder'
+                  reminderScheduled
+                    ? t('anime.detail.cancelReminder')
+                    : t('anime.detail.setReminder')
                 }
                 className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-zinc-800">
                 <Ionicons
@@ -636,7 +645,9 @@ export default function AnimeDetailScreen() {
             ) : null}
             <Pressable
               onPress={handleFavoriteToggle}
-              accessibilityLabel={favorite ? 'Remove from favorites' : 'Add to favorites'}
+              accessibilityLabel={
+                favorite ? t('anime.detail.removeFavorite') : t('anime.detail.addFavorite')
+              }
               className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-zinc-800">
               <Ionicons
                 name={favorite ? 'heart' : 'heart-outline'}
@@ -646,22 +657,22 @@ export default function AnimeDetailScreen() {
             </Pressable>
             <Pressable
               onPress={handleShare}
-              accessibilityLabel="Share anime"
+              accessibilityLabel={t('anime.detail.shareAnime')}
               className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-zinc-800">
               <Ionicons name="share-outline" size={22} color="white" />
             </Pressable>
           </View>
 
           <View className="mt-8">
-            <Text className="mb-3 text-lg font-bold text-white">Synopsis</Text>
+            <Text className="mb-3 text-lg font-bold text-white">{t('anime.detail.synopsis')}</Text>
             <Text className="leading-6 text-zinc-400">
-              {anime.description || anime.mood || 'No description available.'}
+              {anime.description || anime.mood || t('anime.detail.noDescription')}
             </Text>
           </View>
 
           {anime.tags && anime.tags.length > 0 ? (
             <View className="mt-6">
-              <Text className="mb-3 text-lg font-bold text-white">Tags</Text>
+              <Text className="mb-3 text-lg font-bold text-white">{t('anime.detail.tags')}</Text>
               <View className="flex-row flex-wrap gap-2">
                 {anime.tags.map((tag) => (
                   <View
@@ -684,7 +695,9 @@ export default function AnimeDetailScreen() {
 
           {pilgrimage ? (
             <View className="mt-8">
-              <Text className="mb-3 text-lg font-bold text-white">Pilgrimage</Text>
+              <Text className="mb-3 text-lg font-bold text-white">
+                {t('anime.detail.pilgrimage')}
+              </Text>
               <AnimePilgrimageCard
                 anime={pilgrimage}
                 onPress={(target) => router.push(`/pilgrimage/${target.id}`)}
@@ -712,20 +725,27 @@ export default function AnimeDetailScreen() {
           ) : null}
 
           <View className="mt-8 rounded-2xl border border-white/5 bg-zinc-900/50 p-4">
-            <Text className="mb-4 text-lg font-bold text-white">Information</Text>
+            <Text className="mb-4 text-lg font-bold text-white">
+              {t('anime.detail.information')}
+            </Text>
             <View className="flex-row flex-wrap">
-              <InfoItem label="Format" value={anime.format || '?'} />
+              <InfoItem label={t('anime.detail.info.format')} value={anime.format || '?'} />
               <InfoItem
-                label="Episodes"
+                label={t('anime.detail.info.episodes')}
                 value={anime.episodes != null ? String(anime.episodes) : '?'}
               />
-              <InfoItem label="Duration" value={`${anime.durationMinutes || '?'} mins`} />
-              <InfoItem label="Status" value={anime.status || '?'} />
               <InfoItem
-                label="Start Date"
+                label={t('anime.detail.info.duration')}
+                value={t('anime.detail.info.durationMins', {
+                  mins: anime.durationMinutes || '?',
+                })}
+              />
+              <InfoItem label={t('anime.detail.info.status')} value={anime.status || '?'} />
+              <InfoItem
+                label={t('anime.detail.info.startDate')}
                 value={anime.startDate?.year ? String(anime.startDate.year) : '?'}
               />
-              <InfoItem label="Studios" value={anime.studios?.[0] || '?'} />
+              <InfoItem label={t('anime.detail.info.studios')} value={anime.studios?.[0] || '?'} />
             </View>
           </View>
         </View>
@@ -794,6 +814,7 @@ function WatchOptionsSection({
   onOpen: (option: WatchOption) => void;
   onConfigure: () => void;
 }) {
+  const t = useT();
   // Mirror the Staff section's horizontal avatar+caption layout. Each
   // platform is a round brand-tinted disc (icon only) with the name
   // underneath — no rectangular chip backgrounds competing with Synopsis/
@@ -801,12 +822,14 @@ function WatchOptionsSection({
   return (
     <View className="mt-8">
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-lg font-bold text-white">Watch on</Text>
+        <Text className="text-lg font-bold text-white">{t('anime.detail.watchOnSection')}</Text>
         <Pressable
           onPress={onConfigure}
-          accessibilityLabel="Configure watch platforms"
+          accessibilityLabel={t('anime.detail.configureWatchA11y')}
           hitSlop={8}>
-          <Text className="text-xs font-semibold text-blue-400">Configure ›</Text>
+          <Text className="text-xs font-semibold text-blue-400">
+            {t('anime.detail.configure')}
+          </Text>
         </Pressable>
       </View>
       <ScrollView
@@ -818,7 +841,11 @@ function WatchOptionsSection({
             <Pressable
               key={`${opt.platformId ?? 'unknown'}:${opt.url}:${idx}`}
               onPress={() => onOpen(opt)}
-              accessibilityLabel={`${opt.source === 'official' ? 'Open' : 'Search'} ${opt.displayName}`}
+              accessibilityLabel={
+                opt.source === 'official'
+                  ? t('anime.detail.openPlatformA11y', { platform: opt.displayName })
+                  : t('anime.detail.searchPlatformA11y', { platform: opt.displayName })
+              }
               style={{
                 width: 72,
                 opacity: opt.isEnabled || opt.source === 'official' ? 1 : 0.7,
@@ -878,7 +905,7 @@ function WatchOptionsSection({
                   numberOfLines={1}
                   className="text-center text-zinc-500"
                   style={{ fontSize: 10 }}>
-                  search
+                  {t('anime.detail.searchLabel')}
                 </Text>
               ) : null}
             </Pressable>
@@ -893,6 +920,7 @@ function WatchOptionsSection({
 
 function RelationsSection({ items }: { items: AnimeRelation[] }) {
   const router = useRouter();
+  const t = useT();
   // Preserve first-seen order of relation types (sequel before prequel etc.)
   const order: string[] = [];
   const groups: Record<string, AnimeRelation[]> = {};
@@ -912,7 +940,7 @@ function RelationsSection({ items }: { items: AnimeRelation[] }) {
 
   return (
     <View className="mt-8">
-      <Text className="mb-3 text-lg font-bold text-white">Related Entries</Text>
+      <Text className="mb-3 text-lg font-bold text-white">{t('anime.detail.relatedEntries')}</Text>
       <View className="gap-4">
         {order.map((type) => (
           <View key={type} className="flex-row gap-3">
@@ -928,7 +956,7 @@ function RelationsSection({ items }: { items: AnimeRelation[] }) {
                   onPress={() => open(entry)}
                   disabled={!entry.id}
                   accessibilityRole={entry.id ? 'link' : undefined}
-                  accessibilityLabel={`Open ${entry.title}`}
+                  accessibilityLabel={t('anime.detail.openEntryA11y', { title: entry.title })}
                   className="flex-row items-center justify-between rounded-xl bg-zinc-800/60 p-3">
                   <View className="flex-1 pr-2">
                     <Text className="text-sm text-white" numberOfLines={2}>
@@ -954,13 +982,14 @@ function RelationsSection({ items }: { items: AnimeRelation[] }) {
 type MusicService = 'Spotify' | 'Apple Music' | 'YouTube Music';
 
 function ThemesSection({ themes }: { themes: AnimeTheme }) {
+  const t = useT();
   return (
     <View className="mt-8 gap-5">
       {themes.openings.length > 0 ? (
-        <ThemeGroup title="Opening Themes" songs={themes.openings} />
+        <ThemeGroup title={t('anime.detail.openingThemes')} songs={themes.openings} />
       ) : null}
       {themes.endings.length > 0 ? (
-        <ThemeGroup title="Ending Themes" songs={themes.endings} />
+        <ThemeGroup title={t('anime.detail.endingThemes')} songs={themes.endings} />
       ) : null}
     </View>
   );
@@ -1009,6 +1038,7 @@ function MusicLinkButton({
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
 }) {
+  const t = useT();
   const onPress = () => {
     const q = encodeURIComponent(song);
     let url = '';
@@ -1018,7 +1048,9 @@ function MusicLinkButton({
     if (url) Linking.openURL(url).catch(() => undefined);
   };
   return (
-    <Pressable onPress={onPress} accessibilityLabel={`Search on ${service}`}>
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={t('anime.detail.searchOnServiceA11y', { service })}>
       <Ionicons name={icon} size={20} color={color} />
     </Pressable>
   );
@@ -1027,12 +1059,13 @@ function MusicLinkButton({
 // MARK: - Staff
 
 function StaffSection({ items }: { items: AnimeStaff[] }) {
+  const t = useT();
   // Cap at 24 to keep horizontal scroll snappy; iOS shows the full list but
   // RN's Image is heavier, so trim defensively.
   const visible = items.slice(0, 24);
   return (
     <View className="mt-8">
-      <Text className="mb-3 text-lg font-bold text-white">Staff</Text>
+      <Text className="mb-3 text-lg font-bold text-white">{t('anime.detail.staff')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View className="flex-row gap-4 pr-5">
           {visible.map((p, i) => (
@@ -1086,18 +1119,19 @@ const PLATFORM_META: Partial<
   kitsu: { name: 'Kitsu', icon: 'paw-outline', color: '#22c55e' },
 };
 
-const STATUS_ROWS: { key: string; label: string; color: string }[] = [
-  { key: 'watching', label: 'Watching', color: '#34d399' },
-  { key: 'completed', label: 'Completed', color: '#60a5fa' },
-  { key: 'onHold', label: 'On Hold', color: '#fbbf24' },
-  { key: 'dropped', label: 'Dropped', color: '#f87171' },
-  { key: 'planToWatch', label: 'Plan to Watch', color: '#9ca3af' },
+const STATUS_ROWS: { key: string; labelKey: string; color: string }[] = [
+  { key: 'watching', labelKey: 'anime.detail.status.watching', color: '#34d399' },
+  { key: 'completed', labelKey: 'anime.detail.status.completed', color: '#60a5fa' },
+  { key: 'onHold', labelKey: 'anime.detail.status.onHold', color: '#fbbf24' },
+  { key: 'dropped', labelKey: 'anime.detail.status.dropped', color: '#f87171' },
+  { key: 'planToWatch', labelKey: 'anime.detail.status.planToWatch', color: '#9ca3af' },
 ];
 
 function PlatformRatingsSection({ items }: { items: RatingEntry[] }) {
+  const t = useT();
   return (
     <View className="mt-8 gap-3">
-      <Text className="text-lg font-bold text-white">Platform Ratings</Text>
+      <Text className="text-lg font-bold text-white">{t('anime.detail.platformRatings')}</Text>
       {items.map((entry) => (
         <PlatformRatingCard key={entry.platform} platform={entry.platform} data={entry.data} />
       ))}
@@ -1112,6 +1146,7 @@ function PlatformRatingCard({
   platform: PlatformType;
   data: PlatformRatingData;
 }) {
+  const t = useT();
   const dist = data.ratingDistribution || {};
   const scoreBuckets: { score: number; votes: number }[] = [];
   const statusBuckets: Record<string, number> = {};
@@ -1148,7 +1183,9 @@ function PlatformRatingCard({
           <Text className="text-base font-semibold text-white">{meta.name}</Text>
         </View>
         {totalUsers > 0 ? (
-          <Text className="text-xs text-zinc-500">{totalUsers.toLocaleString()} users</Text>
+          <Text className="text-xs text-zinc-500">
+            {t('anime.detail.usersCount', { count: totalUsers.toLocaleString() })}
+          </Text>
         ) : null}
       </View>
 
@@ -1163,7 +1200,9 @@ function PlatformRatingCard({
 
       {hasScores ? (
         <View className="gap-1">
-          <Text className="mb-1 text-xs font-medium text-zinc-400">Score Distribution</Text>
+          <Text className="mb-1 text-xs font-medium text-zinc-400">
+            {t('anime.detail.scoreDistribution')}
+          </Text>
           {scoreBuckets.map((b) => {
             const pct = (b.votes / scoreTotal) * 100;
             return (
@@ -1191,7 +1230,9 @@ function PlatformRatingCard({
 
       {hasStatus ? (
         <View className="gap-1.5">
-          <Text className="mb-1 text-xs font-medium text-zinc-400">Status Distribution</Text>
+          <Text className="mb-1 text-xs font-medium text-zinc-400">
+            {t('anime.detail.statusDistribution')}
+          </Text>
           {STATUS_ROWS.map((row) => {
             const count = statusBuckets[row.key] ?? 0;
             if (count === 0) return null;
@@ -1199,7 +1240,7 @@ function PlatformRatingCard({
             return (
               <View key={row.key}>
                 <View className="mb-1 flex-row items-center justify-between">
-                  <Text className="text-xs text-zinc-400">{row.label}</Text>
+                  <Text className="text-xs text-zinc-400">{t(row.labelKey)}</Text>
                   <Text className="text-xs text-zinc-500">{count.toLocaleString()}</Text>
                 </View>
                 <View className="h-1.5 overflow-hidden rounded-full bg-zinc-800">

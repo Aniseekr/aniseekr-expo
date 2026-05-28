@@ -27,6 +27,7 @@ import { Skeleton, ThemedText } from '../../../components/themed';
 import { useTheme } from '../../../context/ThemeContext';
 import { Radius, Spacing } from '../../../constants/DesignSystem';
 import { hapticsBridge } from '../../../modules/haptics/hapticsBridge';
+import { useT } from '../../../libs/i18n';
 
 interface FolderItem {
   id: string;
@@ -75,6 +76,7 @@ export default function FolderDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme } = useTheme();
+  const t = useT();
   // Rule 10: seed from the sync snapshot so the grid is on screen frame 1.
   const initialItems = id ? folderSnapshotCache.get(id) ?? [] : [];
   const [items, setItems] = useState<FolderItem[]>(initialItems);
@@ -477,7 +479,7 @@ export default function FolderDetailScreen() {
           onPress={handleBack}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('tabs.collectionFolderScreen.back')}
           style={({ pressed }) => [
             styles.headerBtn,
             {
@@ -490,14 +492,14 @@ export default function FolderDetailScreen() {
         </Pressable>
         <View style={styles.headerText}>
           <ThemedText variant="titleMedium" weight="700" numberOfLines={1}>
-            {name || 'Folder'}
+            {name || t('tabs.collectionFolderScreen.folder')}
           </ThemedText>
           <ThemedText variant="captionSmall" tone="tertiary" weight="500">
             {loading
-              ? 'Loading…'
+              ? t('tabs.collectionFolderScreen.loading')
               : viewMode === 'swipe'
-                ? `Swipe to triage · ${items.length}`
-                : `${items.length} ${items.length === 1 ? 'anime' : 'anime'}`}
+                ? t('tabs.collectionFolderScreen.swipeToTriage', { count: String(items.length) })
+                : t('tabs.collectionFolderScreen.countAnime', { count: String(items.length) })}
           </ThemedText>
         </View>
         <Pressable
@@ -506,7 +508,9 @@ export default function FolderDetailScreen() {
           disabled={items.length === 0 && viewMode === 'list'}
           accessibilityRole="button"
           accessibilityLabel={
-            viewMode === 'swipe' ? 'Back to list view' : 'Swipe to like'
+            viewMode === 'swipe'
+              ? t('tabs.collectionFolderScreen.backToList')
+              : t('tabs.collectionFolderScreen.swipeToLike')
           }
           style={({ pressed }) => [
             styles.headerBtn,
@@ -553,10 +557,10 @@ export default function FolderDetailScreen() {
             <View style={styles.emptyState}>
               <MaterialIcons name="folder-open" size={48} color={theme.text.tertiary} />
               <ThemedText variant="titleMedium" weight="700" align="center" style={{ marginTop: 12 }}>
-                No items in this folder
+                {t('tabs.collectionFolderScreen.emptyTitle')}
               </ThemedText>
               <ThemedText variant="bodySmall" tone="secondary" align="center">
-                Add anime to this folder from the rating screen.
+                {t('tabs.collectionFolderScreen.emptyBody')}
               </ThemedText>
             </View>
           }

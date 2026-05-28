@@ -45,6 +45,7 @@ import {
 } from '../../../libs/services/collection/share-templates';
 import { UserRepository } from '../../../libs/repositories/user-repository';
 import { sameArrayBy } from '../../../libs/utils/state-array';
+import { useT } from '../../../libs/i18n';
 
 type SortMode = CollectionSortMode;
 type ScreenMode = 'collect' | 'share';
@@ -163,6 +164,7 @@ function sameAnimeCards(
 export default function CollectionScreen() {
   const { top } = useSafeAreaInsets();
   const { theme } = useTheme();
+  const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   // Seed from MMKV so the collection grid renders in the user's chosen sort
@@ -371,15 +373,15 @@ export default function CollectionScreen() {
 
   const handleConfirmShare = useCallback(async () => {
     if (!shareBuild) {
-      setShareError('Pick a template first');
+      setShareError(t('tabs.collectionScreen.share.pickTemplate'));
       return;
     }
     if (shareBuild.entries.length === 0) {
-      setShareError('Add at least one anime');
+      setShareError(t('tabs.collectionScreen.share.addAtLeastOne'));
       return;
     }
     if (!rendererRef.current) {
-      setShareError('Renderer not ready');
+      setShareError(t('tabs.collectionScreen.share.rendererNotReady'));
       return;
     }
     setCapturing(true);
@@ -395,18 +397,18 @@ export default function CollectionScreen() {
       await Share.share(
         {
           url: uri,
-          message: `My ${shareBuild.template.title} on Aniseekr`,
+          message: t('tabs.collectionScreen.share.myTemplateOnAniseekr', { template: shareBuild.template.title }),
           title: `Aniseekr · ${shareBuild.template.title}`,
         },
-        { dialogTitle: `Share ${shareBuild.template.title}` }
+        { dialogTitle: t('tabs.collectionScreen.share.dialogTitle', { template: shareBuild.template.title }) }
       );
     } catch (error) {
       console.error('Share capture failed:', error);
-      setShareError('Could not render poster');
+      setShareError(t('tabs.collectionScreen.share.couldNotRender'));
     } finally {
       setCapturing(false);
     }
-  }, [shareBuild]);
+  }, [shareBuild, t]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -519,12 +521,12 @@ export default function CollectionScreen() {
 
   const sortOptions: { label: string; value: SortMode }[] = useMemo(
     () => [
-      { label: 'Newest', value: 'newest' },
-      { label: 'Oldest', value: 'oldest' },
-      { label: 'Count', value: 'count' },
-      { label: 'Rarity', value: 'rarity' },
+      { label: t('tabs.collectionScreen.sort.newest'), value: 'newest' },
+      { label: t('tabs.collectionScreen.sort.oldest'), value: 'oldest' },
+      { label: t('tabs.collectionScreen.sort.count'), value: 'count' },
+      { label: t('tabs.collectionScreen.sort.rarity'), value: 'rarity' },
     ],
-    []
+    [t]
   );
 
   return (
@@ -566,7 +568,7 @@ export default function CollectionScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <ThemedText variant="titleMedium" weight="700">
-                My Folders
+                {t('tabs.collectionScreen.myFolders')}
               </ThemedText>
               <Pressable
                 onPress={() => {
@@ -576,7 +578,9 @@ export default function CollectionScreen() {
                 hitSlop={8}
                 style={styles.sectionHeaderRight}>
                 <ThemedText variant="captionSmall" tone="secondary">
-                  {visibleFolders.length} {visibleFolders.length === 1 ? 'folder' : 'folders'}
+                  {visibleFolders.length === 1
+                    ? t('tabs.collectionScreen.folderCount.one', { count: String(visibleFolders.length) })
+                    : t('tabs.collectionScreen.folderCount.other', { count: String(visibleFolders.length) })}
                 </ThemedText>
                 <MaterialIcons name="chevron-right" size={14} color={theme.text.tertiary} />
               </Pressable>
@@ -626,13 +630,13 @@ export default function CollectionScreen() {
               <View style={styles.emptyState}>
                 <ThemedText variant="titleMedium" weight="700" align="center">
                   {selectedCategory === 'All'
-                    ? 'No folders yet'
-                    : `No ${selectedCategory.toLowerCase()} folders`}
+                    ? t('tabs.collectionScreen.emptyFolderTitle.all')
+                    : t('tabs.collectionScreen.emptyFolderTitle.category', { category: selectedCategory.toLowerCase() })}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary" align="center">
                   {selectedCategory === 'All'
-                    ? 'Create a folder to organize the anime you love.'
-                    : 'Anime with this status will appear here.'}
+                    ? t('tabs.collectionScreen.emptyFolderBody.all')
+                    : t('tabs.collectionScreen.emptyFolderBody.category')}
                 </ThemedText>
                 {selectedCategory === 'All' ? (
                   <Pressable
@@ -656,7 +660,7 @@ export default function CollectionScreen() {
                       variant="bodySmall"
                       weight="700"
                       style={{ color: theme.background.primary }}>
-                      New folder
+                      {t('tabs.collectionScreen.newFolder')}
                     </ThemedText>
                   </Pressable>
                 ) : null}
@@ -684,7 +688,7 @@ export default function CollectionScreen() {
               ]}>
               <MaterialIcons name="bar-chart" size={16} color={theme.accent} />
               <ThemedText variant="titleSmall" weight="600" style={styles.statsButtonLabel}>
-                Library stats
+                {t('tabs.collectionScreen.libraryStats')}
               </ThemedText>
               <MaterialIcons name="chevron-right" size={18} color={theme.text.tertiary} />
             </Pressable>
@@ -702,7 +706,9 @@ export default function CollectionScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <ThemedText variant="titleMedium" weight="700">
-                {selectedCategory === 'All' ? 'Recent anime' : `${selectedCategory} anime`}
+                {selectedCategory === 'All'
+                  ? t('tabs.collectionScreen.recentAnime')
+                  : t('tabs.collectionScreen.recentAnimeForCategory', { category: selectedCategory })}
               </ThemedText>
               {animeCards.length > ANIME_PREVIEW_LIMIT ? (
                 <Pressable
@@ -716,7 +722,7 @@ export default function CollectionScreen() {
                   hitSlop={8}
                   style={styles.sectionHeaderRight}>
                   <ThemedText variant="captionSmall" tone="secondary" weight="600">
-                    See all {animeCards.length}
+                    {t('tabs.collectionScreen.seeAllCount', { count: String(animeCards.length) })}
                   </ThemedText>
                   <MaterialIcons name="chevron-right" size={14} color={theme.text.tertiary} />
                 </Pressable>
@@ -736,12 +742,12 @@ export default function CollectionScreen() {
             ) : (
               <View style={styles.emptyAnimeState}>
                 <ThemedText variant="titleMedium" weight="700" align="center">
-                  No anime here yet
+                  {t('tabs.collectionScreen.emptyAnimeTitle')}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary" align="center">
                   {selectedCategory === 'All'
-                    ? 'Rate or import anime to start building your library.'
-                    : `Nothing marked as ${selectedCategory.toLowerCase()} yet.`}
+                    ? t('tabs.collectionScreen.emptyAnimeBody.all')
+                    : t('tabs.collectionScreen.emptyAnimeBody.category', { category: selectedCategory.toLowerCase() })}
                 </ThemedText>
               </View>
             )}

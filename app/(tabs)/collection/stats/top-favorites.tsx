@@ -7,6 +7,7 @@ import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem'
 import { ThemedText, readableTextOn, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
+import { useT } from '../../../../libs/i18n';
 import {
   loadUserAnimeRows,
   summarize,
@@ -32,6 +33,7 @@ function metaFor(row: UserAnimeRow): FavMeta {
 
 export default function TopFavoritesExhibit() {
   const { theme } = useTheme();
+  const t = useT();
   const [favs, setFavs] = useState<UserAnimeRow[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -60,7 +62,10 @@ export default function TopFavoritesExhibit() {
       top
         ? async () => {
             await Share.share({
-              message: `My #1 favorite: ${top.title ?? 'Untitled'}${top.score ? ` (${top.score})` : ''}`,
+              message: t('collectionStats.topFavorites.shareMessage', {
+                title: top.title ?? t('collectionStats.topFavorites.untitled'),
+                score: top.score ? ` (${top.score})` : '',
+              }),
             });
           }
         : undefined,
@@ -69,7 +74,7 @@ export default function TopFavoritesExhibit() {
 
   if (loading) {
     return (
-      <StatsExhibitFrame title="My Top Favorites">
+      <StatsExhibitFrame title={t('collectionStats.topFavorites.title')}>
         <Skeleton.PosterGrid count={6} columns={2} aspectRatio={1.5} />
       </StatsExhibitFrame>
     );
@@ -77,11 +82,11 @@ export default function TopFavoritesExhibit() {
 
   if (!top) {
     return (
-      <StatsExhibitFrame title="My Top Favorites">
+      <StatsExhibitFrame title={t('collectionStats.topFavorites.title')}>
         <EmptyStateView
           icon="favorite"
-          title="No favorites yet"
-          description="Rate at least one anime to crown a #1."
+          title={t('collectionStats.topFavorites.emptyTitle')}
+          description={t('collectionStats.topFavorites.emptyBody')}
         />
       </StatsExhibitFrame>
     );
@@ -91,9 +96,9 @@ export default function TopFavoritesExhibit() {
   const topMeta = metaFor(top);
 
   return (
-    <StatsExhibitFrame title="My Top Favorites" onShare={handleShare}>
+    <StatsExhibitFrame title={t('collectionStats.topFavorites.title')} onShare={handleShare}>
       <ThemedText variant="bodySmall" tone="secondary">
-        {favs?.length} all-time picks
+        {t('collectionStats.topFavorites.subtitle', { count: favs?.length ?? 0 })}
       </ThemedText>
       <LinearGradient
         colors={[HERO_FROM, HERO_TO]}
@@ -105,7 +110,7 @@ export default function TopFavoritesExhibit() {
           <View style={[styles.badge, { backgroundColor: `${onHero}26` }]}>
             <MaterialIcons name="star" size={12} color={onHero} />
             <ThemedText variant="captionSmall" weight="700" style={{ color: onHero, letterSpacing: 1 }}>
-              #1 ALL-TIME
+              {t('collectionStats.topFavorites.allTimeBadge')}
             </ThemedText>
           </View>
           {topMeta.rating ? (
@@ -122,13 +127,21 @@ export default function TopFavoritesExhibit() {
           <View style={[styles.featuredImage, { backgroundColor: `${onHero}1A` }]} />
         )}
         <ThemedText style={[styles.featuredTitle, { color: onHero }]}>
-          {top.title ?? 'Untitled'}
+          {top.title ?? t('collectionStats.topFavorites.untitled')}
         </ThemedText>
         {topMeta.remembered > 0 ? (
           <View style={styles.metricRow}>
-            <Metric label="REMEMBERED" value={`${topMeta.remembered} eps`} color={onHero} />
+            <Metric
+              label={t('collectionStats.topFavorites.metric.remembered')}
+              value={t('collectionStats.topFavorites.metric.episodes', { count: topMeta.remembered })}
+              color={onHero}
+            />
             {topMeta.rating ? (
-              <Metric label="RATING" value={`${topMeta.rating}/10`} color={onHero} />
+              <Metric
+                label={t('collectionStats.topFavorites.metric.rating')}
+                value={`${topMeta.rating}/10`}
+                color={onHero}
+              />
             ) : null}
           </View>
         ) : null}
@@ -137,7 +150,7 @@ export default function TopFavoritesExhibit() {
       {rest.length > 0 ? (
         <View style={styles.restWrap}>
           <ThemedText variant="titleMedium" weight="700">
-            The rest of my top {favs?.length}
+            {t('collectionStats.topFavorites.restTitle', { count: favs?.length ?? 0 })}
           </ThemedText>
           {rest.map((row, i) => {
             const meta = metaFor(row);
@@ -161,11 +174,11 @@ export default function TopFavoritesExhibit() {
                 )}
                 <View style={{ flex: 1, gap: 4 }}>
                   <ThemedText variant="titleSmall" weight="700" numberOfLines={2}>
-                    {row.title ?? 'Untitled'}
+                    {row.title ?? t('collectionStats.topFavorites.untitled')}
                   </ThemedText>
                   {meta.rating ? (
                     <ThemedText variant="captionSmall" tone="tertiary">
-                      Rating {meta.rating}
+                      {t('collectionStats.topFavorites.ratingLabel', { rating: meta.rating })}
                     </ThemedText>
                   ) : null}
                 </View>

@@ -24,13 +24,9 @@ import { Anime } from '../components/rate/types';
 import { hapticsBridge } from '../modules/haptics/hapticsBridge';
 import { FontFamily, Radius, Spacing, Typography } from '../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../context/ThemeContext';
+import { useT } from '../libs/i18n';
 
 type TrendRange = 'week' | 'all';
-
-const RANGE_OPTIONS: readonly { value: TrendRange; label: string }[] = [
-  { value: 'week', label: 'This Week' },
-  { value: 'all', label: 'All Time' },
-];
 
 const PER_PAGE = 50;
 
@@ -43,7 +39,15 @@ export default function TrendingScreen() {
   const router = useRouter();
   const { top } = useSafeAreaInsets();
   const { theme } = useTheme();
+  const t = useT();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const rangeOptions = useMemo<readonly { value: TrendRange; label: string }[]>(
+    () => [
+      { value: 'week', label: t('trending.rangeWeek') },
+      { value: 'all', label: t('trending.rangeAllTime') },
+    ],
+    [t]
+  );
 
   const [range, setRange] = useState<TrendRange>(() => parseRange(initialRangeParam));
   const [weeklyAnime, setWeeklyAnime] = useState<Anime[]>([]);
@@ -75,13 +79,13 @@ export default function TrendingScreen() {
         setError(null);
       } catch (err) {
         console.error('[/trending] load failed', err);
-        setError('Failed to load trending anime.');
+        setError(t('trending.errorLoadFailed'));
       } finally {
         if (target === 'week') setLoadingWeek(false);
         else setLoadingAll(false);
       }
     },
-    [weeklyAnime.length, allTimeAnime.length]
+    [weeklyAnime.length, allTimeAnime.length, t]
   );
 
   useEffect(() => {
@@ -135,21 +139,21 @@ export default function TrendingScreen() {
             }}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('common.back')}
             style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }]}>
             <Ionicons name="chevron-back" size={20} color={theme.text.primary} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Trending</Text>
+            <Text style={styles.headerTitle}>{t('trending.title')}</Text>
             <Text style={styles.headerSubtitle}>
-              {range === 'week' ? 'Top 50 this week' : 'Top 50 all time'}
+              {range === 'week' ? t('trending.subtitleWeek') : t('trending.subtitleAllTime')}
             </Text>
           </View>
           <View style={styles.iconButtonGhost} />
         </View>
 
         <View style={styles.rangeRow}>
-          <RangePill options={RANGE_OPTIONS} value={range} onChange={handleRangeChange} />
+          <RangePill options={rangeOptions} value={range} onChange={handleRangeChange} />
         </View>
 
         {isInitialLoading ? (
@@ -164,7 +168,7 @@ export default function TrendingScreen() {
               onPress={handleRefresh}
               hitSlop={8}
               style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t('common.retry')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -240,6 +244,7 @@ interface TrendingListRowProps {
 
 function TrendingListRow({ anime, rank, onPress }: TrendingListRowProps) {
   const { theme } = useTheme();
+  const t = useT();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const score = anime.score != null ? formatScore(anime.score) : null;
   const isTop3 = rank <= 3;
@@ -248,7 +253,7 @@ function TrendingListRow({ anime, rank, onPress }: TrendingListRowProps) {
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.85 }]}
       accessibilityRole="button"
-      accessibilityLabel={`Rank ${rank}, ${anime.title}`}>
+      accessibilityLabel={t('trending.rankA11y', { rank, title: anime.title })}>
       <Text
         style={[
           styles.rankNumber,

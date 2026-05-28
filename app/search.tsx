@@ -42,6 +42,7 @@ import { sameArrayBy } from '../libs/utils/state-array';
 
 import { kvGet, kvSet } from '../libs/services/storage/app-storage';
 import { SEARCH_RECENT_KEY } from '../libs/services/storage/keys';
+import { useT } from '../libs/i18n';
 
 const MAX_RECENT = 8;
 
@@ -66,17 +67,17 @@ type SearchAnime = Anime & {
   secondaryTitle?: string;
 };
 
-const FILTERS: readonly { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'tv', label: 'TV' },
-  { key: 'movie', label: 'Movie' },
-  { key: 'recent', label: 'Recent' },
+const FILTER_KEYS: readonly { key: FilterKey; labelKey: string }[] = [
+  { key: 'all', labelKey: 'search.filter.all' },
+  { key: 'tv', labelKey: 'search.filter.tv' },
+  { key: 'movie', labelKey: 'search.filter.movie' },
+  { key: 'recent', labelKey: 'search.filter.recent' },
 ];
 
-const SORTS: readonly { key: SortKey; label: string }[] = [
-  { key: 'relevance', label: 'Relevance' },
-  { key: 'score', label: 'Score' },
-  { key: 'year', label: 'Newest' },
+const SORT_KEYS: readonly { key: SortKey; labelKey: string }[] = [
+  { key: 'relevance', labelKey: 'search.sort.relevance' },
+  { key: 'score', labelKey: 'search.sort.score' },
+  { key: 'year', labelKey: 'search.sort.newest' },
 ];
 
 function sameSearchResults(current: SearchAnime[], next: SearchAnime[]): boolean {
@@ -108,6 +109,7 @@ function sameSearchResults(current: SearchAnime[], next: SearchAnime[]): boolean
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useT();
   // `context=pilgrimage` is set by the pilgrimage hub so we route picks to
   // /pilgrimage/[bangumiId] instead of /anime/[id]. Any other value falls
   // through to the default global-search behaviour.
@@ -193,7 +195,7 @@ export default function SearchScreen() {
         let nextResults: SearchAnime[];
         if (isPilgrimageMode) {
           const data = await pilgrimageSearchService.search(trimmed, { limit: 30 });
-          nextResults = data.map(mapPilgrimageResultToAnime);
+          nextResults = data.map((r) => mapPilgrimageResultToAnime(r, t));
         } else {
           const data = await AnimeRepository.searchAnime(trimmed, 1);
           nextResults = (data ?? []) as SearchAnime[];
@@ -202,7 +204,7 @@ export default function SearchScreen() {
         setResults((prev) => (sameSearchResults(prev, nextResults) ? prev : nextResults));
       } catch (e) {
         if (requestId !== searchRequestRef.current) return;
-        setError(e instanceof Error ? e.message : 'Search failed');
+        setError(e instanceof Error ? e.message : t('search.errorGeneric'));
         setResults((prev) => (prev.length === 0 ? prev : []));
       } finally {
         if (requestId === searchRequestRef.current) {
@@ -210,7 +212,7 @@ export default function SearchScreen() {
         }
       }
     },
-    [isPilgrimageMode]
+    [isPilgrimageMode, t]
   );
 
   useEffect(() => {
@@ -263,7 +265,7 @@ export default function SearchScreen() {
           if (resolveRequestId !== resolveRequestRef.current) return;
           if (bangumiId === null) {
             hapticsBridge.warning();
-            setResolveError(`No pilgrimage mapping for "${anime.title}".`);
+            setResolveError(t('search.pilgrimage.noMapping', { title: anime.title }));
             return;
           }
           router.push(
@@ -276,7 +278,7 @@ export default function SearchScreen() {
         } catch (e) {
           if (resolveRequestId !== resolveRequestRef.current) return;
           hapticsBridge.warning();
-          setResolveError(e instanceof Error ? e.message : 'Could not resolve this title.');
+          setResolveError(e instanceof Error ? e.message : t('search.pilgrimage.resolveFailed'));
         } finally {
           if (resolveRequestId === resolveRequestRef.current) {
             setResolvingId(null);
@@ -287,7 +289,7 @@ export default function SearchScreen() {
 
       pushAnimeDetail(router, anime);
     },
-    [recent, persistRecent, router, isPilgrimageMode, query]
+    [recent, persistRecent, router, isPilgrimageMode, query, t]
   );
 
   const handleBookmarkToggle = useCallback(
@@ -309,7 +311,7 @@ export default function SearchScreen() {
       try {
         if (wasTracked) {
           await trackingService.removeTracking(anime.id);
-          showBookmarkToast(`Removed "${anime.title}" from your list`);
+          showBookmarkToast(t('search.bookmark.removed', { title: anime.title }));
         } else {
           await trackingService.upsertTracking({
             animeId: anime.id,
@@ -319,8 +321,8 @@ export default function SearchScreen() {
           });
           showBookmarkToast(
             isPilgrimageMode
-              ? `Added "${anime.title}" to your pilgrimages`
-              : `Added "${anime.title}" to your list`
+              ? t('search.bookmark.addedPilgrimage', { title: anime.title })
+              : t('search.bookmark.added', { title: anime.title })
           );
         }
       } catch (err) {
@@ -333,12 +335,14 @@ export default function SearchScreen() {
           else next.delete(anime.id);
           return next;
         });
-        showBookmarkToast(wasTracked ? "Couldn't remove" : "Couldn't add to your list");
+        showBookmarkToast(
+          wasTracked ? t('search.bookmark.removeFailed') : t('search.bookmark.addFailed')
+        );
       } finally {
         setBookmarkPendingId(null);
       }
     },
-    [bookmarkPendingId, trackedIds, isPilgrimageMode, showBookmarkToast]
+    [bookmarkPendingId, trackedIds, isPilgrimageMode, showBookmarkToast, t]
   );
 
   const handleRecentTap = useCallback((term: string) => {
@@ -405,7 +409,7 @@ export default function SearchScreen() {
     return list;
   }, [filter, results, sort]);
 
-  const sortLabel = SORTS.find((s) => s.key === sort)?.label ?? 'Relevance';
+  const sortLabel = t(SORT_KEYS.find((s) => s.key === sort)?.labelKey ?? 'search.sort.relevance');
 
   return (
     <View style={styles.root}>
@@ -421,7 +425,7 @@ export default function SearchScreen() {
             onPress={handleClose}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('common.back')}
             style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.78 }]}>
             <Ionicons name="chevron-back" size={20} color={Colors.text.primary} />
           </Pressable>
@@ -436,8 +440,8 @@ export default function SearchScreen() {
               autoFocus
               placeholder={
                 isPilgrimageMode
-                  ? 'Search anime for pilgrimage…'
-                  : 'Search anime, characters, studios…'
+                  ? t('search.placeholder.pilgrimage')
+                  : t('search.placeholder.default')
               }
               placeholderTextColor={Colors.text.tertiary}
               value={query}
@@ -453,7 +457,7 @@ export default function SearchScreen() {
                 onPress={() => setQuery('')}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel="Clear">
+                accessibilityLabel={t('search.clearA11y')}>
                 <View style={styles.clearBtn}>
                   <Ionicons name="close" size={12} color={Colors.text.primary} />
                 </View>
@@ -472,7 +476,7 @@ export default function SearchScreen() {
               onPress={() => setResolveError(null)}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Dismiss">
+              accessibilityLabel={t('search.dismissA11y')}>
               <Ionicons name="close" size={14} color={Colors.text.secondary} />
             </Pressable>
           </View>
@@ -484,7 +488,7 @@ export default function SearchScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filterChipsRow}>
-              {FILTERS.map((f) => {
+              {FILTER_KEYS.map((f) => {
                 const active = filter === f.key;
                 return (
                   <Pressable
@@ -502,7 +506,7 @@ export default function SearchScreen() {
                         styles.filterChipText,
                         { color: active ? '#000' : Colors.text.primary },
                       ]}>
-                      {f.label}
+                      {t(f.labelKey)}
                     </Text>
                   </Pressable>
                 );
@@ -512,7 +516,7 @@ export default function SearchScreen() {
         ) : null}
 
         {error ? (
-          <ErrorStateView title="Search failed" message={error} onRetry={() => runSearch(query)} />
+          <ErrorStateView title={t('search.errorTitle')} message={error} onRetry={() => runSearch(query)} />
         ) : query.length === 0 ? (
           <ScrollView
             contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
@@ -520,9 +524,9 @@ export default function SearchScreen() {
             {recent.length > 0 ? (
               <View style={styles.recentSection}>
                 <View style={styles.sectionRow}>
-                  <Text style={styles.sectionTitle}>Recent</Text>
+                  <Text style={styles.sectionTitle}>{t('search.recent')}</Text>
                   <Pressable onPress={handleClearRecent} hitSlop={8}>
-                    <Text style={styles.clearText}>Clear</Text>
+                    <Text style={styles.clearText}>{t('search.clear')}</Text>
                   </Pressable>
                 </View>
                 <View style={styles.recentRow}>
@@ -532,7 +536,7 @@ export default function SearchScreen() {
                       onPress={() => handleRecentTap(term)}
                       style={({ pressed }) => [styles.recentChip, pressed && { opacity: 0.8 }]}
                       accessibilityRole="button"
-                      accessibilityLabel={`Search ${term}`}>
+                      accessibilityLabel={t('search.recentTermA11y', { term })}>
                       <MaterialIcons name="history" size={14} color={Colors.text.secondary} />
                       <Text style={styles.recentText} numberOfLines={1}>
                         {term}
@@ -544,8 +548,8 @@ export default function SearchScreen() {
             ) : (
               <EmptyStateView
                 icon="search"
-                title="Discover anime"
-                description="Search across all your connected platforms — AniList, MAL, Bangumi, Kitsu and more."
+                title={t('search.discoverTitle')}
+                description={t('search.discoverDescription')}
               />
             )}
           </ScrollView>
@@ -574,8 +578,8 @@ export default function SearchScreen() {
         ) : filteredResults.length === 0 ? (
           <EmptyStateView
             icon="search-off"
-            title="No matches"
-            description={`Nothing for "${query}" with the current filters. Try a different keyword or change the filter.`}
+            title={t('search.noMatchesTitle')}
+            description={t('search.noMatchesDescription', { query })}
           />
         ) : (
           <FlatList
@@ -591,13 +595,13 @@ export default function SearchScreen() {
             ListHeaderComponent={
               <View style={styles.sortRow}>
                 <Text style={styles.resultCount}>
-                  {filteredResults.length} {filteredResults.length === 1 ? 'result' : 'results'}
+                  {t('search.resultCount', { count: filteredResults.length })}
                 </Text>
                 <Pressable
                   onPress={handleSortTap}
                   style={({ pressed }) => [styles.sortBtn, pressed && { opacity: 0.8 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="Sort by">
+                  accessibilityLabel={t('search.sortByA11y')}>
                   <Ionicons name="swap-vertical" size={12} color={Colors.text.secondary} />
                   <Text style={styles.sortBtnText}>{sortLabel}</Text>
                   <Ionicons
@@ -608,7 +612,7 @@ export default function SearchScreen() {
                 </Pressable>
                 {sortOpen ? (
                   <View style={styles.sortMenu}>
-                    {SORTS.map((s) => (
+                    {SORT_KEYS.map((s) => (
                       <Pressable
                         key={s.key}
                         onPress={() => handleSortPick(s.key)}
@@ -622,7 +626,7 @@ export default function SearchScreen() {
                             styles.sortMenuItemText,
                             sort === s.key && { color: Colors.primary },
                           ]}>
-                          {s.label}
+                          {t(s.labelKey)}
                         </Text>
                         {sort === s.key ? (
                           <Ionicons name="checkmark" size={14} color={Colors.primary} />
@@ -688,7 +692,10 @@ interface ResultCardProps {
   onBookmarkPress?: () => void;
 }
 
-function mapPilgrimageResultToAnime(result: PilgrimageSearchResult): SearchAnime {
+function mapPilgrimageResultToAnime(
+  result: PilgrimageSearchResult,
+  t: ReturnType<typeof useT>
+): SearchAnime {
   const titles = getPilgrimageAnimeTitles({
     id: result.bangumiId,
     title: result.title,
@@ -698,9 +705,7 @@ function mapPilgrimageResultToAnime(result: PilgrimageSearchResult): SearchAnime
   });
   const tags = [
     result.city,
-    result.pointsLength > 0
-      ? `${result.pointsLength} ${result.pointsLength === 1 ? 'spot' : 'spots'}`
-      : null,
+    result.pointsLength > 0 ? t('search.spotsCount', { count: result.pointsLength }) : null,
   ].filter((tag): tag is string => typeof tag === 'string' && tag.length > 0);
 
   return {
@@ -730,6 +735,7 @@ function ResultCard({
   onPress,
   onBookmarkPress,
 }: ResultCardProps) {
+  const t = useT();
   const score = typeof anime.score === 'number' ? formatScore(anime.score) : null;
   const tags = anime.tags?.slice(0, 3) ?? [];
   return (
@@ -737,7 +743,9 @@ function ResultCard({
       onPress={onPress}
       disabled={pending}
       accessibilityRole="button"
-      accessibilityLabel={hasPilgrimage ? `${anime.title}, pilgrimage available` : anime.title}
+      accessibilityLabel={
+        hasPilgrimage ? t('search.resultPilgrimageA11y', { title: anime.title }) : anime.title
+      }
       style={({ pressed }) => [
         styles.resultCard,
         pressed && { opacity: 0.85 },
@@ -760,7 +768,7 @@ function ResultCard({
               size={IconSize.sm}
               color={Colors.primary}
               style={styles.pilgrimagePin}
-              accessibilityLabel="Has pilgrimage spots"
+              accessibilityLabel={t('search.hasPilgrimageSpotsA11y')}
             />
           ) : null}
         </View>
@@ -800,7 +808,9 @@ function ResultCard({
         hitSlop={6}
         disabled={bookmarkPending}
         accessibilityRole="button"
-        accessibilityLabel={isBookmarked ? 'Remove from your list' : 'Save to your list'}
+        accessibilityLabel={
+          isBookmarked ? t('search.bookmarkRemoveA11y') : t('search.bookmarkAddA11y')
+        }
         accessibilityState={{ selected: !!isBookmarked, busy: !!bookmarkPending }}
         style={({ pressed }) => [
           styles.bookmarkBtn,

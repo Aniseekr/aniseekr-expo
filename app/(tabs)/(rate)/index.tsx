@@ -42,19 +42,9 @@ import {
   type SwipePrefs,
 } from '../../../libs/services/user-prefs';
 import { loadGenreSwipePage } from '../../../libs/services/rate/genre-deck-prefetch';
-
-const MODE_OPTIONS: readonly { value: ViewMode; label: string }[] = [
-  { value: 'discovery', label: 'Discovery' },
-  { value: 'tracking', label: 'Seasonal' },
-  { value: 'trend', label: 'Trend' },
-];
+import { useT } from '../../../libs/i18n';
 
 type TrendRange = 'week' | 'all';
-
-const TREND_RANGE_OPTIONS: readonly { value: TrendRange; label: string }[] = [
-  { value: 'week', label: 'This Week' },
-  { value: 'all', label: 'All Time' },
-];
 
 const TREND_PILGRIMAGE_LIMIT = 6;
 
@@ -63,6 +53,22 @@ export default function HomeRateScreen() {
   const { theme } = useTheme();
   const { state, actions } = useRateData();
   const router = useRouter();
+  const t = useT();
+  const MODE_OPTIONS: readonly { value: ViewMode; label: string }[] = useMemo(
+    () => [
+      { value: 'discovery', label: t('tabs.rateScreen.mode.discovery') },
+      { value: 'tracking', label: t('tabs.rateScreen.mode.seasonal') },
+      { value: 'trend', label: t('tabs.rateScreen.mode.trend') },
+    ],
+    [t]
+  );
+  const TREND_RANGE_OPTIONS: readonly { value: TrendRange; label: string }[] = useMemo(
+    () => [
+      { value: 'week', label: t('tabs.rateScreen.trend.rangeWeek') },
+      { value: 'all', label: t('tabs.rateScreen.trend.rangeAllTime') },
+    ],
+    [t]
+  );
   const [showAI, setShowAI] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
   // Seed both prefs synchronously from MMKV so the deck render and settings
@@ -203,10 +209,10 @@ export default function HomeRateScreen() {
 
   const subtitle =
     state.viewMode === 'discovery'
-      ? 'Explore Genres'
+      ? t('tabs.rateScreen.subtitle.discovery')
       : state.viewMode === 'tracking'
-        ? 'My Feed'
-        : 'Top Charts';
+        ? t('tabs.rateScreen.subtitle.tracking')
+        : t('tabs.rateScreen.subtitle.trend');
 
   const headerBlock = (
     <View>
@@ -276,6 +282,7 @@ export default function HomeRateScreen() {
             weeklyAnime={state.weeklyTrendAnime}
             allTimeAnime={state.trendAnime}
             range={trendRange}
+            rangeOptions={TREND_RANGE_OPTIONS}
             onRangeChange={handleTrendRangeChange}
             pilgrimages={trendPilgrimages}
             loadingPilgrimages={loadingTrendPilgrimages}
@@ -337,6 +344,7 @@ interface TrendViewProps {
   weeklyAnime: Anime[];
   allTimeAnime: Anime[];
   range: TrendRange;
+  rangeOptions: readonly { value: TrendRange; label: string }[];
   onRangeChange: (next: TrendRange) => void;
   pilgrimages: AnitabiBangumi[];
   loadingPilgrimages: boolean;
@@ -352,6 +360,7 @@ function TrendView({
   weeklyAnime,
   allTimeAnime,
   range,
+  rangeOptions,
   onRangeChange,
   pilgrimages,
   loadingPilgrimages,
@@ -364,6 +373,7 @@ function TrendView({
 }: TrendViewProps) {
   const { theme } = useTheme();
   const trendStyles = useMemo(() => makeTrendStyles(theme), [theme]);
+  const t = useT();
 
   const anime = range === 'week' ? weeklyAnime : allTimeAnime;
   // Hero anchors to "This Week #1" so the headline stays current even when the
@@ -372,12 +382,12 @@ function TrendView({
   const rest = anime.slice(0, 10);
   const sectionTitle =
     range === 'week'
-      ? `Top ${Math.min(10, rest.length)} This Week`
-      : `Top ${Math.min(10, rest.length)} All Time`;
+      ? t('tabs.rateScreen.trend.titleWeek', { count: String(Math.min(10, rest.length)) })
+      : t('tabs.rateScreen.trend.titleAllTime', { count: String(Math.min(10, rest.length)) });
   const sectionSubtitle =
     range === 'week'
-      ? 'What everyone is watching right now'
-      : 'Highest popularity across all seasons';
+      ? t('tabs.rateScreen.trend.subtitleWeek')
+      : t('tabs.rateScreen.trend.subtitleAllTime');
 
   return (
     <ScrollView
@@ -399,7 +409,7 @@ function TrendView({
         </View>
       ) : (
         <View style={[trendStyles.heroWrap, trendStyles.heroPlaceholder]}>
-          <Text style={trendStyles.placeholderText}>Loading trends…</Text>
+          <Text style={trendStyles.placeholderText}>{t('tabs.rateScreen.trend.loadingTrends')}</Text>
         </View>
       )}
 
@@ -414,15 +424,15 @@ function TrendView({
               onPress={onSeeAllAnime}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel="See all trending anime"
+              accessibilityLabel={t('tabs.rateScreen.trend.seeAllAnimeA11y')}
               style={({ pressed }) => [trendStyles.seeAllBtn, pressed && { opacity: 0.6 }]}>
-              <Text style={trendStyles.sectionLink}>See all</Text>
+              <Text style={trendStyles.sectionLink}>{t('tabs.rateScreen.trend.seeAll')}</Text>
               <Ionicons name="chevron-forward" size={14} color={theme.accent} />
             </Pressable>
           </View>
           <View style={trendStyles.rangePillRow}>
             <TrendRangePill
-              options={TREND_RANGE_OPTIONS}
+              options={rangeOptions}
               value={range}
               onChange={onRangeChange}
             />
@@ -444,21 +454,21 @@ function TrendView({
         <View style={trendStyles.sectionHead}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={trendStyles.titleRow}>
-              <Text style={trendStyles.sectionTitle}>Trending Pilgrimages</Text>
+              <Text style={trendStyles.sectionTitle}>{t('tabs.rateScreen.trend.pilgrimagesTitle')}</Text>
               <View style={trendStyles.trendBadge}>
                 <Ionicons name="trending-up" size={10} color={theme.accent} />
-                <Text style={trendStyles.trendBadgeText}>HOT</Text>
+                <Text style={trendStyles.trendBadgeText}>{t('tabs.rateScreen.trend.hotBadge')}</Text>
               </View>
             </View>
-            <Text style={trendStyles.sectionSubtitle}>Real-world anime locations to visit</Text>
+            <Text style={trendStyles.sectionSubtitle}>{t('tabs.rateScreen.trend.pilgrimagesSubtitle')}</Text>
           </View>
           <Pressable
             onPress={onSeeAllPilgrimages}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="See all pilgrimages"
+            accessibilityLabel={t('tabs.rateScreen.trend.pilgrimagesA11y')}
             style={({ pressed }) => [trendStyles.seeAllBtn, pressed && { opacity: 0.6 }]}>
-            <Text style={trendStyles.sectionLink}>See all</Text>
+            <Text style={trendStyles.sectionLink}>{t('tabs.rateScreen.trend.seeAll')}</Text>
             <Ionicons name="chevron-forward" size={14} color={theme.accent} />
           </Pressable>
         </View>
@@ -466,7 +476,7 @@ function TrendView({
           <Skeleton.AnimeCardList horizontal count={4} paddingHorizontal={16} />
         ) : pilgrimages.length === 0 ? (
           <View style={trendStyles.pilgrimageEmpty}>
-            <Text style={trendStyles.placeholderText}>No pilgrimages available yet.</Text>
+            <Text style={trendStyles.placeholderText}>{t('tabs.rateScreen.trend.noPilgrimages')}</Text>
           </View>
         ) : (
           <ScrollView
@@ -540,6 +550,7 @@ function TrendingHeroCard({ anime, onPress }: TrendingHeroCardProps) {
   const { theme } = useTheme();
   const trendStyles = useMemo(() => makeTrendStyles(theme), [theme]);
   const accentFg = useMemo(() => readableTextOn(theme.accent), [theme.accent]);
+  const t = useT();
   const score = anime.score != null ? formatScore(anime.score) : null;
   const description = anime.description?.replace(/<[^>]+>/g, '').trim();
   return (
@@ -565,7 +576,7 @@ function TrendingHeroCard({ anime, onPress }: TrendingHeroCardProps) {
         <View style={trendStyles.heroBadgeRow}>
           <View style={trendStyles.trendBadge}>
             <Ionicons name="trending-up" size={11} color={theme.accent} />
-            <Text style={trendStyles.trendBadgeText}>TRENDING #1</Text>
+            <Text style={trendStyles.trendBadgeText}>{t('tabs.rateScreen.trend.heroTrendingBadge')}</Text>
           </View>
           {anime.episodes ? (
             <Text style={trendStyles.heroMeta}>EP {anime.episodes}</Text>
@@ -591,9 +602,9 @@ function TrendingHeroCard({ anime, onPress }: TrendingHeroCardProps) {
             onPress={onPress}
             style={({ pressed }) => [trendStyles.heroPrimaryBtn, pressed && { opacity: 0.85 }]}
             accessibilityRole="button"
-            accessibilityLabel="Open detail">
+            accessibilityLabel={t('tabs.rateScreen.trend.openA11y')}>
             <Ionicons name="play" size={14} color={accentFg} />
-            <Text style={[trendStyles.heroPrimaryText, { color: accentFg }]}>Open</Text>
+            <Text style={[trendStyles.heroPrimaryText, { color: accentFg }]}>{t('tabs.rateScreen.trend.openLabel')}</Text>
           </Pressable>
           <Pressable
             onPress={(e) => {
@@ -602,7 +613,7 @@ function TrendingHeroCard({ anime, onPress }: TrendingHeroCardProps) {
             }}
             style={({ pressed }) => [trendStyles.heroIconBtn, pressed && { opacity: 0.85 }]}
             accessibilityRole="button"
-            accessibilityLabel="Bookmark">
+            accessibilityLabel={t('tabs.rateScreen.trend.bookmarkA11y')}>
             <Ionicons name="bookmark-outline" size={18} color={theme.text.primary} />
           </Pressable>
         </View>
@@ -670,6 +681,7 @@ function TrendingPilgrimageCard({ pilgrim, rank, onPress }: TrendingPilgrimageCa
   const trendStyles = useMemo(() => makeTrendStyles(theme), [theme]);
   const themeColor = pilgrim.color || theme.accent;
   const spotPillFg = useMemo(() => readableTextOn(themeColor), [themeColor]);
+  const t = useT();
   return (
     <Pressable
       onPress={onPress}
@@ -699,7 +711,7 @@ function TrendingPilgrimageCard({ pilgrim, rank, onPress }: TrendingPilgrimageCa
       <View style={[trendStyles.pilgrimageSpotPill, { backgroundColor: `${themeColor}E6` }]}>
         <Ionicons name="location" size={10} color={spotPillFg} />
         <Text style={[trendStyles.pilgrimageSpotText, { color: spotPillFg }]}>
-          {pilgrim.pointsLength} spots
+          {t('tabs.rateScreen.trend.spotsLabel', { count: String(pilgrim.pointsLength) })}
         </Text>
       </View>
       <View style={trendStyles.pilgrimageInfo}>

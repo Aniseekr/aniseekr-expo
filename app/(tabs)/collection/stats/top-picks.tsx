@@ -5,6 +5,7 @@ import { Radius, Spacing, Typography } from '../../../../constants/DesignSystem'
 import { ThemedText, Skeleton } from '../../../../components/themed';
 import { EmptyStateView } from '../../../../components/common/EmptyStateView';
 import { StatsExhibitFrame } from '../../../../components/collection/stats/StatsExhibitFrame';
+import { useT } from '../../../../libs/i18n';
 import {
   loadUserAnimeRows,
   summarize,
@@ -13,6 +14,7 @@ import {
 
 export default function TopPicksExhibit() {
   const { theme } = useTheme();
+  const t = useT();
   const [picks, setPicks] = useState<UserAnimeRow[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,8 +41,8 @@ export default function TopPicksExhibit() {
         ? async () => {
             const lines = picks
               .slice(0, 10)
-              .map((p, i) => `${i + 1}. ${p.title ?? 'Untitled'}${p.score ? ` — ${p.score}` : ''}`);
-            await Share.share({ message: `My Top 10 Picks\n${lines.join('\n')}` });
+              .map((p, i) => `${i + 1}. ${p.title ?? t('collectionStats.topPicks.untitled')}${p.score ? ` — ${p.score}` : ''}`);
+            await Share.share({ message: `${t('collectionStats.topPicks.shareHeading')}\n${lines.join('\n')}` });
           }
         : undefined,
     [picks]
@@ -48,7 +50,7 @@ export default function TopPicksExhibit() {
 
   if (loading) {
     return (
-      <StatsExhibitFrame title="Top 10 Picks">
+      <StatsExhibitFrame title={t('collectionStats.topPicks.title')}>
         <Skeleton.PosterGrid count={6} columns={2} aspectRatio={1.5} />
       </StatsExhibitFrame>
     );
@@ -56,23 +58,23 @@ export default function TopPicksExhibit() {
 
   if (!picks || picks.length === 0) {
     return (
-      <StatsExhibitFrame title="Top 10 Picks">
+      <StatsExhibitFrame title={t('collectionStats.topPicks.title')}>
         <EmptyStateView
           icon="star-rate"
-          title="Rate to unlock"
-          description="Rate a few anime — your top 10 will line up here automatically."
+          title={t('collectionStats.topPicks.emptyTitle')}
+          description={t('collectionStats.topPicks.emptyBody')}
         />
       </StatsExhibitFrame>
     );
   }
 
   return (
-    <StatsExhibitFrame title="My Top 10 Picks" onShare={handleShare}>
+    <StatsExhibitFrame title={t('collectionStats.topPicks.titleOwned')} onShare={handleShare}>
       <ThemedText variant="bodySmall" tone="secondary">
-        A personal guide to anime worth your time
+        {t('collectionStats.topPicks.subtitle')}
       </ThemedText>
       <ThemedText variant="captionSmall" tone="tertiary" weight="700" style={{ letterSpacing: 2 }}>
-        UPDATED · {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        {t('collectionStats.topPicks.updatedPrefix')} · {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </ThemedText>
       {picks.map((p, i) => (
         <View
@@ -105,7 +107,7 @@ export default function TopPicksExhibit() {
           )}
           <View style={{ flex: 1, gap: 4 }}>
             <ThemedText variant="titleSmall" weight="700" numberOfLines={2}>
-              {p.title ?? 'Untitled'}
+              {p.title ?? t('collectionStats.topPicks.untitled')}
             </ThemedText>
             <View style={styles.metaRow}>
               {p.status ? (

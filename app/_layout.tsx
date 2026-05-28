@@ -20,6 +20,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { ThemeProvider } from '../context/ThemeContext';
 import { SubscriptionProvider } from '../context/SubscriptionContext';
+import { I18nProvider } from '../libs/i18n';
 import { notificationService } from '../libs/services/notifications/notification-service';
 import { routeForNotificationResponse } from '../libs/services/streaming/streaming-notification-route';
 import { initClarity } from '../libs/services/analytics/clarity';
@@ -163,18 +164,20 @@ export default function RootLayout() {
       <KeyboardProvider>
         <SafeAreaProvider>
           <ThemeProvider>
-            <SubscriptionProvider>
-              <StatusBar style="light" translucent={Platform.OS === 'android'} />
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="(setting)" />
-                <Stack.Screen name="anime/[id]" />
-                <Stack.Screen name="search" />
-                <Stack.Screen name="trending" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="index" />
-              </Stack>
-            </SubscriptionProvider>
+            <I18nProvider>
+              <SubscriptionProvider>
+                <StatusBar style="light" translucent={Platform.OS === 'android'} />
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="(setting)" />
+                  <Stack.Screen name="anime/[id]" />
+                  <Stack.Screen name="search" />
+                  <Stack.Screen name="trending" />
+                  <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="index" />
+                </Stack>
+              </SubscriptionProvider>
+            </I18nProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </KeyboardProvider>
