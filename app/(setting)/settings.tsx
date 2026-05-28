@@ -32,6 +32,7 @@ import {
   type QuickAction,
 } from '../../components/settings/QuickActionSheet';
 import { ThemedText, readableTextOn } from '../../components/themed';
+import { useT } from '../../libs/i18n';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import {
   loadUserPrefsSync,
@@ -89,6 +90,7 @@ const PRESET_ACCENTS: { hex: string; name: string }[] = [
 export default function SettingsScreen() {
   const { top } = useSafeAreaInsets();
   const subscription = useSubscription();
+  const t = useT();
   const {
     theme,
     themeId,
@@ -454,8 +456,8 @@ export default function SettingsScreen() {
       <LinearGradient colors={theme.gradient} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={[styles.safeArea, { paddingTop: top }]}>
         <SettingsHeader
-          title="Settings"
-          subtitle="Long-press a row for quick actions"
+          title={t('settings.title')}
+          subtitle={t('settings.longPressHint')}
           onBack={() => router.back()}
         />
 
@@ -576,34 +578,30 @@ export default function SettingsScreen() {
             </Pressable>
           ) : null}
 
-          <SettingsSection title="ACCOUNT">
+          <SettingsSection title={t('settings.sections.account')}>
             <SettingsRow
               icon="people-circle-outline"
-              label="Connected platforms"
-              value={
-                connectedCount > 0
-                  ? `${connectedCount} connected`
-                  : 'None'
-              }
+              label={t('settings.connectedPlatforms')}
+              value={connectedCount > 0 ? `${connectedCount}` : t('common.no')}
               onPress={() => router.push('/(setting)/account')}
               onLongPress={() => setActiveSheet('platforms')}
             />
             <SettingsRow
               icon="trophy-outline"
-              label="Achievements"
+              label={t('settings.achievements')}
               onPress={() => router.push('/(setting)/achievements')}
             />
           </SettingsSection>
 
-          <SettingsSection title="CONTENT & SYNC">
+          <SettingsSection title={t('settings.sections.contentSync')}>
             <SettingsRow
               icon="cloud-outline"
-              label="Browse source"
+              label={t('settings.browseSource')}
               onPress={() => router.push('/(setting)/data-source')}
             />
             <SettingsRow
               icon="play-circle-outline"
-              label="Watch platforms"
+              label={t('settings.watchPlatforms')}
               description={
                 prefs.streamingPlatforms.enabled.length > 0
                   ? `${prefs.streamingPlatforms.enabled.length} enabled · primary: ${prefs.streamingPlatforms.primary ?? 'none'}`
@@ -613,21 +611,21 @@ export default function SettingsScreen() {
             />
             <SettingsRow
               icon="server-outline"
-              label="Cache"
+              label={t('settings.cache')}
               onPress={() => router.push('/(setting)/cache')}
             />
             <SettingsRow
               icon="cloud-upload-outline"
-              label="Backup & Restore"
+              label={t('settings.backup')}
               description="iCloud · Google Drive · import old aniseeker data"
               onPress={() => router.push('/(setting)/backup')}
             />
           </SettingsSection>
 
-          <SettingsSection title="APPEARANCE">
+          <SettingsSection title={t('settings.sections.appearance')}>
             <SettingsRow
               icon="color-palette-outline"
-              label="Appearance"
+              label={t('settings.appearance.title')}
               description={`${activeThemeName} · ${THEME_MODE_LABEL[themeMode]}`}
               right={
                 <View
@@ -640,51 +638,57 @@ export default function SettingsScreen() {
               onPress={() => router.push('/(setting)/appearance')}
               onLongPress={() => setActiveSheet('appearance')}
             />
+            <SettingsRow
+              icon="language-outline"
+              label={t('settings.language')}
+              description={t('settings.languageSubtitle')}
+              onPress={() => router.push('/(setting)/language')}
+            />
           </SettingsSection>
 
-          <SettingsSection title="PREFERENCES">
+          <SettingsSection title={t('settings.sections.preferences')}>
             <SettingsSwitchRow
               icon="warning-outline"
-              label="Allow R18 content"
-              description="Show 18+ entries in seasonal lists and search"
+              label={t('settings.prefs.allowR18')}
+              description={t('settings.prefs.allowR18Desc')}
               value={prefs.allowAdultContent}
               onValueChange={handleAdultToggle}
             />
             <SettingsSwitchRow
               icon="game-controller-outline"
-              label="Include games"
-              description="Show video games in Bangumi calendar"
+              label={t('settings.prefs.includeGames')}
+              description={t('settings.prefs.includeGamesDesc')}
               value={prefs.bangumiIncludeGames}
               onValueChange={(v) => void updatePref('bangumiIncludeGames', v)}
             />
             <SettingsSwitchRow
               icon="star-outline"
-              label="Show score prominently"
-              description="Display rating in card header"
+              label={t('settings.prefs.showScore')}
+              description={t('settings.prefs.showScoreDesc')}
               value={prefs.bangumiShowScoreProminently}
               onValueChange={(v) => void updatePref('bangumiShowScoreProminently', v)}
             />
           </SettingsSection>
 
-          <SettingsSection title="NOTIFICATIONS & ABOUT">
+          <SettingsSection title={t('settings.sections.notificationsAbout')}>
             <SettingsRow
               icon="notifications-outline"
-              label="Reminders"
+              label={t('settings.reminders')}
               onPress={() => router.push('/(setting)/notifications')}
             />
             <SettingsRow
               icon="ribbon-outline"
-              label="Attribution"
+              label={t('settings.attribution')}
               onPress={() => router.push('/(setting)/attribution')}
             />
             <SettingsRow
               icon="lock-closed-outline"
-              label="Privacy policy"
+              label={t('settings.privacyLong')}
               onPress={() => router.push('/(setting)/privacy')}
             />
             <SettingsRow
               icon="document-text-outline"
-              label="Terms of service"
+              label={t('settings.termsLong')}
               onPress={() => router.push('/(setting)/terms')}
             />
           </SettingsSection>

@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { normalizeHex, useTheme, type ThemePalette } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { ThemedButton, ThemedText, readableTextOn } from '../../components/themed';
+import { useT } from '../../libs/i18n';
 
 const HUE_STOPS: [string, string, ...string[]] = [
   '#FF0000',
@@ -91,6 +92,7 @@ function rgbToHsl({ r, g, b }: RGB): HSL {
 export default function CustomColorScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useT();
   const { theme, customAccent, setCustomAccent, recentAccents } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -144,16 +146,16 @@ export default function CustomColorScreen() {
             <Ionicons name="chevron-back" size={22} color={theme.text.primary} />
           </Pressable>
           <ThemedText variant="titleLarge" weight="600">
-            Custom Color
+            {t('settings.customColor.title')}
           </ThemedText>
           <Pressable
             onPress={apply}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="Save custom color"
+            accessibilityLabel={t('settings.customColor.saveA11y')}
             style={({ pressed }) => [styles.navSave, pressed && { opacity: 0.6 }]}>
             <ThemedText variant="bodyMedium" weight="600" style={{ color: hex }}>
-              Save
+              {t('common.save')}
             </ThemedText>
           </Pressable>
         </View>
@@ -177,7 +179,7 @@ export default function CustomColorScreen() {
           </View>
 
           <SliderRow
-            label="Hue"
+            label={t('settings.customColor.hue')}
             value={hsl.h}
             suffix="°"
             min={0}
@@ -194,7 +196,7 @@ export default function CustomColorScreen() {
             onChange={(v) => setHsl({ ...hsl, h: Math.round(v) })}
           />
           <SliderRow
-            label="Saturation"
+            label={t('settings.customColor.saturation')}
             value={hsl.s}
             suffix="%"
             min={0}
@@ -214,7 +216,7 @@ export default function CustomColorScreen() {
             onChange={(v) => setHsl({ ...hsl, s: Math.round(v) })}
           />
           <SliderRow
-            label="Lightness"
+            label={t('settings.customColor.lightness')}
             value={hsl.l}
             suffix="%"
             min={0}
@@ -236,7 +238,7 @@ export default function CustomColorScreen() {
             tone="secondary"
             weight="600"
             style={styles.sectionHeader}>
-            VALUES
+            {t('settings.customColor.section.values')}
           </ThemedText>
           <View style={styles.valuesCard}>
             <View style={styles.valueRow}>
@@ -300,12 +302,12 @@ export default function CustomColorScreen() {
             tone="secondary"
             weight="600"
             style={styles.sectionHeader}>
-            RECENTLY USED
+            {t('settings.customColor.section.recent')}
           </ThemedText>
           <View style={styles.recentRow}>
             {recentAccents.length === 0 ? (
               <ThemedText variant="bodySmall" tone="tertiary">
-                Apply a color to see it here.
+                {t('settings.customColor.recentEmpty')}
               </ThemedText>
             ) : (
               recentAccents.map((c) => (
@@ -333,7 +335,7 @@ export default function CustomColorScreen() {
           </View>
 
           <ThemedButton
-            label="Apply Custom Color"
+            label={t('settings.customColor.applyCta')}
             onPress={apply}
             accent={hex}
             size="lg"

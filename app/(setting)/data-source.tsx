@@ -19,9 +19,11 @@ import {
 } from '../../libs/services/data-source-switching-coordinator';
 import { GlassCard } from '../../components/common/GlassCard';
 import { Colors, Radius, Spacing, Typography } from '../../constants/DesignSystem';
+import { useT } from '../../libs/i18n';
 
 export default function DataSourceScreen() {
   const { top } = useSafeAreaInsets();
+  const t = useT();
   const [browseSource, setBrowseSourceState] = useState<PlatformType>(
     dataSourceConfig.browseSource
   );
@@ -97,13 +99,12 @@ export default function DataSourceScreen() {
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
           </Pressable>
-          <Text style={styles.headerTitle}>Browse Source</Text>
+          <Text style={styles.headerTitle}>{t('settings.dataSourceScreen.title')}</Text>
         </View>
 
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.description}>
-            Select the platform used to power discovery and seasonal browsing. This does not change
-            which platforms sync your library.
+            {t('settings.dataSourceScreen.description')}
           </Text>
 
           {initLoading ? (
@@ -134,7 +135,7 @@ export default function DataSourceScreen() {
                         <View>
                           <Text style={styles.rowLabel}>{platform.displayName}</Text>
                           <Text style={styles.rowSubLabel}>
-                            {isSelected ? 'Active source' : 'Tap to use'}
+                            {isSelected ? t('settings.dataSourceScreen.active') : t('settings.dataSourceScreen.tapToUse')}
                           </Text>
                         </View>
                       </View>
@@ -160,7 +161,7 @@ export default function DataSourceScreen() {
           )}
 
           {switchingState.kind === 'failed' ? (
-            <Text style={styles.errorText}>Switch failed: {switchingState.error.message}</Text>
+            <Text style={styles.errorText}>{t('settings.dataSourceScreen.switchFailed', { message: switchingState.error.message })}</Text>
           ) : null}
         </ScrollView>
       </SafeAreaView>

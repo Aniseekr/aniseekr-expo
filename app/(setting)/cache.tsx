@@ -26,6 +26,7 @@ import {
   type CacheSubBucket,
   type StorageOverview,
 } from '../../libs/services/cache/cache-manager';
+import { useT } from '../../libs/i18n';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -44,16 +45,16 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(precision)} ${units[unit]}`;
 }
 
-function formatStats(stats: BucketStats): string {
+function formatStats(stats: BucketStats, t: (k: string, v?: Record<string, string | number>) => string): string {
   const parts: string[] = [];
   if (stats.bytes > 0) parts.push(formatBytes(stats.bytes));
   if (stats.entries > 0) {
-    parts.push(`${stats.entries} ${stats.entries === 1 ? 'entry' : 'entries'}`);
+    parts.push(t('settings.cacheScreen.entries', { count: stats.entries }));
   }
   if (stats.expiredEntries && stats.expiredEntries > 0) {
-    parts.push(`${stats.expiredEntries} expired`);
+    parts.push(t('settings.cacheScreen.expired', { count: stats.expiredEntries }));
   }
-  return parts.length > 0 ? parts.join(' · ') : 'Empty';
+  return parts.length > 0 ? parts.join(' · ') : t('settings.cacheScreen.empty');
 }
 
 type BucketSnapshot = {
@@ -64,6 +65,7 @@ type BucketSnapshot = {
 
 export default function CacheSettingsScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const manager = useMemo(() => CacheManager.getInstance(), []);
   const [snapshots, setSnapshots] = useState<BucketSnapshot[]>([]);
   const [overview, setOverview] = useState<StorageOverview | null>(null);
@@ -173,28 +175,28 @@ export default function CacheSettingsScreen() {
 
   return (
     <SettingsScreenLayout
-      title="Cache"
-      subtitle="Manage offline data and storage usage"
+      title={t('settings.cache')}
+      subtitle={t('settings.cacheScreen.subtitle')}
       refreshing={loading}
       onRefresh={() => void refresh()}>
-      <SettingsSection title="Storage Overview">
+      <SettingsSection title={t('settings.cacheScreen.section.overview')}>
         <SettingsRow
           icon="folder"
-          label="Cache directory"
-          description="Images, temporary files, and preloaded data"
+          label={t('settings.cacheScreen.cacheDir')}
+          description={t('settings.cacheScreen.cacheDirDesc')}
           value={overview ? formatBytes(overview.cacheDirBytes) : '...'}
         />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="description"
-          label="Document directory"
-          description="User data; never cleared by cache actions"
+          label={t('settings.cacheScreen.docDir')}
+          description={t('settings.cacheScreen.docDirDesc')}
           value={overview ? formatBytes(overview.documentDirBytes) : '...'}
         />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="storage"
-          label="Available device storage"
+          label={t('settings.cacheScreen.deviceStorage')}
           value={
             overview && overview.totalDiskBytes > 0
               ? `${formatBytes(overview.availableDiskBytes)} / ${formatBytes(overview.totalDiskBytes)}`
@@ -203,7 +205,7 @@ export default function CacheSettingsScreen() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Cache Buckets">
+      <SettingsSection title={t('settings.cacheScreen.section.buckets')}>
         {snapshots.length === 0 && loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={theme.accent} />
@@ -240,13 +242,13 @@ export default function CacheSettingsScreen() {
         )}
       </SettingsSection>
 
-      <SettingsSection title="Actions">
-        <SettingsRow icon="refresh" label="Recalculate usage" onPress={() => void refresh()} />
+      <SettingsSection title={t('settings.cacheScreen.section.actions')}>
+        <SettingsRow icon="refresh" label={t('settings.cacheScreen.recalculate')} onPress={() => void refresh()} />
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="cleaning-services"
-          label="Prune expired entries"
-          description="Only clears TTL-based cache entries that are already expired"
+          label={t('settings.cacheScreen.pruneExpired')}
+          description={t('settings.cacheScreen.pruneExpiredDesc')}
           onPress={handlePruneExpired}
         />
       </SettingsSection>
@@ -255,7 +257,7 @@ export default function CacheSettingsScreen() {
         onPress={handleClearAll}
         disabled={busy}
         accessibilityRole="button"
-        accessibilityLabel="Clear all caches"
+        accessibilityLabel={t('settings.cacheScreen.clearAll')}
         accessibilityState={{ disabled: busy }}
         style={({ pressed }) => [
           styles.dangerButton,
@@ -266,7 +268,7 @@ export default function CacheSettingsScreen() {
           },
         ]}>
         <MaterialIcons name="delete-forever" size={20} color={Colors.error} />
-        <Text style={styles.dangerLabel}>Clear all caches</Text>
+        <Text style={styles.dangerLabel}>{t('settings.cacheScreen.clearAll')}</Text>
       </Pressable>
     </SettingsScreenLayout>
   );
@@ -283,6 +285,7 @@ interface BucketRowProps {
 
 function BucketRow({ bucket, stats, hasChildren, expanded, onToggle, onClear }: BucketRowProps) {
   const { theme } = useTheme();
+  const t = useT();
   const icon = (bucket.icon ?? 'storage') as React.ComponentProps<typeof MaterialIcons>['name'];
   return (
     <Pressable
@@ -304,7 +307,7 @@ function BucketRow({ bucket, stats, hasChildren, expanded, onToggle, onClear }: 
           </Text>
         ) : null}
         <Text style={[styles.bucketStats, { color: theme.text.tertiary }]}>
-          {formatStats(stats)}
+          {formatStats(stats, t)}
         </Text>
       </View>
       <Pressable
@@ -343,6 +346,7 @@ interface SubBucketRowProps {
 
 function SubBucketRow({ child, onClear }: SubBucketRowProps) {
   const { theme } = useTheme();
+  const t = useT();
   return (
     <View style={[styles.subRow, { borderTopColor: theme.glassBorder }]}>
       <View style={styles.subIndicator}>
@@ -351,7 +355,7 @@ function SubBucketRow({ child, onClear }: SubBucketRowProps) {
       <View style={{ flex: 1 }}>
         <Text style={[styles.subLabel, { color: theme.text.primary }]}>{child.label}</Text>
         <Text style={[styles.subStats, { color: theme.text.tertiary }]}>
-          {formatStats(child.stats)}
+          {formatStats(child.stats, t)}
         </Text>
       </View>
       <Pressable
@@ -370,7 +374,7 @@ function SubBucketRow({ child, onClear }: SubBucketRowProps) {
             opacity: pressed ? 0.7 : 1,
           },
         ]}>
-        <Text style={[styles.subActionLabel, { color: theme.text.secondary }]}>Clear</Text>
+        <Text style={[styles.subActionLabel, { color: theme.text.secondary }]}>{t('settings.cacheScreen.clear')}</Text>
       </Pressable>
     </View>
   );

@@ -11,6 +11,7 @@ import {
   SettingsSection,
 } from '../../components/setting/SettingsScreenLayout';
 import { ThemedText, readableTextOn } from '../../components/themed';
+import { useT } from '../../libs/i18n';
 
 import { kvGet, kvSet } from '../../libs/services/storage/app-storage';
 import { SYNC_LAST_RUN_KEY, SYNC_PREFS_KEY } from '../../libs/services/storage/keys';
@@ -47,6 +48,7 @@ function readLastSyncSync(): Date | null {
 
 export default function SyncHubScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const [prefs, setPrefs] = useState<SyncPrefs>(readSyncPrefsSync);
   const [lastSync, setLastSync] = useState<Date | null>(readLastSyncSync);
 
@@ -65,7 +67,7 @@ export default function SyncHubScreen() {
   };
 
   return (
-    <SettingsScreenLayout title="Sync hub" subtitle="Cross-platform syncing">
+    <SettingsScreenLayout title={t('settings.syncHub')} subtitle={t('settings.syncHubScreen.subtitle')}>
       <View
         style={[
           styles.statusCard,
@@ -78,57 +80,57 @@ export default function SyncHubScreen() {
         <View style={{ flex: 1 }}>
           <View style={styles.statusTitleRow}>
             <Text style={[styles.statusTitle, { color: theme.text.primary }]}>
-              {lastSync ? `Last sync ${formatRelative(lastSync)}` : 'No sync yet'}
+              {lastSync ? t('settings.syncHubScreen.lastSync', { when: formatRelative(lastSync, t) }) : t('settings.syncHubScreen.noSync')}
             </Text>
             <View style={[styles.betaPill, { backgroundColor: theme.accent }]}>
               <ThemedText
                 variant="captionSmall"
                 weight="800"
                 style={[styles.betaPillText, { color: readableTextOn(theme.accent) }]}>
-                BETA
+                {t('settings.syncHubScreen.beta')}
               </ThemedText>
             </View>
           </View>
           <Text style={[styles.statusBody, { color: theme.text.secondary }]}>
-            Sync runs in the background when your library changes.
+            {t('settings.syncHubScreen.statusBody')}
           </Text>
         </View>
         <Pressable
           onPress={runNow}
           accessibilityRole="button"
-          accessibilityLabel="Sync now"
+          accessibilityLabel={t('settings.syncHubScreen.syncNow')}
           style={({ pressed }) => [
             styles.syncButton,
             { backgroundColor: theme.accent, opacity: pressed ? 0.85 : 1 },
           ]}>
-          <Text style={[styles.syncLabel, { color: readableTextOn(theme.accent) }]}>Sync now</Text>
+          <Text style={[styles.syncLabel, { color: readableTextOn(theme.accent) }]}>{t('settings.syncHubScreen.syncNow')}</Text>
         </Pressable>
       </View>
 
-      <SettingsSection title="Behaviour">
+      <SettingsSection title={t('settings.syncHubScreen.section.behaviour')}>
         <ToggleRow
           icon="wifi"
-          label="Wi-Fi only"
-          description="Pause syncing on cellular networks"
+          label={t('settings.syncHubScreen.wifiOnly')}
+          description={t('settings.syncHubScreen.wifiOnlyDesc')}
           value={prefs.wifiOnly}
           onChange={(v) => persist({ ...prefs, wifiOnly: v })}
         />
         <Divider />
         <ToggleRow
           icon="autorenew"
-          label="Background sync"
-          description="Periodic updates when the app is open"
+          label={t('settings.syncHubScreen.backgroundSync')}
+          description={t('settings.syncHubScreen.backgroundSyncDesc')}
           value={prefs.autoSync}
           onChange={(v) => persist({ ...prefs, autoSync: v })}
         />
       </SettingsSection>
 
-      <SettingsSection title="Conflict resolution">
+      <SettingsSection title={t('settings.syncHubScreen.section.conflict')}>
         {(
           [
-            ['newest', 'Newest wins', 'Pick whichever side has the latest update timestamp'],
-            ['local', 'Prefer this device', 'Local edits always overwrite remote'],
-            ['remote', 'Prefer remote', 'Remote always overwrites local'],
+            ['newest', t('settings.syncHubScreen.conflict.newest.label'), t('settings.syncHubScreen.conflict.newest.desc')],
+            ['local', t('settings.syncHubScreen.conflict.local.label'), t('settings.syncHubScreen.conflict.local.desc')],
+            ['remote', t('settings.syncHubScreen.conflict.remote.label'), t('settings.syncHubScreen.conflict.remote.desc')],
           ] as const
         ).map(([key, label, desc], idx, arr) => {
           const active = prefs.conflictStrategy === key;
@@ -163,25 +165,25 @@ export default function SyncHubScreen() {
         })}
       </SettingsSection>
 
-      <SettingsSection title="Linked services">
+      <SettingsSection title={t('settings.syncHubScreen.section.linked')}>
         <SettingsRow
           icon="manage-accounts"
-          label="Connected platforms"
+          label={t('settings.connectedPlatforms')}
           onPress={() => router.push('/(setting)/account')}
-          value="Manage in Account"
+          value={t('settings.syncHubScreen.manageInAccount')}
         />
         <Divider />
         <SettingsRow
           icon="cloud"
-          label="Cloud backup"
-          description="iCloud · Google Drive — full library snapshot"
+          label={t('settings.syncHubScreen.cloudBackup')}
+          description={t('settings.syncHubScreen.cloudBackupDesc')}
           onPress={() => router.push('/(setting)/backup')}
         />
         <Divider />
         <SettingsRow
           icon="restore"
-          label="Force resync from remote"
-          description="Wipes local cache and re-pulls everything"
+          label={t('settings.syncHubScreen.forceResync')}
+          description={t('settings.syncHubScreen.forceResyncDesc')}
           destructive
           onPress={runNow}
         />
@@ -235,15 +237,15 @@ function ToggleRow({
   );
 }
 
-function formatRelative(date: Date): string {
+function formatRelative(date: Date, t: (k: string, v?: Record<string, string | number>) => string): string {
   const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('settings.syncHubScreen.relative.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('settings.syncHubScreen.relative.minutes', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('settings.syncHubScreen.relative.hours', { count: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return t('settings.syncHubScreen.relative.days', { count: days });
   return date.toLocaleDateString();
 }
 

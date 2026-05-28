@@ -11,6 +11,7 @@ import {
   readableTextOn,
 } from '../../components/themed';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { useT } from '../../libs/i18n';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -26,13 +27,14 @@ interface Row {
 export default function AdvancedScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const t = useT();
 
   const syncRows: Row[] = [
     {
       key: 'sync-hub',
       icon: 'git-branch-outline',
-      label: 'Sync hub',
-      description: 'Cross-platform syncing preferences',
+      label: t('settings.syncHub'),
+      description: t('settings.advanced.syncHubDesc'),
       beta: true,
       onPress: () => router.push('/(setting)/sync-hub'),
     },
@@ -42,30 +44,30 @@ export default function AdvancedScreen() {
     {
       key: 'camera-diagnostics',
       icon: 'camera-outline',
-      label: 'Camera diagnostics',
-      description: 'Hardware capabilities + cohort classification for bug reports',
+      label: t('settings.advanced.cameraDiagnostics'),
+      description: t('settings.advanced.cameraDiagnosticsDesc'),
       onPress: () => router.push('/(setting)/camera-diagnostics'),
     },
     {
       key: 'otaku-dna',
       icon: 'finger-print-outline',
-      label: 'Otaku DNA',
-      description: 'Insights derived from your library',
+      label: t('settings.otakuDna.title'),
+      description: t('settings.advanced.otakuDnaDesc'),
       onPress: () => router.push('/(setting)/otaku-dna'),
     },
     {
-      key: 'language-priority',
+      key: 'language',
       icon: 'language-outline',
-      label: 'Title language priority',
-      description: 'Romaji, English, native, or original',
+      label: t('settings.language'),
+      description: t('settings.advanced.languageDesc'),
       beta: true,
-      onPress: () => router.push('/(setting)/language-priority'),
+      onPress: () => router.push('/(setting)/language'),
     },
     {
       key: 'import-wizard',
       icon: 'cloud-upload-outline',
-      label: 'Import wizard',
-      description: 'Bulk-import from MAL or AniList exports',
+      label: t('settings.importWizard.title'),
+      description: t('settings.advanced.importWizardDesc'),
       beta: true,
       onPress: () => router.push('/(setting)/import-wizard'),
     },
@@ -97,10 +99,10 @@ export default function AdvancedScreen() {
           </Pressable>
           <View style={styles.headerTitleWrap}>
             <ThemedText variant="titleLarge" weight="700">
-              Advanced
+              {t('settings.advanced.title')}
             </ThemedText>
             <ThemedText variant="bodySmall" tone="secondary">
-              Beta and diagnostic features
+              {t('settings.advanced.subtitle')}
             </ThemedText>
           </View>
           <View style={styles.headerSpacer} />
@@ -112,8 +114,8 @@ export default function AdvancedScreen() {
             { paddingBottom: insets.bottom + Spacing.xl * 2 },
           ]}
           showsVerticalScrollIndicator={false}>
-          <Section title="Sync" rows={syncRows} />
-          <Section title="Diagnostics" rows={diagnosticsRows} />
+          <Section title={t('settings.advanced.section.sync')} rows={syncRows} />
+          <Section title={t('settings.advanced.section.diagnostics')} rows={diagnosticsRows} />
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -179,6 +181,7 @@ function AdvancedRow({ row, divider }: { row: Row; divider: boolean }) {
 
 function BetaPill() {
   const { theme } = useTheme();
+  const t = useT();
   const fg = readableTextOn(theme.accent);
   return (
     <View style={[styles.betaPill, { backgroundColor: theme.accent }]}>
@@ -186,7 +189,7 @@ function BetaPill() {
         variant="captionSmall"
         weight="800"
         style={[styles.betaPillText, { color: fg }]}>
-        BETA
+        {t('settings.advanced.beta')}
       </ThemedText>
     </View>
   );

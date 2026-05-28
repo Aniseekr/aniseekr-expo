@@ -23,9 +23,11 @@ import {
   type StreamingPlatformId,
   type StreamingPlatformSpec,
 } from '../../libs/services/streaming/streaming-platforms';
+import { useT } from '../../libs/i18n';
 
 export default function WatchPlatformsScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const [prefs, setPrefs] = useState<StreamingPrefs>(
     () => loadUserPrefsSync().streamingPlatforms,
   );
@@ -85,29 +87,28 @@ export default function WatchPlatformsScreen() {
     : null;
   const subtitle =
     prefs.enabled.length === 0
-      ? 'No platforms picked yet'
+      ? t('settings.watchPlatformsScreen.subtitle.none')
       : primaryName
-        ? `${prefs.enabled.length} enabled · Primary: ${primaryName}`
-        : `${prefs.enabled.length} enabled`;
+        ? t('settings.watchPlatformsScreen.subtitle.withPrimary', { count: prefs.enabled.length, primary: primaryName })
+        : t('settings.watchPlatformsScreen.subtitle.count', { count: prefs.enabled.length });
 
   return (
-    <SettingsScreenLayout title="Watch platforms" subtitle={subtitle}>
+    <SettingsScreenLayout title={t('settings.watchPlatforms')} subtitle={subtitle}>
       <Text style={[styles.intro, { color: theme.text.secondary }]}>
-        Pick where you actually watch — those platforms show up first on every anime, and we’ll
-        deep-link straight into the app when it’s installed.
+        {t('settings.watchPlatformsScreen.intro')}
       </Text>
 
-      <SettingsSection title="Preferences">
+      <SettingsSection title={t('settings.watchPlatformsScreen.section.preferences')}>
         <ToggleRow
           icon="rocket-outline"
-          label="Open in app when installed"
-          description="Try the platform’s app via deep-link before falling back to the web URL."
+          label={t('settings.watchPlatformsScreen.openInApp')}
+          description={t('settings.watchPlatformsScreen.openInAppDesc')}
           value={prefs.preferAppDeepLink}
           onChange={(v) => void update({ preferAppDeepLink: v })}
         />
       </SettingsSection>
 
-      <SettingsSection title="Platforms">
+      <SettingsSection title={t('settings.watchPlatformsScreen.section.platforms')}>
         {platforms.map((spec, idx) => (
           <View key={spec.id}>
             <PlatformRow
@@ -125,7 +126,7 @@ export default function WatchPlatformsScreen() {
       </SettingsSection>
 
       <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-        Your picks live on this device only — there’s no Aniseekr server holding them.
+        {t('settings.watchPlatformsScreen.footnote')}
       </Text>
     </SettingsScreenLayout>
   );
@@ -185,6 +186,7 @@ function PlatformRow({
   onPrimary: () => void;
 }) {
   const { theme } = useTheme();
+  const t = useT();
   return (
     <Pressable
       onPress={onToggle}
@@ -208,7 +210,7 @@ function PlatformRow({
         <Text
           style={[styles.platformMeta, { color: theme.text.tertiary }]}
           numberOfLines={1}>
-          {spec.regions?.join(' · ') ?? 'Streaming service'}
+          {spec.regions?.join(' · ') ?? t('settings.watchPlatformsScreen.streamingService')}
         </Text>
       </View>
       <Pressable

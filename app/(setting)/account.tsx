@@ -15,6 +15,7 @@ import { isAuthRequiresFormError } from '../../libs/services/auth/auth-errors';
 import type { PlatformType } from '../../libs/services/auth/types';
 import { PlatformAuthSheet, PlatformAuthInput } from '../../components/auth/PlatformAuthSheet';
 import type { AuthFormKind } from '../../libs/services/auth/auth-errors';
+import { useT } from '../../libs/i18n';
 
 interface PlatformDef {
   id: PlatformType;
@@ -52,6 +53,7 @@ const HIDDEN_SHEET: SheetState = {
 
 export default function AccountScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const [connections, setConnections] = useState<ConnectionState>({} as ConnectionState);
   const [loading, setLoading] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(HIDDEN_SHEET);
@@ -186,13 +188,12 @@ export default function AccountScreen() {
   };
 
   return (
-    <SettingsScreenLayout title="Account" subtitle="Connected platforms">
+    <SettingsScreenLayout title={t('settings.account')} subtitle={t('settings.connectedPlatforms')}>
       <Text style={[styles.intro, { color: theme.text.secondary }]}>
-        Connect platforms to sync your library, ratings and progress across Aniseekr and other
-        clients.
+        {t('settings.accountScreen.intro')}
       </Text>
 
-      <SettingsSection title="Platforms">
+      <SettingsSection title={t('settings.accountScreen.section.platforms')}>
         {PLATFORMS.map((platform, idx) => {
           const connected = !!connections[platform.id];
           return (
@@ -210,7 +211,7 @@ export default function AccountScreen() {
                       styles.platformStatus,
                       { color: connected ? Colors.success : theme.text.tertiary },
                     ]}>
-                    {connected ? 'Connected' : 'Not connected'}
+                    {connected ? t('settings.accountScreen.connected') : t('settings.accountScreen.notConnected')}
                   </Text>
                 </View>
                 {connected ? (
@@ -226,7 +227,7 @@ export default function AccountScreen() {
                         opacity: pressed ? 0.7 : 1,
                       },
                     ]}>
-                    <Text style={[styles.actionLabel, { color: Colors.error }]}>Disconnect</Text>
+                    <Text style={[styles.actionLabel, { color: Colors.error }]}>{t('settings.accountScreen.disconnect')}</Text>
                   </Pressable>
                 ) : (
                   <Pressable
@@ -244,7 +245,7 @@ export default function AccountScreen() {
                     ]}>
                     <Text
                       style={[styles.actionLabel, { color: readableTextOn(theme.accent) }]}>
-                      Connect
+                      {t('settings.accountScreen.connect')}
                     </Text>
                   </Pressable>
                 )}
@@ -257,11 +258,11 @@ export default function AccountScreen() {
         })}
       </SettingsSection>
 
-      <SettingsSection title="Account actions">
+      <SettingsSection title={t('settings.accountScreen.section.actions')}>
         <SettingsRow
           icon="cloud-download"
-          label="Refresh tokens"
-          description="Re-pull authentication state from secure storage"
+          label={t('settings.accountScreen.refreshTokens')}
+          description={t('settings.accountScreen.refreshTokensDesc')}
           onPress={() => {
             hapticsBridge.tap();
             refreshAll();
@@ -270,8 +271,8 @@ export default function AccountScreen() {
         <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
         <SettingsRow
           icon="delete-forever"
-          label="Disconnect everything from this device"
-          description="Signs out of every platform and erases all stored OAuth tokens locally"
+          label={t('settings.accountScreen.disconnectAll')}
+          description={t('settings.accountScreen.disconnectAllDesc')}
           onPress={() => {
             hapticsBridge.tap();
             handleDisconnectAll();
@@ -281,10 +282,7 @@ export default function AccountScreen() {
       </SettingsSection>
 
       <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-        Aniseekr has no server-side account — your library lives only on this device. Disconnecting
-        a platform removes its OAuth token and the cached library it pulled. To fully delete data on
-        each platform, revoke access in that platform&apos;s account settings. To erase every local
-        cache, screenshot, preference and SQLite store as well, delete the app from your device.
+        {t('settings.accountScreen.footnote')}
       </Text>
 
       <PlatformAuthSheet

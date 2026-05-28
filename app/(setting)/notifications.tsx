@@ -30,6 +30,7 @@ import {
   refreshNotificationPrefs,
   saveNotificationPrefs,
 } from '../../libs/services/notifications/notification-service';
+import { useT } from '../../libs/i18n';
 
 // Storage now lives on MMKV via notification-service.saveNotificationPrefs.
 
@@ -45,11 +46,11 @@ interface PendingNotification {
 
 type GroupKey = 'today' | 'tomorrow' | 'thisWeek' | 'later';
 
-const GROUP_LABELS: Record<GroupKey, string> = {
-  today: 'Today',
-  tomorrow: 'Tomorrow',
-  thisWeek: 'Later this week',
-  later: 'Later',
+const GROUP_LABEL_KEYS: Record<GroupKey, string> = {
+  today: 'settings.notificationsScreen.group.today',
+  tomorrow: 'settings.notificationsScreen.group.tomorrow',
+  thisWeek: 'settings.notificationsScreen.group.thisWeek',
+  later: 'settings.notificationsScreen.group.later',
 };
 
 function startOfDay(d: Date): Date {
@@ -70,8 +71,8 @@ function bucketize(date?: Date): GroupKey {
   return 'later';
 }
 
-function formatScheduled(date?: Date): string {
-  if (!date) return 'Pending';
+function formatScheduled(date: Date | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+  if (!date) return t('settings.notificationsScreen.pending');
   const formatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
@@ -105,6 +106,7 @@ function extractScheduled(n: Notifications.NotificationRequest): Date | undefine
 
 export default function NotificationsScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const { permission, scheduled, requestPermission, cancelAll, refreshSchedule } =
     useNotifications();
   // Seed sync from MMKV so the toggles render in their persisted state on
@@ -187,8 +189,8 @@ export default function NotificationsScreen() {
     }
     return (Object.keys(buckets) as GroupKey[])
       .filter((k) => buckets[k].length > 0)
-      .map((k) => ({ key: k, label: GROUP_LABELS[k], items: buckets[k] }));
-  }, [pending]);
+      .map((k) => ({ key: k, label: t(GROUP_LABEL_KEYS[k]), items: buckets[k] }));
+  }, [pending, t]);
 
   const update = async (next: NotificationPreferences) => {
     hapticsBridge.selection();
@@ -248,8 +250,8 @@ export default function NotificationsScreen() {
 
   return (
     <SettingsScreenLayout
-      title="Notifications"
-      subtitle={`${pending.length} scheduled · ${permissionLabel}`}
+      title={t('settings.notifications')}
+      subtitle={t('settings.notificationsScreen.subtitle', { count: pending.length, status: permissionLabel })}
       refreshing={refreshing}
       onRefresh={onRefresh}>
       {!permission.granted ? (
@@ -264,54 +266,54 @@ export default function NotificationsScreen() {
           <MaterialIcons name="notifications-off" size={22} color={theme.accent} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.bannerTitle, { color: theme.text.primary }]}>
-              Notifications are off
+              {t('settings.notificationsScreen.banner.title')}
             </Text>
             <Text style={[styles.bannerBody, { color: theme.text.secondary }]}>
-              Allow notifications so we can remind you when episodes drop.
+              {t('settings.notificationsScreen.banner.body')}
             </Text>
           </View>
           <Pressable
             onPress={handleRequestPermission}
             accessibilityRole="button"
-            accessibilityLabel="Allow notifications"
+            accessibilityLabel={t('settings.notificationsScreen.banner.allow')}
             style={({ pressed }) => [
               styles.bannerAction,
               { backgroundColor: theme.accent, opacity: pressed ? 0.85 : 1 },
             ]}>
             <Text style={[styles.bannerActionLabel, { color: readableTextOn(theme.accent) }]}>
-              Allow
+              {t('settings.notificationsScreen.banner.allow')}
             </Text>
           </Pressable>
         </View>
       ) : null}
 
-      <SettingsSection title="What to send">
+      <SettingsSection title={t('settings.notificationsScreen.section.whatToSend')}>
         <ToggleSwitchRow
-          label="Episode reminders"
-          description="Notify me before each new episode"
+          label={t('settings.notificationsScreen.episodeReminders')}
+          description={t('settings.notificationsScreen.episodeRemindersDesc')}
           value={prefs.episodeReminders}
           onChange={(v) => update({ ...prefs, episodeReminders: v })}
           icon="notifications-active"
         />
         <Divider />
         <ToggleSwitchRow
-          label="Daily digest"
-          description="Morning recap of upcoming episodes"
+          label={t('settings.notificationsScreen.dailyDigest')}
+          description={t('settings.notificationsScreen.dailyDigestDesc')}
           value={prefs.dailyDigest}
           onChange={(v) => update({ ...prefs, dailyDigest: v })}
           icon="event-note"
         />
         <Divider />
         <ToggleSwitchRow
-          label="Achievement unlocks"
-          description="Local pings when you earn a badge"
+          label={t('settings.notificationsScreen.achievementAlerts')}
+          description={t('settings.notificationsScreen.achievementAlertsDesc')}
           value={prefs.achievementAlerts}
           onChange={(v) => update({ ...prefs, achievementAlerts: v })}
           icon="emoji-events"
         />
       </SettingsSection>
 
-      <SettingsSection title="Reminder lead time">
+      <SettingsSection title={t('settings.notificationsScreen.section.leadTime')}>
         {LEAD_OPTIONS.map((mins, idx) => (
           <View key={mins}>
             <Pressable
@@ -335,7 +337,7 @@ export default function NotificationsScreen() {
                 ) : null}
               </View>
               <Text style={[styles.leadLabel, { color: theme.text.primary }]}>
-                {mins} minutes before
+                {t('settings.notificationsScreen.leadMinutes', { mins })}
               </Text>
             </Pressable>
             {idx < LEAD_OPTIONS.length - 1 ? <Divider /> : null}
@@ -345,7 +347,9 @@ export default function NotificationsScreen() {
 
       <SettingsSection
         title={
-          pending.length > 0 ? `Scheduled reminders (${pending.length})` : 'Scheduled reminders'
+          pending.length > 0
+            ? t('settings.notificationsScreen.section.scheduledWithCount', { count: pending.length })
+            : t('settings.notificationsScreen.section.scheduled')
         }>
         {pendingLoading && pending.length === 0 ? (
           <View style={styles.pendingLoader}>
@@ -355,7 +359,7 @@ export default function NotificationsScreen() {
           <View style={styles.emptyState}>
             <MaterialIcons name="notifications-none" size={28} color={theme.text.tertiary} />
             <Text style={[styles.emptyLabel, { color: theme.text.secondary }]}>
-              No scheduled reminders
+              {t('settings.notificationsScreen.emptyState')}
             </Text>
           </View>
         ) : (
@@ -368,7 +372,7 @@ export default function NotificationsScreen() {
               ) : null}
               {group.items.map((item, idx) => (
                 <View key={item.identifier}>
-                  <ScheduledRow item={item} onDelete={() => handleDeleteOne(item.identifier)} />
+                  <ScheduledRow item={item} onDelete={() => handleDeleteOne(item.identifier)} t={t} />
                   {idx < group.items.length - 1 ? <Divider /> : null}
                 </View>
               ))}
@@ -378,16 +382,16 @@ export default function NotificationsScreen() {
         )}
       </SettingsSection>
 
-      <SettingsSection title="Manage">
+      <SettingsSection title={t('settings.notificationsScreen.section.manage')}>
         <SettingsRow
           icon="settings"
-          label="Open system settings"
+          label={t('settings.notificationsScreen.openSystemSettings')}
           onPress={() => Linking.openSettings()}
         />
         <Divider />
         <SettingsRow
           icon="delete-sweep"
-          label="Cancel all reminders"
+          label={t('settings.notificationsScreen.cancelAll')}
           destructive
           onPress={handleCancelAll}
         />
@@ -395,8 +399,7 @@ export default function NotificationsScreen() {
 
       {Platform.OS === 'android' ? (
         <Text style={[styles.footnote, { color: theme.text.tertiary }]}>
-          Android schedules reminders via the local AlarmManager. They run even if the app is
-          closed, but battery optimisations may delay them by a few minutes on some devices.
+          {t('settings.notificationsScreen.androidFootnote')}
         </Text>
       ) : null}
     </SettingsScreenLayout>
@@ -408,7 +411,7 @@ function Divider() {
   return <View style={{ height: 1, marginLeft: 56, backgroundColor: theme.glassBorder }} />;
 }
 
-function ScheduledRow({ item, onDelete }: { item: PendingNotification; onDelete: () => void }) {
+function ScheduledRow({ item, onDelete, t }: { item: PendingNotification; onDelete: () => void; t: (k: string, v?: Record<string, string | number>) => string }) {
   const { theme } = useTheme();
   const display = item.animeTitle ?? item.title;
   return (
@@ -421,7 +424,7 @@ function ScheduledRow({ item, onDelete }: { item: PendingNotification; onDelete:
           {display}
         </Text>
         <Text style={[styles.scheduledTime, { color: theme.text.secondary }]} numberOfLines={1}>
-          {formatScheduled(item.scheduledFor)}
+          {formatScheduled(item.scheduledFor, t)}
         </Text>
       </View>
       <Pressable

@@ -7,6 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { SettingsScreenLayout } from '../../components/setting/SettingsScreenLayout';
 import { ThemedButton, readableTextOn } from '../../components/themed';
+import { useT } from '../../libs/i18n';
 
 type ImportSource = 'mal' | 'anilist' | 'kitsu' | 'csv';
 type Step = 'source' | 'mode' | 'confirm';
@@ -14,61 +15,62 @@ type ConflictMode = 'merge' | 'overwrite' | 'skip';
 
 const SOURCES: {
   id: ImportSource;
-  name: string;
-  description: string;
+  nameKey: string;
+  descKey: string;
   icon: React.ComponentProps<typeof MaterialIcons>['name'];
   color: string;
 }[] = [
   {
     id: 'mal',
-    name: 'MyAnimeList XML',
-    description: 'Standard MAL export, includes scores and notes',
+    nameKey: 'settings.importWizard.source.mal.name',
+    descKey: 'settings.importWizard.source.mal.desc',
     icon: 'data-usage',
     color: '#2E51A2',
   },
   {
     id: 'anilist',
-    name: 'AniList JSON',
-    description: 'Use the official "Export user data" download',
+    nameKey: 'settings.importWizard.source.anilist.name',
+    descKey: 'settings.importWizard.source.anilist.desc',
     icon: 'public',
     color: '#02A9FF',
   },
   {
     id: 'kitsu',
-    name: 'Kitsu library',
-    description: 'JSON export from your Kitsu account settings',
+    nameKey: 'settings.importWizard.source.kitsu.name',
+    descKey: 'settings.importWizard.source.kitsu.desc',
     icon: 'collections',
     color: '#F75239',
   },
   {
     id: 'csv',
-    name: 'CSV file',
-    description: 'Generic CSV with title / score / status columns',
+    nameKey: 'settings.importWizard.source.csv.name',
+    descKey: 'settings.importWizard.source.csv.desc',
     icon: 'insert-drive-file',
     color: '#5E5CE6',
   },
 ];
 
-const MODES: { id: ConflictMode; label: string; description: string }[] = [
+const MODES: { id: ConflictMode; labelKey: string; descKey: string }[] = [
   {
     id: 'merge',
-    label: 'Merge',
-    description: 'Keep existing scores; add anything missing',
+    labelKey: 'settings.importWizard.mode.merge.label',
+    descKey: 'settings.importWizard.mode.merge.desc',
   },
   {
     id: 'overwrite',
-    label: 'Overwrite',
-    description: 'Replace local data with the imported file',
+    labelKey: 'settings.importWizard.mode.overwrite.label',
+    descKey: 'settings.importWizard.mode.overwrite.desc',
   },
   {
     id: 'skip',
-    label: 'Skip duplicates',
-    description: 'Only import series not already in your library',
+    labelKey: 'settings.importWizard.mode.skip.label',
+    descKey: 'settings.importWizard.mode.skip.desc',
   },
 ];
 
 export default function ImportWizardScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const [step, setStep] = useState<Step>('source');
   const [source, setSource] = useState<ImportSource | null>(null);
   const [mode, setMode] = useState<ConflictMode>('merge');
@@ -86,7 +88,7 @@ export default function ImportWizardScreen() {
   };
 
   return (
-    <SettingsScreenLayout title="Import wizard" subtitle="Bring your existing library across">
+    <SettingsScreenLayout title={t('settings.importWizard.title')} subtitle={t('settings.importWizard.subtitle')}>
       <View style={styles.stepIndicator}>
         {(['source', 'mode', 'confirm'] as Step[]).map((s, idx) => {
           const active = step === s;
@@ -123,7 +125,7 @@ export default function ImportWizardScreen() {
                   styles.stepLabel,
                   { color: active ? theme.text.primary : theme.text.tertiary },
                 ]}>
-                {s === 'source' ? 'Source' : s === 'mode' ? 'Mode' : 'Confirm'}
+                {s === 'source' ? t('settings.importWizard.step.source') : s === 'mode' ? t('settings.importWizard.step.mode') : t('settings.importWizard.step.confirm')}
               </Text>
               {idx < 2 ? (
                 <View
@@ -163,9 +165,9 @@ export default function ImportWizardScreen() {
                   <MaterialIcons name={s.icon} size={22} color={s.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.sourceName, { color: theme.text.primary }]}>{s.name}</Text>
+                  <Text style={[styles.sourceName, { color: theme.text.primary }]}>{t(s.nameKey)}</Text>
                   <Text style={[styles.sourceDesc, { color: theme.text.secondary }]}>
-                    {s.description}
+                    {t(s.descKey)}
                   </Text>
                 </View>
                 {active ? (
@@ -175,7 +177,7 @@ export default function ImportWizardScreen() {
             );
           })}
           <ThemedButton
-            label="Continue"
+            label={t('common.continue')}
             disabled={!source}
             onPress={() => next('mode')}
             fullWidth
@@ -213,9 +215,9 @@ export default function ImportWizardScreen() {
                   ) : null}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.modeLabel, { color: theme.text.primary }]}>{m.label}</Text>
+                  <Text style={[styles.modeLabel, { color: theme.text.primary }]}>{t(m.labelKey)}</Text>
                   <Text style={[styles.modeDesc, { color: theme.text.secondary }]}>
-                    {m.description}
+                    {t(m.descKey)}
                   </Text>
                 </View>
               </Pressable>
@@ -225,13 +227,13 @@ export default function ImportWizardScreen() {
             <View style={styles.rowItem}>
               <ThemedButton
                 variant="secondary"
-                label="Back"
+                label={t('common.back')}
                 onPress={() => next('source')}
                 fullWidth
               />
             </View>
             <View style={styles.rowItem}>
-              <ThemedButton label="Continue" onPress={() => next('confirm')} fullWidth />
+              <ThemedButton label={t('common.continue')} onPress={() => next('confirm')} fullWidth />
             </View>
           </View>
         </Animated.View>
@@ -247,33 +249,37 @@ export default function ImportWizardScreen() {
                 borderColor: theme.glassBorder,
               },
             ]}>
-            <SummaryRow label="Source" value={SOURCES.find((s) => s.id === source)?.name ?? '—'} />
+            <SummaryRow label={t('settings.importWizard.summary.source')} value={(() => {
+              const s = SOURCES.find((x) => x.id === source);
+              return s ? t(s.nameKey) : '—';
+            })()} />
             <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
             <SummaryRow
-              label="Conflict mode"
-              value={MODES.find((m) => m.id === mode)?.label ?? '—'}
+              label={t('settings.importWizard.summary.mode')}
+              value={(() => {
+                const m = MODES.find((x) => x.id === mode);
+                return m ? t(m.labelKey) : '—';
+              })()}
             />
             <View style={[styles.divider, { backgroundColor: theme.glassBorder }]} />
-            <SummaryRow label="Backup before import" value="Enabled" />
+            <SummaryRow label={t('settings.importWizard.summary.backup')} value={t('common.enabled')} />
           </View>
 
           <Text style={[styles.note, { color: theme.text.tertiary }]}>
-            Importing copies the file into the local cache, validates each row, and writes new
-            entries via the collection service. You can cancel mid-flight without affecting your
-            current library.
+            {t('settings.importWizard.note')}
           </Text>
 
           <View style={styles.row}>
             <View style={styles.rowItem}>
               <ThemedButton
                 variant="secondary"
-                label="Back"
+                label={t('common.back')}
                 onPress={() => next('mode')}
                 fullWidth
               />
             </View>
             <View style={styles.rowItem}>
-              <ThemedButton label="Start import" onPress={finish} fullWidth haptic="success" />
+              <ThemedButton label={t('settings.importWizard.startCta')} onPress={finish} fullWidth haptic="success" />
             </View>
           </View>
         </Animated.View>

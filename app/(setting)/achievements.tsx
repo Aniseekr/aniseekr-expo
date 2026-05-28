@@ -7,8 +7,10 @@ import {
   AchievementWithProgress,
 } from '../../libs/services/achievements/achievement-service';
 import { Spacing } from '../../constants/DesignSystem';
+import { useT } from '../../libs/i18n';
 
 export default function AchievementsScreen() {
+  const t = useT();
   const [items, setItems] = useState<AchievementWithProgress[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -29,7 +31,7 @@ export default function AchievementsScreen() {
   };
 
   return (
-    <SettingsScreenLayout title="Achievements" refreshing={refreshing} onRefresh={onRefresh}>
+    <SettingsScreenLayout title={t('settings.achievements')} refreshing={refreshing} onRefresh={onRefresh}>
       <View style={{ paddingBottom: Spacing.xxl }}>
         <AchievementsGallery achievements={items} />
       </View>

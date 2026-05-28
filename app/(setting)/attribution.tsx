@@ -7,11 +7,12 @@ import {
   SettingsSection,
 } from '../../components/setting/SettingsScreenLayout';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
+import { useT } from '../../libs/i18n';
 
 interface Source {
   name: string;
   url: string;
-  description: string;
+  descKey: string;
   icon: 'public' | 'data-usage' | 'language' | 'translate' | 'place' | 'collections';
 }
 
@@ -19,43 +20,43 @@ const DATA_SOURCES: Source[] = [
   {
     name: 'AniList',
     url: 'https://anilist.co/',
-    description: 'Primary anime metadata, scoring, and seasonal listings',
+    descKey: 'settings.attribution.source.anilist',
     icon: 'public',
   },
   {
     name: 'MyAnimeList',
     url: 'https://myanimelist.net/',
-    description: 'Cross-platform ratings and community lists',
+    descKey: 'settings.attribution.source.myanimelist',
     icon: 'data-usage',
   },
   {
     name: 'Bangumi',
     url: 'https://bgm.tv/',
-    description: 'Chinese-community anime database & scoring',
+    descKey: 'settings.attribution.source.bangumi',
     icon: 'translate',
   },
   {
     name: 'Kitsu',
     url: 'https://kitsu.io/',
-    description: 'Anime catalog and streaming aggregation',
+    descKey: 'settings.attribution.source.kitsu',
     icon: 'collections',
   },
   {
     name: 'Annict',
     url: 'https://annict.com/',
-    description: 'Japanese seasonal tracking',
+    descKey: 'settings.attribution.source.annict',
     icon: 'language',
   },
   {
     name: 'Jikan / MAL',
     url: 'https://jikan.moe/',
-    description: 'Open MAL REST mirror for cross-platform fallback',
+    descKey: 'settings.attribution.source.jikan',
     icon: 'data-usage',
   },
   {
     name: 'Anitabi',
     url: 'https://www.anitabi.cn/',
-    description: 'Real-world anime pilgrimage spots',
+    descKey: 'settings.attribution.source.anitabi',
     icon: 'place',
   },
 ];
@@ -64,13 +65,13 @@ const MAP_SOURCES: Source[] = [
   {
     name: 'OpenStreetMap',
     url: 'https://www.openstreetmap.org/copyright',
-    description: 'Map data © OpenStreetMap contributors, available under the ODbL',
+    descKey: 'settings.attribution.source.osm',
     icon: 'place',
   },
   {
     name: 'CARTO Basemaps',
     url: 'https://carto.com/attributions',
-    description: 'Voyager / Positron / Dark Matter raster tiles for the pilgrimage map',
+    descKey: 'settings.attribution.source.carto',
     icon: 'place',
   },
 ];
@@ -86,6 +87,7 @@ const LIBRARIES = [
 
 export default function AttributionScreen() {
   const { theme } = useTheme();
+  const t = useT();
 
   const open = (url: string) => {
     hapticsBridge.tap();
@@ -95,19 +97,18 @@ export default function AttributionScreen() {
   };
 
   return (
-    <SettingsScreenLayout title="Attribution" subtitle="The data and tools we stand on">
+    <SettingsScreenLayout title={t('settings.attribution')} subtitle={t('settings.attributionScreen.subtitle')}>
       <Text style={[styles.intro, { color: theme.text.secondary }]}>
-        Aniseekr aggregates information from these excellent sources. Tap any entry to open the
-        project page.
+        {t('settings.attributionScreen.intro')}
       </Text>
 
-      <SettingsSection title="Anime data">
+      <SettingsSection title={t('settings.attributionScreen.section.animeData')}>
         {DATA_SOURCES.map((src, idx) => (
           <View key={src.name}>
             <SettingsRow
               icon={src.icon}
               label={src.name}
-              description={src.description}
+              description={t(src.descKey)}
               onPress={() => open(src.url)}
             />
             {idx < DATA_SOURCES.length - 1 ? (
@@ -117,13 +118,13 @@ export default function AttributionScreen() {
         ))}
       </SettingsSection>
 
-      <SettingsSection title="Maps & geodata">
+      <SettingsSection title={t('settings.attributionScreen.section.maps')}>
         {MAP_SOURCES.map((src, idx) => (
           <View key={src.name}>
             <SettingsRow
               icon={src.icon}
               label={src.name}
-              description={src.description}
+              description={t(src.descKey)}
               onPress={() => open(src.url)}
             />
             {idx < MAP_SOURCES.length - 1 ? (
@@ -133,7 +134,7 @@ export default function AttributionScreen() {
         ))}
       </SettingsSection>
 
-      <SettingsSection title="Open-source libraries">
+      <SettingsSection title={t('settings.attributionScreen.section.libraries')}>
         <View style={styles.tagsRow}>
           {LIBRARIES.map((lib) => (
             <View
@@ -152,8 +153,7 @@ export default function AttributionScreen() {
       </SettingsSection>
 
       <Text style={[styles.footer, { color: theme.text.tertiary }]}>
-        Trademarks belong to their respective owners. Aniseekr is not affiliated with any of the
-        services listed above.
+        {t('settings.attributionScreen.footer')}
       </Text>
     </SettingsScreenLayout>
   );

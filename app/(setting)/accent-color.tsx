@@ -13,10 +13,12 @@ import {
 } from '../../context/ThemeContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { ThemedButton, ThemedText, readableTextOn } from '../../components/themed';
+import { useT } from '../../libs/i18n';
 
 export default function AccentColorScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const t = useT();
   const { theme, customAccent, setCustomAccent, recentAccents } = useTheme();
   const initial = customAccent ?? theme.accent.toUpperCase();
   const [pending, setPending] = useState<string>(initial);
@@ -57,11 +59,11 @@ export default function AccentColorScreen() {
             style={({ pressed }) => [styles.navBack, pressed && { opacity: 0.6 }]}>
             <Ionicons name="chevron-back" size={22} color={theme.text.primary} />
             <ThemedText variant="bodyMedium" weight="500">
-              Settings
+              {t('settings.title')}
             </ThemedText>
           </Pressable>
           <ThemedText variant="titleLarge" weight="600">
-            Accent Color
+            {t('settings.accentColor.title')}
           </ThemedText>
           <Pressable
             onPress={handleReset}
@@ -76,7 +78,7 @@ export default function AccentColorScreen() {
               pressed && customAccent ? { opacity: 0.6 } : null,
             ]}>
             <ThemedText variant="bodyMedium" tone="accent" weight="500">
-              Reset
+              {t('common.reset')}
             </ThemedText>
           </Pressable>
         </View>
@@ -85,10 +87,10 @@ export default function AccentColorScreen() {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}>
           <ThemedText variant="bodySmall" tone="secondary" style={styles.subtitle}>
-            Choose an accent color used across buttons, tabs, and highlights throughout aniseekr.
+            {t('settings.accentColor.subtitle')}
           </ThemedText>
 
-          <Section title="PRESET ACCENTS">
+          <Section title={t('settings.accentColor.section.presets')}>
             <View style={styles.presetGrid}>
               {ACCENT_PRESETS.map((preset) => (
                 <PresetSwatch
@@ -101,7 +103,7 @@ export default function AccentColorScreen() {
             </View>
           </Section>
 
-          <Section title="GRADIENT ACCENTS">
+          <Section title={t('settings.accentColor.section.gradients')}>
             <View style={styles.gradientList}>
               {ACCENT_GRADIENTS.map((g) => (
                 <GradientCard
@@ -114,7 +116,7 @@ export default function AccentColorScreen() {
             </View>
           </Section>
 
-          <Section title="RECENT">
+          <Section title={t('settings.accentColor.section.recent')}>
             <View style={styles.recentRow}>
               {recentAccents.map((hex) => (
                 <Pressable
@@ -161,7 +163,7 @@ export default function AccentColorScreen() {
             },
           ]}>
           <ThemedButton
-            label="Apply"
+            label={t('settings.accentColor.apply')}
             onPress={handleApply}
             disabled={!dirty}
             size="lg"

@@ -23,6 +23,7 @@ import { useSubscription } from '../../context/SubscriptionContext';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { ThemedButton, ThemedText, readableTextOn } from '../../components/themed';
 import { PaywallSheet } from '../../components/subscription/PaywallSheet';
+import { useT } from '../../libs/i18n';
 import {
   loadUserPrefsSync,
   patchUserPrefs,
@@ -31,16 +32,16 @@ import {
 import { useMapThemePref } from '../../hooks/useMapThemePref';
 import type { MapThemePref } from '../../libs/services/pilgrimage/map-theme-prefs';
 
-const MODES: { id: ThemeMode; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { id: 'light', label: 'Light', icon: 'sunny-outline' },
-  { id: 'dark', label: 'Dark', icon: 'moon-outline' },
-  { id: 'auto', label: 'Auto', icon: 'contrast-outline' },
+const MODE_DEFS: { id: ThemeMode; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { id: 'light', icon: 'sunny-outline' },
+  { id: 'dark', icon: 'moon-outline' },
+  { id: 'auto', icon: 'contrast-outline' },
 ];
 
-const MAP_MODES: { id: MapThemePref; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { id: 'light', label: 'Light', icon: 'map-outline' },
-  { id: 'dark', label: 'Dark', icon: 'moon-outline' },
-  { id: 'auto', label: 'Auto', icon: 'contrast-outline' },
+const MAP_MODE_DEFS: { id: MapThemePref; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { id: 'light', icon: 'map-outline' },
+  { id: 'dark', icon: 'moon-outline' },
+  { id: 'auto', icon: 'contrast-outline' },
 ];
 
 const TINT_STEPS: TintIntensity[] = ['subtle', 'balanced', 'vivid'];
@@ -49,6 +50,9 @@ export default function AppearanceScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const subscription = useSubscription();
+  const t = useT();
+  const MODES = MODE_DEFS.map((m) => ({ ...m, label: t(`settings.appearance.mode.${m.id}`) }));
+  const MAP_MODES = MAP_MODE_DEFS.map((m) => ({ ...m, label: t(`settings.appearance.mode.${m.id}`) }));
   const {
     theme,
     themeId,
@@ -124,11 +128,11 @@ export default function AppearanceScreen() {
             style={({ pressed }) => [styles.navBack, pressed && { opacity: 0.6 }]}>
             <Ionicons name="chevron-back" size={22} color={theme.text.primary} />
             <ThemedText variant="bodyMedium" weight="500">
-              Settings
+              {t('settings.title')}
             </ThemedText>
           </Pressable>
           <ThemedText variant="titleLarge" weight="600">
-            Appearance
+            {t('settings.appearance.title')}
           </ThemedText>
           <View style={{ width: 80 }} />
         </View>
@@ -143,7 +147,7 @@ export default function AppearanceScreen() {
             text={theme.text}
           />
 
-          <SectionHeader>THEME</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.theme')}</SectionHeader>
           <View style={styles.themeGrid}>
             {themes.map((palette) => (
               <ThemeCard
@@ -156,7 +160,7 @@ export default function AppearanceScreen() {
             ))}
           </View>
 
-          <SectionHeader>MODE</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.mode')}</SectionHeader>
           <View style={styles.modeRow}>
             {MODES.map((m) => (
               <ModeChip
@@ -171,12 +175,12 @@ export default function AppearanceScreen() {
             ))}
           </View>
 
-          <SectionHeader>MAP</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.map')}</SectionHeader>
           <ThemedText
             variant="captionSmall"
             tone="tertiary"
             style={{ marginTop: -8 }}>
-            Pilgrimage map theme. Defaults to light — most maps look better that way.
+            {t('settings.appearance.mapHint')}
           </ThemedText>
           <View style={styles.modeRow}>
             {MAP_MODES.map((m) => (
@@ -192,7 +196,7 @@ export default function AppearanceScreen() {
             ))}
           </View>
 
-          <SectionHeader>ACCENT</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.accent')}</SectionHeader>
           <View style={styles.presetGrid}>
             {ACCENT_PRESETS.map((p) => (
               <AccentSwatch
@@ -216,7 +220,7 @@ export default function AppearanceScreen() {
           {recentAccents.length > 0 ? (
             <View style={styles.recentRow}>
               <ThemedText variant="captionSmall" tone="secondary" weight="600">
-                RECENT
+                {t('settings.appearance.section.recent')}
               </ThemedText>
               <View style={styles.recentDots}>
                 {recentAccents.map((hex) => (
@@ -245,7 +249,7 @@ export default function AppearanceScreen() {
           <View style={styles.accentActions}>
             <ThemedButton
               variant="secondary"
-              label="Custom hex…"
+              label={t('settings.appearance.customHex')}
               icon={
                 <Ionicons name="color-wand-outline" size={16} color={theme.text.primary} />
               }
@@ -255,7 +259,7 @@ export default function AppearanceScreen() {
             {customAccent ? (
               <ThemedButton
                 variant="ghost"
-                label="Reset to theme default"
+                label={t('settings.appearance.resetToDefault')}
                 icon={
                   <Ionicons name="refresh-outline" size={16} color={theme.text.secondary} />
                 }
@@ -265,15 +269,15 @@ export default function AppearanceScreen() {
             ) : null}
           </View>
 
-          <SectionHeader>DENSITY</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.density')}</SectionHeader>
           <View style={styles.sliderCard}>
             <View style={styles.sliderHeader}>
               <View style={{ flex: 1 }}>
                 <ThemedText variant="titleMedium" weight="600">
-                  Card height
+                  {t('settings.appearance.cardHeight')}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary">
-                  Adjusts Bangumi calendar and Rate cards.
+                  {t('settings.appearance.cardHeightDesc')}
                 </ThemedText>
               </View>
               <ThemedText variant="titleMedium" weight="700">
@@ -294,15 +298,15 @@ export default function AppearanceScreen() {
             />
           </View>
 
-          <SectionHeader>ADVANCED</SectionHeader>
+          <SectionHeader>{t('settings.appearance.section.advanced')}</SectionHeader>
           <View style={styles.sliderCard}>
             <View style={styles.sliderHeader}>
               <View style={{ flex: 1 }}>
                 <ThemedText variant="titleMedium" weight="600">
-                  Tint intensity
+                  {t('settings.appearance.tintIntensity')}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary">
-                  {tintSubtitle(tintIntensity)}
+                  {tintSubtitle(tintIntensity, t)}
                 </ThemedText>
               </View>
               <View
@@ -312,7 +316,7 @@ export default function AppearanceScreen() {
                 ]}>
                 <View style={[styles.sampleDot, { backgroundColor: accent }]} />
                 <ThemedText variant="bodySmall" weight="600" style={{ color: accent }}>
-                  Sample
+                  {t('settings.appearance.sample')}
                 </ThemedText>
               </View>
             </View>
@@ -340,7 +344,7 @@ export default function AppearanceScreen() {
                   variant="captionSmall"
                   tone={s === tintIntensity ? 'accent' : 'tertiary'}
                   weight={s === tintIntensity ? '600' : '500'}>
-                  {capitalize(s)}
+                  {t(`settings.appearance.tint.${s}`)}
                 </ThemedText>
               ))}
             </View>
@@ -348,10 +352,10 @@ export default function AppearanceScreen() {
           <View style={styles.toggleCard}>
             <View style={{ flex: 1 }}>
               <ThemedText variant="titleMedium" weight="600">
-                Increase contrast
+                {t('settings.appearance.increaseContrast')}
               </ThemedText>
               <ThemedText variant="bodySmall" tone="secondary">
-                Sharper text and borders
+                {t('settings.appearance.increaseContrastDesc')}
               </ThemedText>
             </View>
             <Switch
@@ -373,7 +377,7 @@ export default function AppearanceScreen() {
             style={({ pressed }) => [styles.previewLink, pressed && { opacity: 0.6 }]}>
             <Ionicons name="eye-outline" size={14} color={theme.text.tertiary} />
             <ThemedText variant="captionSmall" tone="tertiary" weight="500">
-              See live preview
+              {t('settings.appearance.seeLivePreview')}
             </ThemedText>
           </Pressable>
         </ScrollView>
@@ -407,6 +411,7 @@ function PreviewCard({
   gradient: ThemePalette['gradient'];
   text: ThemePalette['text'];
 }) {
+  const t = useT();
   return (
     <LinearGradient
       colors={gradient}
@@ -418,10 +423,10 @@ function PreviewCard({
       </View>
       <View style={{ flex: 1 }}>
         <ThemedText variant="titleMedium" weight="700" style={{ color: text.primary }}>
-          Live preview
+          {t('settings.appearance.livePreview')}
         </ThemedText>
         <ThemedText variant="bodySmall" style={{ color: text.secondary }}>
-          Accent and surface tints update as you tap.
+          {t('settings.appearance.livePreviewDesc')}
         </ThemedText>
       </View>
       <View style={[styles.previewChip, { backgroundColor: accent }]}>
@@ -445,6 +450,7 @@ function ThemeCard({
   onPress: () => void;
 }) {
   const { theme } = useTheme();
+  const t = useT();
   return (
     <Pressable
       onPress={onPress}
@@ -492,7 +498,7 @@ function ThemeCard({
                 variant="captionSmall"
                 weight="700"
                 style={{ color: palette.accent }}>
-                Premium
+                {t('settings.appearance.premium')}
               </ThemedText>
             </View>
           ) : null}
@@ -510,7 +516,7 @@ function ModeChip({
   selected,
   onPress,
 }: {
-  mode: (typeof MODES)[number];
+  mode: { id: string; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] };
   selected: boolean;
   onPress: () => void;
 }) {
@@ -650,17 +656,14 @@ function GradientCard({
   );
 }
 
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-function tintSubtitle(t: TintIntensity) {
-  switch (t) {
+function tintSubtitle(value: TintIntensity, t: (key: string, values?: Record<string, string | number>) => string) {
+  switch (value) {
     case 'subtle':
-      return 'Calmer accent backgrounds';
+      return t('settings.appearance.tintSubtitle.subtle');
     case 'vivid':
-      return 'Stronger pops of color';
+      return t('settings.appearance.tintSubtitle.vivid');
     default:
-      return 'Default accent intensity';
+      return t('settings.appearance.tintSubtitle.balanced');
   }
 }
 

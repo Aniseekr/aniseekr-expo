@@ -49,6 +49,7 @@ import {
   BACKUP_LAST_RUN_KEY,
   BACKUP_PROVIDER_KEY,
 } from '../../libs/services/storage/keys';
+import { useT } from '../../libs/i18n';
 
 let SecureStore: {
   getItemAsync(k: string): Promise<string | null>;
@@ -109,6 +110,7 @@ const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_DRIVE_IOS_CLIENT_ID 
 
 export default function BackupScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [provider, setProvider] = useState<string>(Platform.OS === 'ios' ? 'icloud' : 'googledrive');
   const [scope, setScope] = useState<CloudScope | null>(null);
@@ -524,7 +526,7 @@ export default function BackupScreen() {
   // ---------- Render ----------
 
   return (
-    <SettingsScreenLayout title="Backup & Restore" subtitle="iCloud · Google Drive · CloudKit">
+    <SettingsScreenLayout title={t('settings.backup')} subtitle={t('settings.backupScreen.subtitle')}>
       <View
         style={[
           styles.statusCard,
@@ -537,35 +539,35 @@ export default function BackupScreen() {
           <ThemedText variant="titleLarge">{providerLabel(provider)}</ThemedText>
           <ThemedText variant="bodySmall" tone="secondary">
             {available === null
-              ? 'Checking…'
+              ? t('settings.backupScreen.status.checking')
               : available
                 ? lastBackupAt
-                  ? `Last backup ${formatRelative(lastBackupAt)}`
-                  : 'No backup yet'
+                  ? t('settings.backupScreen.status.lastBackup', { when: formatRelative(lastBackupAt, t) })
+                  : t('settings.backupScreen.status.noBackup')
                 : provider === 'googledrive'
-                  ? 'Sign in with Google below'
-                  : 'iCloud not available — check Settings → Apple ID'}
+                  ? t('settings.backupScreen.status.googleSignInPrompt')
+                  : t('settings.backupScreen.status.icloudUnavailable')}
           </ThemedText>
           <ThemedText variant="caption" tone="tertiary">
-            {scopeHint(provider, scope)}
-            {encryptionEnabled ? ' · 🔒 encrypted (AES-256-GCM)' : ''}
+            {scopeHint(provider, scope, t)}
+            {encryptionEnabled ? ` · ${t('settings.backupScreen.encryptedTag')}` : ''}
           </ThemedText>
         </View>
         {phase === 'checking' ? <ActivityIndicator color={theme.text.secondary} /> : null}
       </View>
 
       {legacyPending ? (
-        <SettingsSection title="從舊版 aniseeker 匯入">
+        <SettingsSection title={t('settings.backupScreen.legacy.title')}>
           <View style={{ padding: Spacing.sm + 2, gap: Spacing.sm }}>
             <ThemedText variant="bodySmall" tone="secondary">
-              偵測到舊版 aniseeker 的遷移資料 ({legacyPending.total} 筆)。{'\n'}
+              {t('settings.backupScreen.legacy.detected', { total: legacyPending.total })}{'\n'}
               {describeLegacyCounts(legacyPending)}
             </ThemedText>
             <ThemedText variant="caption" tone="tertiary">
-              這是舊版 SwiftUI app 留下的最小化評分 / 觀看進度資料。匯入時會先預覽差異,確認後才寫入,匯入過後不會再顯示這個區塊。
+              {t('settings.backupScreen.legacy.explainer')}
             </ThemedText>
             <ThemedButton
-              label={phase === 'downloading' || phase === 'restoring' ? '處理中…' : '匯入並覆蓋同 id 的資料'}
+              label={phase === 'downloading' || phase === 'restoring' ? t('settings.backupScreen.legacy.processing') : t('settings.backupScreen.legacy.importCta')}
               onPress={onMigrateLegacy}
               size="lg"
               fullWidth
@@ -577,11 +579,11 @@ export default function BackupScreen() {
       ) : null}
 
       {Platform.OS === 'ios' ? (
-        <SettingsSection title="Backup destination">
+        <SettingsSection title={t('settings.backupScreen.section.destination')}>
           <SettingsRow
             icon="cloud"
             label="iCloud Drive"
-            description="Native to iPhone — no sign-in needed"
+            description={t('settings.backupScreen.icloudDesc')}
             onPress={busy ? undefined : () => selectProvider('icloud')}
             rightSlot={
               provider === 'icloud' ? (
@@ -593,7 +595,7 @@ export default function BackupScreen() {
           <SettingsRow
             icon="add-to-drive"
             label="Google Drive"
-            description="Cross-platform — restorable on Android too"
+            description={t('settings.backupScreen.googleDriveDesc')}
             onPress={busy ? undefined : () => selectProvider('googledrive')}
             rightSlot={
               provider === 'googledrive' ? (
@@ -604,10 +606,10 @@ export default function BackupScreen() {
         </SettingsSection>
       ) : null}
 
-      <SettingsSection title="Backup">
+      <SettingsSection title={t('settings.backupScreen.section.backup')}>
         <View style={{ padding: Spacing.sm + 2, gap: Spacing.sm }}>
           <ThemedButton
-            label={phase === 'uploading' ? 'Uploading…' : 'Backup now'}
+            label={phase === 'uploading' ? t('settings.backupScreen.uploading') : t('settings.backupScreen.backupNow')}
             onPress={onBackupNow}
             size="lg"
             fullWidth
@@ -616,33 +618,33 @@ export default function BackupScreen() {
           />
           <ToggleRow
             icon="lock"
-            label="Encrypt backup file"
-            description="AES-256-GCM with a device key. Required to restore on the same device."
+            label={t('settings.backupScreen.encrypt')}
+            description={t('settings.backupScreen.encryptDesc')}
             value={encryptionEnabled}
             onChange={onToggleEncryption}
           />
           <ToggleRow
             icon="autorenew"
-            label="Auto-backup"
-            description={`Run automatically every ${autoBackupHours}h when the app goes to background`}
+            label={t('settings.backupScreen.autoBackup')}
+            description={t('settings.backupScreen.autoBackupDesc', { hours: autoBackupHours })}
             value={autoBackupEnabled}
             onChange={onToggleAutoBackup}
           />
         </View>
       </SettingsSection>
 
-      <SettingsSection title="Restore">
+      <SettingsSection title={t('settings.backupScreen.section.restore')}>
         <SettingsRow
           icon="cloud-download"
-          label="Restore from cloud"
-          description="Preview changes before applying"
+          label={t('settings.backupScreen.restoreFromCloud')}
+          description={t('settings.backupScreen.restoreFromCloudDesc')}
           onPress={onRestoreFromCloud}
         />
         <Divider />
         <SettingsRow
           icon="archive"
-          label="Restore from legacy aniseeker backup"
-          description="Paste migration JSON if you extracted it manually"
+          label={t('settings.backupScreen.restoreLegacy')}
+          description={t('settings.backupScreen.restoreLegacyDesc')}
           onPress={() => setShowLegacyPaste((v) => !v)}
           rightSlot={
             <MaterialIcons
@@ -673,7 +675,7 @@ export default function BackupScreen() {
               spellCheck={false}
             />
             <ThemedButton
-              label={phase === 'restoring' ? 'Restoring…' : 'Restore legacy backup'}
+              label={phase === 'restoring' ? t('settings.backupScreen.restoring') : t('settings.backupScreen.restoreLegacyCta')}
               onPress={onRestoreLegacy}
               size="md"
               fullWidth
@@ -684,22 +686,22 @@ export default function BackupScreen() {
       </SettingsSection>
 
       {Platform.OS === 'ios' ? (
-        <SettingsSection title="CloudKit sync (advanced)">
+        <SettingsSection title={t('settings.backupScreen.section.cloudkit')}>
           <SettingsRow
             icon="sync-alt"
-            label="Pull from CloudKit"
+            label={t('settings.backupScreen.cloudkitPull')}
             description={
               cloudkitAvailable
-                ? 'Only pulls folders the old app explicitly shared. For full restore, use the section above.'
-                : 'Not available — rebuild dev client with the bridge'
+                ? t('settings.backupScreen.cloudkitPullDesc')
+                : t('settings.backupScreen.cloudkitUnavailable')
             }
             onPress={cloudkitAvailable ? onImportFromCloudKit : undefined}
           />
           <Divider />
           <SettingsRow
             icon="cloud-upload"
-            label="Push current data to CloudKit"
-            description="So the old SwiftUI app on another device sees the same data"
+            label={t('settings.backupScreen.cloudkitPush')}
+            description={t('settings.backupScreen.cloudkitPushDesc')}
             onPress={cloudkitAvailable ? onPushToCloudKit : undefined}
           />
         </SettingsSection>
@@ -719,8 +721,7 @@ export default function BackupScreen() {
           ) : (
             <View style={{ padding: Spacing.sm + 2 }}>
               <ThemedText variant="bodySmall" tone="secondary">
-                Set EXPO_PUBLIC_GOOGLE_DRIVE_WEB_CLIENT_ID in .env to enable
-                Google Drive backup.
+                {t('settings.backupScreen.googleNotConfigured')}
               </ThemedText>
             </View>
           )}
@@ -750,6 +751,7 @@ function GoogleDriveAuth({
   onAuthenticated: (accessToken: string) => void | Promise<void>;
   onSignedOut: () => void;
 }) {
+  const t = useT();
   const [working, setWorking] = useState(false);
 
   // Configure the SDK once, then restore any prior session without UI.
@@ -818,12 +820,12 @@ function GoogleDriveAuth({
     <View style={{ padding: Spacing.sm + 2, gap: Spacing.sm }}>
       <ThemedText variant="bodySmall" tone="secondary">
         {hasToken
-          ? 'Signed in. Backup file lives in the hidden app-data folder of your Google Drive.'
-          : 'Sign in to enable Google Drive backup.'}
+          ? t('settings.backupScreen.google.signedIn')
+          : t('settings.backupScreen.google.signInPrompt')}
       </ThemedText>
       {hasToken ? (
         <ThemedButton
-          label="Sign out of Google"
+          label={t('settings.backupScreen.google.signOut')}
           onPress={signOut}
           size="md"
           variant="secondary"
@@ -832,7 +834,7 @@ function GoogleDriveAuth({
         />
       ) : (
         <ThemedButton
-          label={working ? 'Signing in…' : 'Sign in with Google'}
+          label={working ? t('settings.backupScreen.google.signingIn') : t('settings.backupScreen.google.signIn')}
           onPress={signIn}
           size="md"
           fullWidth
@@ -903,19 +905,19 @@ function providerLabel(provider: string): string {
   return provider;
 }
 
-function scopeHint(provider: string, scope: CloudScope | null): string {
+function scopeHint(provider: string, scope: CloudScope | null, t: (k: string, v?: Record<string, string | number>) => string): string {
   if (!scope) return '';
   if (provider === 'icloud') {
     return scope === 'documents'
-      ? 'Stored in iCloud Drive · Aniseekr (visible in Files.app)'
-      : 'Stored in the app-private iCloud container (hidden)';
+      ? t('settings.backupScreen.scope.icloudDocuments')
+      : t('settings.backupScreen.scope.icloudPrivate');
   }
   if (provider === 'googledrive') {
     return scope === 'app_data'
-      ? "Stored in Drive's app-data folder (hidden, app-private)"
-      : 'Stored in your Drive root (visible in drive.google.com)';
+      ? t('settings.backupScreen.scope.driveAppData')
+      : t('settings.backupScreen.scope.driveRoot');
   }
-  return `Scope: ${scope}`;
+  return t('settings.backupScreen.scope.other', { scope });
 }
 
 function describeSnapshot(env: BackupEnvelopeV1): string {
@@ -980,15 +982,15 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function formatRelative(date: Date): string {
+function formatRelative(date: Date, t: (k: string, v?: Record<string, string | number>) => string): string {
   const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('settings.backupScreen.relative.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('settings.backupScreen.relative.minutes', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('settings.backupScreen.relative.hours', { count: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return t('settings.backupScreen.relative.days', { count: days });
   return date.toLocaleDateString();
 }
 
