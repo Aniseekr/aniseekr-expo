@@ -43,6 +43,14 @@ export const AUTO_BACKUP_LAST_ERR_KEY = 'aniseekr.cloud.autoBackup.lastError';
 export const SYNC_PREFS_KEY = '@aniseekr/sync/prefs';
 export const SYNC_LAST_RUN_KEY = '@aniseekr/sync/lastRun';
 export const LANGUAGE_PRIORITY_KEY = '@aniseekr/title-language-priority';
+/** App UI language preference: 'auto' | 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko'. */
+export const APP_LANGUAGE_KEY = '@aniseekr/app-language';
+/** Language used to render anime vocab (genres / tags / studios). 'auto' = follow app language. */
+export const ANIME_VOCAB_LANG_KEY = '@aniseekr/anime/vocab-language';
+/** Whether to machine-translate synopsis when no localized version exists. P3 turns this on. */
+export const ANIME_AUTOTRANSLATE_KEY = '@aniseekr/anime/autotranslate-synopsis';
+/** Whether to render original text alongside every translation. */
+export const ANIME_SHOW_ORIGINAL_KEY = '@aniseekr/anime/show-original';
 export const GACHA_USER_DATA_KEY = '@gacha_user_data';
 export const RATE_NATIVE_AD_SUPPRESS_UNTIL_KEY = '@aniseekr/ads/rate-native/suppressUntil';
 /** Prefix for one-shot collection tip-dismissal flags (`@aniseekr/${tip}`). */
