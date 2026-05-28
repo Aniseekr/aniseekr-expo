@@ -416,16 +416,17 @@ export const MAP_BASE_CSS = `
 /**
  * Returns the static body markup that wraps every map. Call this inside
  * `<body>` before injecting any consumer scripts.
+ *
+ * The previous in-WebView "recenter" FAB lived here. It has been replaced by a
+ * native `<LocateFab />` so the button can use theme tokens, haptics, and the
+ * idle/following/compass state machine. The `#map-controls` container stays
+ * because spot detail still hangs zoom +/- buttons off it.
  */
 export const MAP_BASE_BODY = `
 <div id="map"></div>
 <div id="map-loading" class="map-loading"><div class="spinner"></div></div>
 <div id="map-banner" class="map-banner"><span class="dot"></span><span id="map-banner-label">Connecting…</span></div>
-<div class="map-controls" id="map-controls">
-  <div class="map-btn" data-act="re" role="button" aria-label="Recenter">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 .001 8.001A4 4 0 0 0 12 8zm9 3h-2.07A7.001 7.001 0 0 0 13 5.07V3h-2v2.07A7.001 7.001 0 0 0 5.07 11H3v2h2.07A7.001 7.001 0 0 0 11 18.93V21h2v-2.07A7.001 7.001 0 0 0 18.93 13H21v-2zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/></svg>
-  </div>
-</div>
+<div class="map-controls" id="map-controls"></div>
 `;
 
 /**
@@ -860,35 +861,61 @@ export const MAP_BASE_JS = `
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }
 
-  /**
-   * Wire shared chrome to a freshly-built map.
-   * @param {L.Map} map
-   * @param {Function} recenterFn  Called when the user taps the recenter button.
-   */
-  window.__bindMap = function(map, recenterFn) {
+  // Wire shared chrome to a freshly-built map.
+  //
+  //   @param {L.Map} map
+  //
+  //   The recenter button has moved off the WebView; recentre is now a native
+  //   FAB that calls window.__recenter(...). __bindMap therefore takes only
+  //   the map. Older callsites passed a recenterFn as the second arg — it is
+  //   silently ignored to keep them compiling during the migration.
+  //
+  //   userPanned postMessage:
+  //   Emitted on Leaflet dragstart (which covers user drag + pinch-zoom
+  //   translation but NEVER fires for programmatic setView/flyTo). Native
+  //   uses this signal to break out of follow / compass mode the moment the
+  //   user takes manual control of the camera.
+  window.__bindMap = function(map /*, recenterFn (deprecated) */) {
     loadingEl = document.getElementById('map-loading');
     bannerEl = document.getElementById('map-banner');
     bannerLabel = document.getElementById('map-banner-label');
-    // Expose for live tile swaps from native (__setTileStyle).
+    // Expose for live tile swaps from native (__setTileStyle) + __recenter.
     window.__activeMap = map;
 
     var ctrl = document.getElementById('map-controls');
     if (ctrl) {
       L.DomEvent.disableClickPropagation(ctrl);
       L.DomEvent.disableScrollPropagation(ctrl);
-      ctrl.addEventListener('click', function(e){
-        var node = e.target;
-        while (node && node !== ctrl && !node.getAttribute('data-act')) node = node.parentNode;
-        var act = node && node.getAttribute ? node.getAttribute('data-act') : null;
-        if (act === 're' && typeof recenterFn === 'function') recenterFn();
-      });
     }
+
+    map.on('dragstart', function(){
+      window.__post({ type: 'userPanned' });
+    });
 
     // Online/offline browser events fire inside WebViews on most platforms.
     if (typeof window.addEventListener === 'function') {
       window.addEventListener('online', function(){ offlineOnly ? setBanner('Offline cache mode — cached tiles only', 'offline') : setBanner('Back online', 'warn'); });
       window.addEventListener('offline', function(){ setBanner('Offline — showing cached tiles', 'offline'); });
     }
+  };
+
+  // Pan/zoom the map to a target location. Used by the native locate FAB to
+  // drive the map from outside the WebView. zoom defaults to a walking-scale
+  // framing so "where am I?" answers without zooming back out to the whole
+  // prefecture. animate=false is honoured for the silent recentres a
+  // following state machine fires on each GPS update.
+  window.__recenter = function(lat, lng, zoom, opts) {
+    if (!window.__activeMap) return;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return;
+    var targetZoom = typeof zoom === 'number' ? zoom : 15;
+    var animate = !opts || opts.animate !== false;
+    try {
+      if (animate) {
+        window.__activeMap.flyTo([lat, lng], targetZoom, { duration: 0.4 });
+      } else {
+        window.__activeMap.setView([lat, lng], targetZoom, { animate: false });
+      }
+    } catch (e) {}
   };
 })();
 `;

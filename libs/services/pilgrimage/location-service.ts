@@ -109,6 +109,54 @@ export class LocationService {
   }
 
   /**
+   * Synchronous accessor for the in-memory cache. Used on the render path so
+   * the locate FAB can paint a stale-but-known user dot on frame 1 instead of
+   * showing nothing while a fresh fix resolves. Returns `null` when nothing
+   * has been cached yet (cold start before any successful `getCurrentLocation`
+   * or `getLastKnown` call).
+   */
+  getCached(): LatLng | null {
+    if (!this.cached) return null;
+    if (this.now() - this.cached.at >= this.cacheTtlMs) return null;
+    return this.cached.value;
+  }
+
+  /**
+   * Best-effort "where were we last?" without prompting for permission and
+   * without spinning up GPS. Used to seed the user dot on first paint so the
+   * FAB doesn't sit on "no location" for the ~1–3 s a cold fix takes. Reads
+   * the OS's last-known position (which itself can be a few minutes stale);
+   * returns `null` when the OS has nothing.
+   *
+   * Skipping the permission prompt is deliberate — we only want to use this
+   * when permission has already been granted. Callers that need to *request*
+   * permission still go through `getCurrentLocation`.
+   */
+  async getLastKnown(): Promise<LatLng | null> {
+    try {
+      const status = await this.module.getForegroundPermissionsAsync();
+      if (status.status !== 'granted') return null;
+    } catch {
+      return null;
+    }
+    try {
+      const fix = await this.module.getLastKnownPositionAsync({
+        maxAge: this.cacheTtlMs,
+      });
+      if (!fix) return null;
+      const value: LatLng = {
+        latitude: fix.coords.latitude,
+        longitude: fix.coords.longitude,
+      };
+      this.cached = { value, at: this.now() };
+      return value;
+    } catch (err) {
+      console.warn('[LocationService] getLastKnown failed:', err);
+      return null;
+    }
+  }
+
+  /**
    * Resolve the user's current coordinates.
    * Returns the cached value when fresh, otherwise queries the OS.
    * Returns `null` when permission is denied or GPS is unavailable.
