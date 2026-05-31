@@ -250,7 +250,6 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
           <View style={StyleSheet.absoluteFill} pointerEvents="auto">
             <MapSurface
               ref={hostRef}
-              engine="maplibre"
               markers={maplibreMarkers}
               styleUrl={styleUrl}
               user={

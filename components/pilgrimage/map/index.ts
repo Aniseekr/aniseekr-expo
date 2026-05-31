@@ -11,7 +11,6 @@ export type {
   BBox,
   LatLng,
   Viewport,
-  MapEngineId,
   MapSurfaceHandle,
   MapSurfaceProps,
 } from '../../../libs/services/pilgrimage/map-engine/types';

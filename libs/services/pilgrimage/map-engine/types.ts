@@ -91,9 +91,6 @@ export interface MapWaypoint {
   label?: string;
 }
 
-/** Which renderer backs a surface. `leaflet` is temporary rollout-safety (D11). */
-export type MapEngineId = 'maplibre' | 'leaflet';
-
 /**
  * Imperative handle the screens drive. 1:1 with today's Hub/Spot handles
  * (`recenter` + `setHeading`) plus the generalised focus/fit/visited methods —

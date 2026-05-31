@@ -139,7 +139,6 @@ const SpotMapViewImpl = forwardRef<SpotMapViewHandle, SpotMapViewProps>(function
   return (
     <View style={[styles.container, style]} testID="pilgrimage-spot-map">
       <MapSurface
-        engine="maplibre"
         ref={maplibreRef}
         markers={markers}
         styleUrl={styleUrl}
