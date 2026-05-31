@@ -3,7 +3,7 @@
 - **Date:** 2026-05-31
 - **Status:** In progress — code on branch `perf/pilgrimage-map-cold-open` (not merged to main)
 - **Goal:** faster pilgrimage map, primarily **cold-open** (`libs/services/pilgrimage/*`, `app/(tabs)/pilgrimage/*`)
-- **Related:** [`2026-05-30-pilgrimage-map-native-switchable-design.md`](./2026-05-30-pilgrimage-map-native-switchable-design.md) — the proposed MapLibre+Leaflet native-switchable pivot (awaiting decision; may supersede the WebView-host direction for the online path).
+- **Related:** [`2026-05-30-pilgrimage-map-maplibre-migration-design.md`](./2026-05-30-pilgrimage-map-maplibre-migration-design.md) — the **MapLibre migration** design (decision made 2026-05-31: replace Leaflet with a single MapLibre engine; offline via MapLibre-native pointed at OpenFreeMap → our R2). Supersedes this WebView-host direction.
 
 > Root cause recap: each of the 3 map surfaces mounts its **own** WebView and cold-parses **~200 KB** of inlined Leaflet JS on every open (the stable origin caches *tiles*, not the inline script). Secondary: ~160 KB `*.data.json` eager-parsed at import; `map.tsx` 11-`useState` root (Rule 9); hub does full marker `replace` per filter/search.
 
@@ -44,13 +44,15 @@ Note: W5-B's win is **amortize** (pay parse once at idle), not **eliminate**. Go
 
 ---
 
-## 🔀 Pending decision — native-switchable pivot
+## 🔀 Decision made (2026-05-31) — MapLibre migration (switchable dropped)
 
-The companion spec proposes: **MapLibre Native** (online, eliminates the parse) + **Leaflet kept as the offline engine** (reuse the Cache-API tile cache) behind an engine-neutral `MapSurface`/`MapEngineContract`, with an Auto/MapLibre/Leaflet setting; plus GPX + 導覽.
+The companion spec's *switchable two-engine* proposal was **dropped**. Decision: **replace Leaflet with a single MapLibre Native engine**; **offline = MapLibre-native** (ambient cache + `createPack`) pointed at a **multi-source chain (OpenFreeMap now → our Worker+R2 read-through cache later)**; Leaflet is **deleted** after migration. Rationale: MapLibre v11 *does* have native offline — the old "MapLibre is online-only, keep Leaflet for offline" premise was false, so two engines forever was needless. See the migration design doc.
 
-**How it reframes the work above (nothing wasted):**
+**How it reframes the work above:**
 - W1 / W4 are engine-agnostic → stay.
-- W5-A (`HubMapWebView`) → becomes the seed of the `LeafletEngine` adapter.
-- W5-B + the reload fix → become the **Leaflet/offline-adapter keep-alive** — because on-location (poor signal → Leaflet) still cold-parses 200 KB, and MapLibre is online-only, so the keep-alive is exactly what the offline path needs.
+- W5-A (`HubMapWebView`) → can seed a temporary `LeafletEngine` adapter for per-surface rollout safety, then is deleted.
+- W5-B keep-alive + the reload fix were justified by "MapLibre is online-only, so the offline/Leaflet path still needs WebView keep-alive" — **that justification no longer holds** (MapLibre offlines natively; Leaflet is being removed).
 
-**Gating risk for the pivot:** `@maplibre/maplibre-react-native` on **Expo 54 / RN 0.81 / React 19 / New Arch** (needs config plugin + dev-client/prebuild). Prove it renders with a minimal spike **before** building the abstraction around it.
+> **🟡 Open question for the user:** does the `perf/pilgrimage-map-cold-open` keep-alive work (W5-B, Device-verify B, pre-warm C) still earn its place as an **interim** cold-open win *before* MapLibre lands, or is it superseded by the migration? Decide this before investing more in Device-verify B / pre-warm C.
+
+**Gating risk for the migration:** `@maplibre/maplibre-react-native` v11 on **Expo 54 / RN 0.81 / New Arch** — confirmed compatible (v11 is New-Arch-only; needs config plugin + dev-client/prebuild, already satisfied via AdMob). Still prove it renders + acceptable binary size with a minimal spike on the smallest surface (`SpotMapView`) **before** building the abstraction around it.
