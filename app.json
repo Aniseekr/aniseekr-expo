@@ -11,6 +11,7 @@
       "tsconfigPaths": true
     },
     "plugins": [
+      "@maplibre/maplibre-react-native",
       "./plugins/with-vibration-bridge.js",
       "./plugins/with-clarity-proguard.js",
       "./plugins/with-storekit-config.js",
