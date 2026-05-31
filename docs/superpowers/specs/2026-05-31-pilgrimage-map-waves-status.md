@@ -76,12 +76,19 @@ Verifiable foundation landed via TDD — every commit is `tsc --noEmit` + lint +
 **Device-gated remainder** (cannot be verified headlessly — this is the P1 spike):
 1. Prebuild a dev client; flip the flag to `'maplibre'` on `SpotMapView` and confirm it renders (OpenFreeMap style, markers, user puck, camera) + acceptable binary-size delta.
 2. Confirm/fix the OpenFreeMap style slugs in `map-source-prefs.ts` (`positron`/`dark`) against OFM's live catalog — the D7 override means this needs no app release.
+2b. **Privacy posture:** with MapLibre enabled, every device fetches tiles directly from the 3rd-party OpenFreeMap endpoint (viewport coordinates → their servers, no API key/PII, but real IP + areas browsed). Document this in the privacy policy before flipping the flag; the Phase-2 self-hosted R2 Worker removes the 3rd-party hop entirely.
 3. Wire the 3 surfaces onto `<MapSurface engine={flag} leafletFallback={…existing…} markers={…via normalize.ts…}>` (smallest-first), per the per-surface plan from the constraints workflow.
 4. Post-validation: port full per-kind marker rendering (anime balloons, gold 88 pins, spot bubble/dot, visited flips, cluster picker) from the placeholder circles; then delete the Leaflet path (spec P4).
 
 ### Per-surface wiring plan (from constraints workflow `w722ikyal`)
 
-`MapSurface` ref-delegation fix already landed (`b7ba8f5`), so the parent's ref works in both modes. Sequence smallest/safest first:
+`MapSurface` ref-delegation fix already landed (`b7ba8f5`), so the parent's ref works in both modes. Sequence smallest/safest first.
+
+**Shared (all surfaces) — resolve `styleUrl`, don't drop dark/auto + the override.** The engine's internal fallback is hardcoded light; each surface MUST pass a resolved `styleUrl` or MapLibre silently ignores the user's map-theme (dark/auto) and the D7 source override (the Leaflet path honours both today). Each surface already has `mapThemePref` + `effectiveMode` in scope:
+```ts
+const styleUrl = resolveMapStyleUrl(resolveMapMode(mapThemePref, effectiveMode), loadMapStyleOverrideSync());
+```
+and subscribe to `subscribeMapThemePref` + `subscribeMapStyleOverride` so the style repaints in place on change.
 
 1. **SpotMapView** — the one live ref consumer (`app/(tabs)/pilgrimage/[animeId].tsx:570` via `spotMapRef`).
    - markers: `sceneMarkerToMapMarker` (its `SceneMarkerInput` == the existing `MapMarkerPayload`).
