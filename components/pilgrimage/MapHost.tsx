@@ -31,6 +31,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -46,6 +47,20 @@ import {
   type HubMapWebViewHandle,
   type RegionBounds,
 } from './HubMapWebView';
+import { MapSurface, type MapSurfaceHandle } from './map';
+import { hubMarkerToMapMarker } from '../../libs/services/pilgrimage/map-engine/normalize';
+import {
+  loadMapStyleOverrideSync,
+  resolveMapStyleUrl,
+  subscribeMapStyleOverride,
+} from '../../libs/services/pilgrimage/map-source-prefs';
+import { resolveMapMode } from '../../libs/services/pilgrimage/map-theme-prefs';
+import { useMapThemePref } from '../../hooks/useMapThemePref';
+import {
+  loadMapEngineSync,
+  subscribeMapEngine,
+} from '../../libs/services/pilgrimage/map-engine-prefs';
+import { CLUSTER_DISABLE_AT } from '../../libs/services/pilgrimage/map-engine/cluster-style';
 
 // Portal host id — the claiming screen teleports its overlays here (via
 // <Portal hostName={MAP_PORTAL_HOST}>) so they render in the SAME layer as the
@@ -107,9 +122,26 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
   // App-level theme used only while UNCLAIMED, so the host still pre-warms
   // tiles with sane chrome. Once a screen claims, its own theme is pushed
   // through config.theme (the provider can't know the claiming screen's theme).
-  const { theme: appTheme } = useTheme();
+  const { theme: appTheme, effectiveMode } = useTheme();
+  const { pref: mapThemePref } = useMapThemePref();
 
-  const hostRef = useRef<HubMapWebViewHandle>(null);
+  // Engine rollout flag (default 'leaflet'). While 'leaflet', MapSurface renders
+  // the HubMapWebView fallback below byte-for-byte; flipping to 'maplibre' routes
+  // the same config through the native engine. map.tsx is unaware either way.
+  const [engine, setEngine] = useState(loadMapEngineSync);
+  useEffect(() => subscribeMapEngine(setEngine), []);
+
+  // Resolved MapLibre style URL (D7 seam) — mirrors each surface's resolution so
+  // the native hub honours the user's map-theme pref + source override.
+  const [styleOverride, setStyleOverride] = useState(loadMapStyleOverrideSync);
+  useEffect(() => subscribeMapStyleOverride(setStyleOverride), []);
+  const styleUrl = resolveMapStyleUrl(resolveMapMode(mapThemePref, effectiveMode), styleOverride);
+
+  // hostRef points at MapSurface (the delegating handle) so claim/recenter/
+  // setHeading reach whichever engine is live; leafletHandleRef is the
+  // HubMapWebView's own handle, which MapSurface delegates to while 'leaflet'.
+  const hostRef = useRef<MapSurfaceHandle>(null);
+  const leafletHandleRef = useRef<HubMapWebViewHandle>(null);
 
   // active=false → unclaimed (empty markers, app theme). We keep config in a
   // single state object so a claim/update is one setState and one re-render;
@@ -199,6 +231,26 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
 
   const { config } = state;
 
+  // MapLibre hub markers — 1:1 from the same HubMapMarker[] the leaflet path uses.
+  const maplibreMarkers = useMemo(
+    () => config.markers.map(hubMarkerToMapMarker),
+    [config.markers]
+  );
+
+  // MapLibre: focus the camera on the selected anime; fly to a chosen region.
+  // No-ops while 'leaflet' (the WebView drives its own focusBangumiId /
+  // flyBoundsRequest props; the delegating handle has no focus/fitBounds there).
+  useEffect(() => {
+    if (engine !== 'maplibre' || config.focusBangumiId == null) return;
+    const m = config.markers.find((mk) => mk.bangumiId === config.focusBangumiId);
+    if (m) hostRef.current?.focus?.({ lat: m.lat, lng: m.lng, zoom: 11 });
+  }, [engine, config.focusBangumiId, config.markers]);
+
+  useEffect(() => {
+    if (engine !== 'maplibre' || !config.flyBoundsRequest) return;
+    hostRef.current?.fitBounds?.(config.flyBoundsRequest.bounds);
+  }, [engine, config.flyBoundsRequest]);
+
   return (
     <PortalProvider>
       <MapHostContext.Provider value={value}>
@@ -218,18 +270,38 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
               empty-map taps). The parent View gates visibility/interactivity;
               this stays a plain always-auto holder. */}
           <View style={StyleSheet.absoluteFill} pointerEvents="auto">
-            <HubMapWebView
+            <MapSurface
               ref={hostRef}
-              markers={config.markers}
-              replaceKey={config.replaceKey}
-              userLocation={config.userLocation}
-              ringColor={config.ringColor}
-              theme={config.theme}
-              focusBangumiId={config.focusBangumiId}
-              flyBoundsRequest={config.flyBoundsRequest}
-              onAnimePress={onAnimePress}
+              engine={engine}
+              leafletRef={leafletHandleRef}
+              leafletFallback={
+                <HubMapWebView
+                  ref={leafletHandleRef}
+                  markers={config.markers}
+                  replaceKey={config.replaceKey}
+                  userLocation={config.userLocation}
+                  ringColor={config.ringColor}
+                  theme={config.theme}
+                  focusBangumiId={config.focusBangumiId}
+                  flyBoundsRequest={config.flyBoundsRequest}
+                  onAnimePress={onAnimePress}
+                  onBoundsChange={onBoundsChange}
+                  onUserPan={onUserPan}
+                />
+              }
+              markers={maplibreMarkers}
+              styleUrl={styleUrl}
+              user={
+                config.userLocation
+                  ? { lat: config.userLocation.latitude, lng: config.userLocation.longitude }
+                  : null
+              }
+              clusterDisableAtZoom={CLUSTER_DISABLE_AT.hub}
+              onMarkerPress={(m) => {
+                if (m.bangumiId != null) onAnimePress(m.bangumiId);
+              }}
               onBoundsChange={onBoundsChange}
-              onUserPan={onUserPan}
+              onPanned={onUserPan}
             />
           </View>
           {/* Claiming screen's overlays teleport here — rendered AFTER the
