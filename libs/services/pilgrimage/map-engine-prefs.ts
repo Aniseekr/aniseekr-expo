@@ -13,8 +13,8 @@ import type { MapEngineId } from './map-engine/types';
 
 export { MAP_ENGINE_STORAGE_KEY };
 
-/** Stay on Leaflet until MapLibre is proven on-device. */
-export const DEFAULT_MAP_ENGINE: MapEngineId = 'leaflet';
+/** MapLibre is now the engine; Leaflet is being removed. */
+export const DEFAULT_MAP_ENGINE: MapEngineId = 'maplibre';
 
 function isMapEngineId(value: unknown): value is MapEngineId {
   return value === 'maplibre' || value === 'leaflet';

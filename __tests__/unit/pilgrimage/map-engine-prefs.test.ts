@@ -21,9 +21,9 @@ beforeEach(() => {
 });
 
 describe('DEFAULT_MAP_ENGINE', () => {
-  it('defaults to leaflet so the app is unchanged until the MapLibre device spike', () => {
-    expect(DEFAULT_MAP_ENGINE).toBe('leaflet');
-    expect(loadMapEngineSync()).toBe('leaflet');
+  it('defaults to maplibre (Leaflet is being removed)', () => {
+    expect(DEFAULT_MAP_ENGINE).toBe('maplibre');
+    expect(loadMapEngineSync()).toBe('maplibre');
   });
 });
 
@@ -36,7 +36,7 @@ describe('loadMapEngine / setMapEngine', () => {
 
   it('ignores an unknown value and keeps the default', async () => {
     appStorage.set('aniseekr.pilgrimage.mapEngine.v1', 'bogus');
-    expect(loadMapEngineSync()).toBe('leaflet');
+    expect(loadMapEngineSync()).toBe('maplibre');
   });
 });
 
