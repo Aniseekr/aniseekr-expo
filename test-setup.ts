@@ -42,20 +42,40 @@ mock.module('react-native-reanimated', () => {
     FadeOut: animationBuilder,
     FadeOutDown: animationBuilder,
     runOnJS: (fn: (...args: unknown[]) => unknown) => fn,
-    makeMutable: <T,>(value: T) => ({ value }),
+    makeMutable: <T>(value: T) => ({ value }),
     useAnimatedReaction: () => undefined,
     useAnimatedScrollHandler: (handlers: unknown) => handlers,
     useAnimatedStyle: (fn: () => unknown) => fn(),
-    useSharedValue: <T,>(value: T) => ({ value }),
-    withDelay: <T,>(_delayMs: number, value: T) => value,
-    withRepeat: <T,>(value: T) => value,
-    withSequence: <T,>(...values: T[]) => values[values.length - 1],
-    withSpring: <T,>(value: T) => value,
-    withTiming: <T,>(value: T) => value,
+    useSharedValue: <T>(value: T) => ({ value }),
+    withDelay: <T>(_delayMs: number, value: T) => value,
+    withRepeat: <T>(value: T) => value,
+    withSequence: <T>(...values: T[]) => values[values.length - 1],
+    withSpring: <T>(value: T) => value,
+    withTiming: <T>(value: T) => value,
     interpolate: (value: number) => value,
     interpolateColor: (_value: number, _input: number[], output: string[]) => output[0],
   };
 });
+
+// @maplibre/maplibre-react-native — native module. The published package isn't
+// loadable under raw bun (native bindings), so stub the components + managers
+// the MapLibre engine uses; tests that transitively import a wired pilgrimage
+// surface then don't crash. No test renders a real map.
+mock.module('@maplibre/maplibre-react-native', () => ({
+  Map: animatedPassthrough('MLMap'),
+  Camera: animatedPassthrough('MLCamera'),
+  GeoJSONSource: animatedPassthrough('MLGeoJSONSource'),
+  Layer: animatedPassthrough('MLLayer'),
+  UserLocation: animatedPassthrough('MLUserLocation'),
+  Marker: animatedPassthrough('MLMarker'),
+  ViewAnnotation: animatedPassthrough('MLViewAnnotation'),
+  Images: animatedPassthrough('MLImages'),
+  OfflineManager: {
+    createPack: async () => undefined,
+    getPacks: async () => [],
+    invalidatePack: async () => undefined,
+  },
+}));
 
 // AsyncStorage in-memory shim
 const asyncStorageMemory = new Map<string, string>();
