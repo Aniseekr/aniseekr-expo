@@ -24,7 +24,7 @@ describe('resolveMarkerVisual — city88 gold pin', () => {
     expect(v.shape).toBe('gold88');
     expect(v.width).toBe(36);
     expect(v.height).toBe(45);
-    expect(v.anchor).toEqual({ x: 0.5, y: 1 });
+    expect(v.anchor).toBe('bottom');
     expect(v.badge).toEqual({ text: '#7', kind: 'id88' });
     expect(v.showStar).toBe(true);
     expect(v.visited).toBe(false);
@@ -37,7 +37,7 @@ describe('resolveMarkerVisual — spot bubble', () => {
     expect(v.shape).toBe('balloon');
     expect(v.width).toBe(48);
     expect(v.height).toBe(57);
-    expect(v.anchor).toEqual({ x: 0.5, y: 1 });
+    expect(v.anchor).toBe('bottom');
     expect(v.badge).toEqual({ text: 'EP 2', kind: 'ep' });
     expect(v.visited).toBe(true);
     expect(v.showStar).toBe(false);
@@ -50,7 +50,7 @@ describe('resolveMarkerVisual — spot dot', () => {
     expect(v.shape).toBe('dot');
     expect(v.width).toBe(24);
     expect(v.height).toBe(24);
-    expect(v.anchor).toEqual({ x: 0.5, y: 0.5 });
+    expect(v.anchor).toBe('center');
     expect(v.badge).toBeNull();
     expect(v.visited).toBe(true);
   });

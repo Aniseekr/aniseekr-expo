@@ -15,22 +15,26 @@ export interface MarkerBadge {
   kind: 'ep' | 'pts' | 'id88';
 }
 
+/** MapLibre `<Marker anchor>` value: which point of the view sits on the coord. */
+export type MarkerAnchor = 'bottom' | 'center';
+
 export interface MarkerVisual {
   shape: MarkerShape;
   width: number;
   height: number;
-  /** Fractional anchor within the box ({0.5,1} = bottom tip, {0.5,0.5} = centre). */
-  anchor: { x: number; y: number };
+  /** 'bottom' = tail tip on the coord (balloon/pin); 'center' = dot centred. */
+  anchor: MarkerAnchor;
   ringColor: string;
   visited: boolean;
   badge: MarkerBadge | null;
   showStar: boolean;
 }
 
-// iconSize/iconAnchor from the Leaflet markers, expressed as fractional anchors.
-const BALLOON = { width: 48, height: 57, anchor: { x: 0.5, y: 1 } }; // [48,57] anchor [24,57]
-const DOT = { width: 24, height: 24, anchor: { x: 0.5, y: 0.5 } }; //   [24,24] anchor [12,12]
-const GOLD88 = { width: 36, height: 45, anchor: { x: 0.5, y: 1 } }; //  [36,45] anchor [18,45]
+// iconSize/iconAnchor from the Leaflet markers ([48,57]@[24,57], [24,24]@[12,12],
+// [36,45]@[18,45]) → MapLibre string anchors.
+const BALLOON = { width: 48, height: 57, anchor: 'bottom' as const };
+const DOT = { width: 24, height: 24, anchor: 'center' as const };
+const GOLD88 = { width: 36, height: 45, anchor: 'bottom' as const };
 
 /**
  * Resolve a neutral marker to its on-map visual. `defaultMode` is the surface's

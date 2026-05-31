@@ -119,6 +119,8 @@ export interface MapSurfaceProps {
   /** Default rendering for markers that don't carry their own `markerMode`. */
   markerMode?: MapMarkerMode;
   visitedIds?: readonly string[];
+  /** Zoom at which clustering stops (Leaflet `disableClusteringAtZoom`); per-surface. */
+  clusterDisableAtZoom?: number;
   /** Style/source URL (resolved via `map-source-prefs.resolveMapStyleUrl`). */
   styleUrl?: string;
   /** On-location offline-only mode (Leaflet path today). */

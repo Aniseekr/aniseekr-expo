@@ -1,57 +1,124 @@
-// MapLibre Native engine for the pilgrimage map (migration spec §4.2, D1/D3).
+// MapLibre Native engine for the pilgrimage map (migration spec §4.2, D1/D3) —
+// the single runtime engine that replaces Leaflet across all surfaces.
 //
-// STATUS: type-correct spike, device-render UNVERIFIED. This compiles + lints
-// here, but MapLibre is a native module — it cannot render in a headless/CI
-// environment. It must be validated on a prebuilt dev client (spec §15, the P1
-// gating spike). It is reached only when the engine flag is flipped to
-// 'maplibre' (default is 'leaflet'); the shipping app is unaffected until then.
+// Renders full Leaflet parity from the engine-neutral model: per-kind rich
+// markers (anime balloon, Tourism-88 gold pin, spot bubble/dot, visited flip)
+// via view-based <Marker>s, JS clustering (supercluster) with dot/numbered
+// bubbles + multi-id cluster picker, a heading-cone user puck, plus the
+// imperative handle (recenter/focus/fitBounds/setHeading/updateVisited) and
+// onPanned/onBoundsChange. The parity *logic* lives in unit-tested helpers
+// (marker-style, cluster-style, viewport, use-clustered-markers); this file is
+// the native glue.
 //
-// Scope of this spike: prove the map renders with our source, shows markers,
-// the user puck, and that the imperative handle drives the camera. The full
-// per-kind rendering (anime balloons, gold 88 pins, spot bubble/dot, visited
-// flips, cluster picker), plus onBoundsChange + multi-id onClusterPress, are
-// deliberately deferred to post-spike — markers here render as colour-coded
-// circles via a clustered GeoJSON source.
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+// STATUS: device-render is the one remaining gate — MapLibre is a native module
+// that cannot render headlessly (spec §15). Validate on a prebuilt dev client.
+//
+// Offline: MapLibre's automatic ambient cache reproduces Leaflet's
+// cache-as-you-browse; explicit `offlineOnly` / per-region `createPack` UX is
+// reserved (spec P3), so `offlineOnly` is accepted but not yet enforced here.
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import {
-  Map as MapLibreMap,
-  Camera,
-  GeoJSONSource,
-  Layer,
-  UserLocation,
-  type CameraRef,
-  type MapRef,
-} from '@maplibre/maplibre-react-native';
+import { Map as MapLibreMap, Camera, Marker, type CameraRef, type MapRef } from '@maplibre/maplibre-react-native';
 
-import type {
-  MapMarker,
-  MapSurfaceHandle,
-  MapSurfaceProps,
-} from '../../../../libs/services/pilgrimage/map-engine/types';
-import { markersToFeatureCollection } from '../../../../libs/services/pilgrimage/map-engine/feature-collection';
+import type { BBox, MapMarker, MapSurfaceHandle, MapSurfaceProps } from '../../../../libs/services/pilgrimage/map-engine/types';
 import { resolveMapStyleUrl } from '../../../../libs/services/pilgrimage/map-source-prefs';
-import { ON_DARK } from '../../../themed/contrast';
+import { resolveMarkerVisual } from '../../../../libs/services/pilgrimage/map-engine/marker-style';
+import {
+  CLUSTER_DISABLE_AT,
+  clusterMaxZoom,
+  clusterTapAction,
+} from '../../../../libs/services/pilgrimage/map-engine/cluster-style';
+import {
+  bboxToBounds,
+  boundsToBBox,
+  leavesToBBox,
+} from '../../../../libs/services/pilgrimage/map-engine/viewport';
+import {
+  clusterLeaves,
+  useClusteredMarkers,
+  type ClusterViewport,
+} from '../../../../libs/services/pilgrimage/map-engine/use-clustered-markers';
+import { NativeMapMarker } from './markers/NativeMapMarker';
+import { ClusterBubble } from './markers/ClusterBubble';
+import { UserPuck } from './markers/UserPuck';
 
-const MARKER_SOURCE_ID = 'pilgrimage-markers';
 /** Whole-Japan overview as [lng, lat] (MapLibre uses lng-first coordinates). */
 const DEFAULT_CENTER: [number, number] = [138.0, 36.5];
+/** Recompute clusters + emit bounds only on settle, not per frame (Rule 9). */
+const BOUNDS_DEBOUNCE_MS = 300;
 
 export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(function MapLibreEngine(
-  { markers, user, center, zoom = 5, styleUrl, onMarkerPress, onPanned },
+  {
+    markers,
+    user,
+    center,
+    zoom = 5,
+    markerMode = 'bubble',
+    visitedIds,
+    clusterDisableAtZoom = CLUSTER_DISABLE_AT.default,
+    styleUrl,
+    controlsBottomOffset = 0,
+    onMarkerPress,
+    onClusterPress,
+    onPanned,
+    onBoundsChange,
+  },
   ref
 ) {
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Coarse, settle-time viewport (zoom + bbox): drives clustering + bounds emit.
+  const [viewport, setViewport] = useState<ClusterViewport>({ zoom, bbox: null });
+  // Imperative heading (compass cone) + visited override — kept off props/render
+  // path so the locate FAB and visited toggles don't churn the parent (Rule 9).
+  const [heading, setHeadingState] = useState<number | null>(user?.heading ?? null);
+  const [visitedOverride, setVisitedOverride] = useState<readonly string[] | null>(null);
 
   const byId = useMemo(() => {
     const map = new Map<string, MapMarker>();
     markers.forEach((m) => map.set(m.id, m));
     return map;
   }, [markers]);
-  const shape = useMemo(() => markersToFeatureCollection(markers), [markers]);
+
+  // updateVisited(ids) / visitedIds prop flip a spot marker's visited flag
+  // without rebuilding the whole source.
+  const effectiveMarkers = useMemo(() => {
+    const ids = visitedOverride ?? visitedIds;
+    if (!ids) return markers;
+    const set = new Set(ids);
+    return markers.map((m) => (m.kind === 'spot' ? { ...m, visited: set.has(m.id) } : m));
+  }, [markers, visitedIds, visitedOverride]);
+
+  const { index, items } = useClusteredMarkers(effectiveMarkers, viewport, {
+    maxZoom: clusterMaxZoom(clusterDisableAtZoom),
+  });
+
   const styleURL = styleUrl ?? resolveMapStyleUrl('light', null);
   const initialCenter: [number, number] = center ? [center.lng, center.lat] : DEFAULT_CENTER;
+
+  const refreshViewport = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      const [z, bounds] = await Promise.all([map.getZoom(), map.getBounds()]);
+      const box = boundsToBBox(bounds);
+      setViewport({ zoom: z, bbox: box });
+      onBoundsChange?.(box);
+    } catch {
+      // Map torn down between the event and the async read — ignore.
+    }
+  }, [onBoundsChange]);
+
+  const scheduleViewportRefresh = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void refreshViewport(), BOUNDS_DEBOUNCE_MS);
+  }, [refreshViewport]);
+
+  const fitBox = useCallback((box: BBox, animate: boolean) => {
+    cameraRef.current?.fitBounds(bboxToBounds(box), { duration: animate ? 400 : 0 });
+  }, []);
 
   useImperativeHandle(
     ref,
@@ -62,14 +129,30 @@ export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(func
           zoom: z,
           duration: opts?.animate === false ? 0 : 500,
         }),
-      // No-op: <UserLocation heading> renders the device-heading arrow
-      // natively, so the manual heading push the Leaflet path needed is
-      // unnecessary. Reserved for a future custom puck.
-      setHeading: () => {},
+      setHeading: (deg) => setHeadingState(deg),
       focus: (target) =>
         cameraRef.current?.flyTo({ center: [target.lng, target.lat], zoom: target.zoom }),
+      fitBounds: (box, opts) => fitBox(box, opts?.animate !== false),
+      updateVisited: (ids) => setVisitedOverride(ids),
     }),
-    []
+    [fitBox]
+  );
+
+  const handleClusterPress = useCallback(
+    (clusterId: number, count: number) => {
+      const leaves = clusterLeaves(index, clusterId);
+      // Big cluster → zoom to fit its members; small → hand the picker its markers.
+      if (clusterTapAction(count) === 'zoom') {
+        const box = leavesToBBox(leaves);
+        if (box) fitBox(box, true);
+        return;
+      }
+      const picked = leaves
+        .map((l) => byId.get(l.id))
+        .filter((m): m is MapMarker => m != null);
+      if (picked.length) onClusterPress?.(picked);
+    },
+    [index, byId, onClusterPress, fitBox]
   );
 
   return (
@@ -78,40 +161,46 @@ export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(func
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         mapStyle={styleURL}
+        attributionPosition={{ bottom: 8 + controlsBottomOffset, right: 8 }}
+        logoPosition={{ bottom: 8 + controlsBottomOffset, left: 8 }}
         onRegionWillChange={(e) => {
-          // Only a genuine user drag/pinch should drop follow/compass — not our
-          // own easeTo/flyTo. ViewStateChangeEvent carries the interaction flag.
+          // Only a genuine drag/pinch drops follow/compass — not our easeTo/flyTo.
           if (e.nativeEvent.userInteraction) onPanned?.();
-        }}>
-        {/* initialViewState applies ONCE on load; every later move goes through
-            the imperative handle (easeTo/flyTo) so marker/user re-renders never
-            re-issue a setStop that snaps the viewport back (Rule 9). */}
+        }}
+        onRegionDidChange={scheduleViewportRefresh}
+        onDidFinishLoadingMap={() => void refreshViewport()}>
+        {/* initialViewState applies once; later moves go through the handle so
+            marker/user re-renders never snap the viewport back (Rule 9). */}
         <Camera ref={cameraRef} initialViewState={{ center: initialCenter, zoom }} />
-        <GeoJSONSource
-          id={MARKER_SOURCE_ID}
-          data={shape}
-          cluster
-          clusterRadius={48}
-          onPress={(event) => {
-            const id = event.nativeEvent?.features?.[0]?.properties?.id as string | undefined;
-            const marker = id ? byId.get(id) : undefined;
-            if (marker) onMarkerPress?.(marker);
-          }}>
-          <Layer
-            id={`${MARKER_SOURCE_ID}-circle`}
-            type="circle"
-            // `style` (camelCase) is v11's convenience form — it works + typechecks.
-            // v12 will require `paint`/`layout` with kebab-case style-spec keys
-            // ('circle-radius', …); migrate during the post-spike per-kind rework.
-            style={{
-              circleRadius: 7,
-              circleColor: ['get', 'color'],
-              circleStrokeWidth: 2,
-              circleStrokeColor: ON_DARK,
-            }}
-          />
-        </GeoJSONSource>
-        {user ? <UserLocation heading accuracy /> : null}
+        {items.map((it) => {
+          if (it.type === 'cluster') {
+            return (
+              <Marker key={`c:${it.clusterId}`} lngLat={[it.lng, it.lat]} anchor="center">
+                <ClusterBubble
+                  count={it.count}
+                  color={it.color}
+                  zoom={viewport.zoom}
+                  onPress={() => handleClusterPress(it.clusterId, it.count)}
+                />
+              </Marker>
+            );
+          }
+          const m = byId.get(it.id);
+          if (!m) return null;
+          return (
+            <Marker
+              key={`m:${it.id}`}
+              lngLat={[it.lng, it.lat]}
+              anchor={resolveMarkerVisual(m, markerMode).anchor}>
+              <NativeMapMarker marker={m} defaultMode={markerMode} onPress={onMarkerPress} />
+            </Marker>
+          );
+        })}
+        {user ? (
+          <Marker lngLat={[user.lng, user.lat]} anchor="center">
+            <UserPuck heading={heading} />
+          </Marker>
+        ) : null}
       </MapLibreMap>
     </View>
   );

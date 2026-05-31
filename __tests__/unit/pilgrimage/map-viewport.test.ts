@@ -7,9 +7,9 @@ import {
   leavesToBBox,
 } from '../../../libs/services/pilgrimage/map-engine/viewport';
 
-describe('boundsToBBox (MapLibre visibleBounds [[E,N],[W,S]] → BBox)', () => {
-  it('splits the NE/SW corners into named edges', () => {
-    expect(boundsToBBox([[139.9, 35.8], [139.6, 35.5]])).toEqual({
+describe('boundsToBBox (MapLibre getBounds [west,south,east,north] → BBox)', () => {
+  it('names the tuple edges', () => {
+    expect(boundsToBBox([139.6, 35.5, 139.9, 35.8])).toEqual({
       north: 35.8,
       east: 139.9,
       south: 35.5,

@@ -3,9 +3,9 @@
 // unit-testable without a native render.
 import type { BBox, LatLng } from './types';
 
-/** MapLibre `getVisibleBounds()` → BBox. Returns [[E,N],[W,S]] (NE then SW corner). */
-export function boundsToBBox(visibleBounds: [[number, number], [number, number]]): BBox {
-  const [[east, north], [west, south]] = visibleBounds;
+/** MapLibre `getBounds()` → BBox. LngLatBounds is the tuple [west, south, east, north]. */
+export function boundsToBBox(bounds: readonly [number, number, number, number]): BBox {
+  const [west, south, east, north] = bounds;
   return { north, east, south, west };
 }
 
