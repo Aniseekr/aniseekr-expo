@@ -86,7 +86,7 @@ export function clusterItemsFor(
 export function clusterLeaves(
   index: Supercluster<LeafProps, ClusterAgg>,
   clusterId: number
-): Array<{ id: string; lat: number; lng: number }> {
+): { id: string; lat: number; lng: number }[] {
   return index.getLeaves(clusterId, Infinity).map((f) => ({
     id: f.properties.id,
     lat: f.geometry.coordinates[1],
@@ -103,7 +103,10 @@ export function useClusteredMarkers(
 ): { index: Supercluster<LeafProps, ClusterAgg>; items: RenderedClusterItem[] } {
   const radius = opts?.radius ?? CLUSTER_RADIUS_PX;
   const maxZoom = opts?.maxZoom ?? 16;
-  const index = useMemo(() => buildClusterIndex(markers, radius, maxZoom), [markers, radius, maxZoom]);
+  const index = useMemo(
+    () => buildClusterIndex(markers, radius, maxZoom),
+    [markers, radius, maxZoom]
+  );
   const items = useMemo(
     () => clusterItemsFor(index, viewport),
     // eslint-disable-next-line react-hooks/exhaustive-deps

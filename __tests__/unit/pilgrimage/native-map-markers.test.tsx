@@ -21,7 +21,12 @@ const marker = (over: Partial<MapMarker>): MapMarker => ({
 describe('NativeMapMarker', () => {
   it('anime balloon shows the cover photo + points badge', () => {
     const tree = render(NativeMapMarker, {
-      marker: marker({ kind: 'anime', color: '#FF5577', image: 'https://img/c.jpg', pointsLength: 12 }),
+      marker: marker({
+        kind: 'anime',
+        color: '#FF5577',
+        image: 'https://img/c.jpg',
+        pointsLength: 12,
+      }),
     });
     expect(findAll(tree, (n) => n.type === 'Image').length).toBe(1);
     expect(getAllText(tree)).toContain('12');
@@ -69,6 +74,8 @@ describe('UserPuck', () => {
       findAll(withHeading, (n) => n.props.accessibilityLabel === 'heading-cone').length
     ).toBeGreaterThan(0);
     const followOnly = render(UserPuck, { heading: null });
-    expect(findAll(followOnly, (n) => n.props.accessibilityLabel === 'heading-cone').length).toBe(0);
+    expect(findAll(followOnly, (n) => n.props.accessibilityLabel === 'heading-cone').length).toBe(
+      0
+    );
   });
 });

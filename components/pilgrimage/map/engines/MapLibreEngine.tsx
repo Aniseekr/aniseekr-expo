@@ -18,9 +18,20 @@
 // reserved (spec P3), so `offlineOnly` is accepted but not yet enforced here.
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Map as MapLibreMap, Camera, Marker, type CameraRef, type MapRef } from '@maplibre/maplibre-react-native';
+import {
+  Map as MapLibreMap,
+  Camera,
+  Marker,
+  type CameraRef,
+  type MapRef,
+} from '@maplibre/maplibre-react-native';
 
-import type { BBox, MapMarker, MapSurfaceHandle, MapSurfaceProps } from '../../../../libs/services/pilgrimage/map-engine/types';
+import type {
+  BBox,
+  MapMarker,
+  MapSurfaceHandle,
+  MapSurfaceProps,
+} from '../../../../libs/services/pilgrimage/map-engine/types';
 import { resolveMapStyleUrl } from '../../../../libs/services/pilgrimage/map-source-prefs';
 import { resolveMarkerVisual } from '../../../../libs/services/pilgrimage/map-engine/marker-style';
 import {
@@ -147,9 +158,7 @@ export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(func
         if (box) fitBox(box, true);
         return;
       }
-      const picked = leaves
-        .map((l) => byId.get(l.id))
-        .filter((m): m is MapMarker => m != null);
+      const picked = leaves.map((l) => byId.get(l.id)).filter((m): m is MapMarker => m != null);
       if (picked.length) onClusterPress?.(picked);
     },
     [index, byId, onClusterPress, fitBox]

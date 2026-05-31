@@ -33,7 +33,9 @@ describe('resolveMarkerVisual — city88 gold pin', () => {
 
 describe('resolveMarkerVisual — spot bubble', () => {
   it('is a 48x57 balloon with an EP badge, anchored at the tail tip', () => {
-    const v = resolveMarkerVisual(base({ kind: 'spot', episode: 2, markerMode: 'bubble', visited: true }));
+    const v = resolveMarkerVisual(
+      base({ kind: 'spot', episode: 2, markerMode: 'bubble', visited: true })
+    );
     expect(v.shape).toBe('balloon');
     expect(v.width).toBe(48);
     expect(v.height).toBe(57);

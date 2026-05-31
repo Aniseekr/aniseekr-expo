@@ -87,12 +87,7 @@ export interface MapHostContextValue {
   /** Give up ownership. The WebView stays mounted so re-claim is instant. */
   release: () => void;
   /** Imperative camera recenter — forwarded to the live HubMapWebView handle. */
-  recenter: (
-    lat: number,
-    lng: number,
-    zoom?: number,
-    opts?: { animate?: boolean }
-  ) => void;
+  recenter: (lat: number, lng: number, zoom?: number, opts?: { animate?: boolean }) => void;
   /** Push the device heading (or null to clear the cone) into the WebView. */
   setHeading: (deg: number | null) => void;
 }
@@ -126,20 +121,18 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
   // active=false → unclaimed (empty markers, app theme). We keep config in a
   // single state object so a claim/update is one setState and one re-render;
   // HubMapWebView only re-injects from it, never remounts.
-  const [state, setState] = useState<{ active: boolean; config: MapHostConfig }>(
-    () => ({
-      active: false,
-      config: {
-        markers: [],
-        replaceKey: 'idle',
-        userLocation: null,
-        ringColor: appTheme.accent,
-        theme: appTheme,
-        focusBangumiId: null,
-        flyBoundsRequest: null,
-      },
-    })
-  );
+  const [state, setState] = useState<{ active: boolean; config: MapHostConfig }>(() => ({
+    active: false,
+    config: {
+      markers: [],
+      replaceKey: 'idle',
+      userLocation: null,
+      ringColor: appTheme.accent,
+      theme: appTheme,
+      focusBangumiId: null,
+      flyBoundsRequest: null,
+    },
+  }));
 
   // Handlers in a ref: the host's WebView props read from these via stable
   // wrappers below, so swapping in fresh useCallback identities from the
@@ -180,12 +173,9 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => (prev.active ? { ...prev, active: false } : prev));
   }, []);
 
-  const recenter = useCallback<MapHostContextValue['recenter']>(
-    (lat, lng, zoom, opts) => {
-      hostRef.current?.recenter(lat, lng, zoom, opts);
-    },
-    []
-  );
+  const recenter = useCallback<MapHostContextValue['recenter']>((lat, lng, zoom, opts) => {
+    hostRef.current?.recenter(lat, lng, zoom, opts);
+  }, []);
 
   const setHeading = useCallback<MapHostContextValue['setHeading']>((deg) => {
     hostRef.current?.setHeading(deg);
@@ -194,10 +184,7 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
   // Stable wrappers — read the latest handler from the ref so the WebView's
   // onAnimePress/onBoundsChange/onUserPan props never change identity (no
   // remount) yet always call the claiming screen's current callbacks.
-  const onAnimePress = useCallback(
-    (id: number) => handlersRef.current.onAnimePress(id),
-    []
-  );
+  const onAnimePress = useCallback((id: number) => handlersRef.current.onAnimePress(id), []);
   const onBoundsChange = useCallback(
     (bounds: BoundingBox) => handlersRef.current.onBoundsChange(bounds),
     []
@@ -212,10 +199,7 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
   const { config } = state;
 
   // MapLibre hub markers — 1:1 from the same HubMapMarker[] the leaflet path uses.
-  const maplibreMarkers = useMemo(
-    () => config.markers.map(hubMarkerToMapMarker),
-    [config.markers]
-  );
+  const maplibreMarkers = useMemo(() => config.markers.map(hubMarkerToMapMarker), [config.markers]);
 
   // Focus the camera on the selected anime; fly to a chosen region.
   useEffect(() => {

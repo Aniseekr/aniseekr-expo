@@ -6,7 +6,10 @@
 import { memo } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { MapMarker, MapMarkerMode } from '../../../../../libs/services/pilgrimage/map-engine/types';
+import type {
+  MapMarker,
+  MapMarkerMode,
+} from '../../../../../libs/services/pilgrimage/map-engine/types';
 import {
   resolveMarkerVisual,
   VISITED_COLOR,

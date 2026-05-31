@@ -13,9 +13,8 @@ import { MapLibreEngine } from './engines/MapLibreEngine';
 /** Public prop name kept stable for call sites; identical to MapSurfaceProps. */
 export type MapSurfaceComponentProps = MapSurfaceProps;
 
-export const MapSurface = forwardRef<MapSurfaceHandle, MapSurfaceProps>(function MapSurface(
-  props,
-  ref
-) {
-  return <MapLibreEngine ref={ref} {...props} />;
-});
+export const MapSurface = forwardRef<MapSurfaceHandle, MapSurfaceProps>(
+  function MapSurface(props, ref) {
+    return <MapLibreEngine ref={ref} {...props} />;
+  }
+);
