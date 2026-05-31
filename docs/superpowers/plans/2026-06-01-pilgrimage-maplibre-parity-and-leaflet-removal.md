@@ -144,3 +144,29 @@
 - Per stage: full `bun test` + `tsc --noEmit` green before commit.
 - Stage 5: lint, repo-wide leaflet grep clean, `expo prebuild --no-install` config-plugin check.
 - **Remaining human gate (device):** prebuild a dev client, run the app, confirm each surface renders + the 6-point feel checklist (markers/visited/heading/cluster tap/bounds-lazy-load/touch). Reverting the Stage-4 deletion commits restores Leaflet if the device pass fails.
+
+---
+
+## Outcome (2026-06-01) — DONE
+
+**Leaflet is fully removed; MapLibre is the single engine.** Landed in 17 staged commits (`5ea4fb1..HEAD`), each `bunx tsc --noEmit` + `bun test` green. The migration adds **zero** new test failures across the full 1210-test suite (the only 4 failures — `AnitabiService` PILG-005..008 — are **pre-existing on the baseline `5ea4fb1`**, unrelated to maps).
+
+### What landed
+- **Engine:** `MapLibreEngine` rewritten from placeholder circles to full parity — per-kind `<Marker>` views (`NativeMapMarker`: anime balloon + pts badge, gold Tourism-88 pin + star + #id, spot bubble/dot + EP badge + visited green), JS clustering via **supercluster** (`ClusterBubble` dot/numbered, dominant-colour, "1.2k"), `UserPuck` pulse + heading cone, `onBoundsChange` (debounced 300 ms), multi-id `onClusterPress` (small→picker, large→fit), `fitBounds`, `updateVisited`, real `setHeading`, `controlsBottomOffset`. Parity *logic* extracted into unit-tested pure modules (`marker-style`, `cluster-style`, `viewport`, `use-clustered-markers`) — 35 new map tests.
+- **Surfaces:** `SpotMapView` collapsed to maplibre-only (750→~230 LOC). Hub wired via `MapHost` → `MapSurface` with `map.tsx` **unchanged** (still drives `host.claim/update/recenter/setHeading`); `MapHost` retained as the warm keep-alive wrapper (now holds a native map, not a WebView).
+- **Deletions:** `leaflet-map.ts`, `leaflet-assets.ts` (198 KB generated), `HubMapWebView.tsx`, `PilgrimageMapView.tsx` (dead), `MapHost` leaflet path, `delegating-handle.ts`, `map-engine-prefs.ts`, `scripts/bundle-leaflet.mjs` + postinstall/`bundle:leaflet` entries, `MapEngineId`/engine flag, and the `leaflet`/`leaflet.markercluster`/`react-native-webview` deps. `MapSurface` collapsed to a thin pass-through.
+
+### Scope refinements made during execution (vs the plan above)
+- **T0.2/T0.3 dropped:** the data model + `byId` leaf-resolution were already sufficient — no `inCollection` field, no enriched GeoJSON properties needed.
+- **`MapHost` kept** (collapsed to maplibre-only) instead of deleted, so `map.tsx`/`_layout.tsx` stay unchanged and warm re-entry is preserved.
+- **`offlineOnly`** is accepted but documents-only (ambient cache covers cache-as-you-browse parity; explicit cache-only / `createPack` is the reserved P3 work).
+
+### Device-gated remainder (the one human step — cannot be verified headlessly)
+Prebuild a dev client and eyeball each surface: marker fidelity, visited flips, heading-cone feel, cluster dot↔numbered + tap, hub bounds-lazy-load + region fly + touch in the portal layer, binary-size delta. `git revert` of the Stage-4 deletion commits restores Leaflet if the device pass regresses. Also confirm the OFM style slugs (`positron`/`dark`) against OFM's live catalog (D7 override needs no release).
+
+### Known minor gaps / notes
+- **Hub one-time auto-snap-to-user** on first GPS fix (old WebView behaviour) not replicated — the locate FAB covers user-centring; left out to avoid an untestable camera-moving effect.
+- **Clustering** uses one supercluster pixel radius (≈ Leaflet's mid-zoom 38–50 band) rather than Leaflet's per-zoom curve — dot/numbered visuals + tap behaviour match; clustering geometry is approximate (supercluster builds all zooms from one radius).
+- **Repo-wide `bun run lint` fails on pre-existing issues** (the gitignored generated `ios/` dir is linted + widespread pre-existing prettier dirt in app files) — *unrelated to this migration*. The migration's own files are `tsc`-clean, `bun test`-green, eslint-error-free, and prettier-clean.
+- A few **explanatory comments** still say "Leaflet"/"WebView": provenance comments ("ported from the Leaflet `__makeClusterGroup`") are accurate and kept; a handful of stale terminology comments in pre-existing prettier-dirty files (`map.tsx`, `_layout.tsx`, `MapHost` type docs) were left to avoid reformatting those whole files.
+- **GPX (P5), 導覽 (P6), `createPack` offline UX (P3), Phase-2 Worker+R2 (P7)** remain reserved (net-new, not Leaflet parity).

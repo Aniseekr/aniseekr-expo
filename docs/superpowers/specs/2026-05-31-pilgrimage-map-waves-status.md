@@ -1,7 +1,9 @@
 # Pilgrimage Map Perf — Waves Status & Remaining Work
 
+> ✅ **Superseded & resolved 2026-06-01.** The MapLibre migration this doc anticipated is **done**: Leaflet (the WebView + ~200 KB inlined JS that this whole doc was about) is **deleted**, replaced by a single native MapLibre engine with full feature parity, landed in 17 staged commits (`tsc`/`bun test` green). The WebView-host cold-open waves (W5-B keep-alive, Device-verify B, pre-warm C) are **moot** — there's no WebView parse left to amortize; `MapHost` now keeps a native map warm instead. Only on-device visual validation remains. See [`../plans/2026-06-01-pilgrimage-maplibre-parity-and-leaflet-removal.md`](../plans/2026-06-01-pilgrimage-maplibre-parity-and-leaflet-removal.md).
+
 - **Date:** 2026-05-31
-- **Status:** In progress — code on branch `perf/pilgrimage-map-cold-open` (not merged to main)
+- **Status:** ✅ **Resolved by the 2026-06-01 MapLibre migration** (was: in progress on `perf/pilgrimage-map-cold-open`)
 - **Goal:** faster pilgrimage map, primarily **cold-open** (`libs/services/pilgrimage/*`, `app/(tabs)/pilgrimage/*`)
 - **Related:** [`2026-05-30-pilgrimage-map-maplibre-migration-design.md`](./2026-05-30-pilgrimage-map-maplibre-migration-design.md) — the **MapLibre migration** design (decision made 2026-05-31: replace Leaflet with a single MapLibre engine; offline via MapLibre-native pointed at OpenFreeMap → our R2). Supersedes this WebView-host direction.
 
@@ -110,7 +112,7 @@ Done under a strict "leaflet path byte-verbatim under an `engine` guard, MapLibr
 | Surface | Status | Notes |
 |---|---|---|
 | **SpotMapView** | ✅ **wired** (`e0a5244`) | Live spot-detail map. Early-return MapLibre branch; existing Leaflet `return` + handle bodies byte-identical (only the handle's `if (engine==='maplibre') …else…` guard + a behavior-neutral `[ready]→[ready,engine]` dep). Verified `leafletPreserved=true` (high). |
-| **PilgrimageMapView** | ✅ **wired** (`6532fbb`) | Purely additive. **Currently has no live mount** (only its `cityToColor` is imported), so it's inert until something renders it. `inCollection` overlay dropped (no `MapMarker` field). |
-| **Hub (MapHost)** | ⏸️ **deferred** | The blind wiring added always-on hooks/subscriptions to the kept-alive portal singleton → changed the leaflet path (`leafletPreserved=false`) → **reverted**, not shipped. This is the touch-sensitive portal that broke before; do it on-device with the leaflet branch byte-verbatim, validating gestures + the bounds lazy-loader. `map.tsx` stays unchanged (route the flag inside `MapHost`). |
+| **PilgrimageMapView** | 🗑️ **deleted** (2026-06-01) | Was dead on render (only `cityToColor` used → repointed to `region-color`); removed entirely. |
+| **Hub (MapHost)** | ✅ **done** (2026-06-01) | Engine flag routed **inside `MapHost`** → `MapSurface`; `map.tsx` unchanged (still `host.claim/update/recenter/setHeading`). Leaflet branch then deleted; `MapHost` retained as the warm native keep-alive wrapper. `onBoundsChange`→lazy loader, region `fitBounds`, `focusAnime`→`focus`, multi-id cluster press all wired. |
 
-`@maplibre/maplibre-react-native` is mocked in `test-setup.ts` (`334c4f8`) so tests importing a wired surface stay green under `bun test`. Engine flag still defaults to `'leaflet'`, so all three surfaces render exactly as today until the on-device spike flips it. Still device-gated: per-kind marker rendering, `onBoundsChange`, multi-id `onClusterPress`, hub wiring → then delete Leaflet (P4).
+**Final state (2026-06-01):** the engine flag, the Leaflet branch, `HubMapWebView`, `leaflet-map.ts`/`leaflet-assets.ts`, `delegating-handle`, `map-engine-prefs`, the bundle script, and the `leaflet`/`leaflet.markercluster`/`react-native-webview` deps are all **deleted**. `MapLibreEngine` does full per-kind rendering + supercluster clustering + `onBoundsChange`/multi-id `onClusterPress`/`fitBounds`/`updateVisited`/heading. The `@maplibre/maplibre-react-native` mock in `test-setup.ts` keeps `bun test` green. **One human gate left: on-device visual validation** (marker fidelity, heading cone, cluster tap, hub gestures + bounds-lazy-load, binary size).

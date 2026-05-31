@@ -1,7 +1,7 @@
 # Pilgrimage Map — MapLibre Migration + Multi-Source Offline (Design)
 
 - **Date:** 2026-05-30, **revised 2026-05-31**
-- **Status:** Draft — direction agreed; full migration pending on-device validation (binary size, marker fidelity, transition feel)
+- **Status:** ✅ **Implemented 2026-06-01** — Leaflet fully removed; MapLibre is the single engine across all surfaces (P0–P4 done; P5 GPX / P6 導覽 / P3 createPack / P7 Worker+R2 reserved). Code-complete + `tsc`/`bun test` green; **on-device visual validation is the one remaining gate**. See the execution record: [`../plans/2026-06-01-pilgrimage-maplibre-parity-and-leaflet-removal.md`](../plans/2026-06-01-pilgrimage-maplibre-parity-and-leaflet-removal.md).
 - **Owner:** kidneyweakx
 - **Scope:** `app/(tabs)/pilgrimage/*`, `components/pilgrimage/*`, `libs/services/pilgrimage/*`
 - **Supersedes:**
