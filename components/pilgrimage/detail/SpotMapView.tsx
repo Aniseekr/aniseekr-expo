@@ -46,6 +46,7 @@ import type { MapMarkerMode } from '../../../hooks/usePilgrimageDetailView';
 import { hasValidGeo } from './_helpers';
 import { MapSurface, type MapMarker, type MapSurfaceHandle } from '../map';
 import { sceneMarkerToMapMarker } from '../../../libs/services/pilgrimage/map-engine/normalize';
+import { CLUSTER_DISABLE_AT } from '../../../libs/services/pilgrimage/map-engine/cluster-style';
 import {
   loadMapStyleOverrideSync,
   resolveMapStyleUrl,
@@ -609,6 +610,15 @@ const SpotMapViewImpl = forwardRef<SpotMapViewHandle, SpotMapViewProps>(function
     `);
   }, [focusSpotId, ready]);
 
+  // MapLibre: chip-strip selection pans to the focused spot — parity with the
+  // leaflet __focusSpot inject above, via the native flyTo handle (zoom 16).
+  useEffect(() => {
+    if (engine !== 'maplibre' || !focusSpotId) return;
+    const spot = spotsById.current.get(focusSpotId);
+    if (!spot || !hasValidGeo(spot.geo)) return;
+    maplibreRef.current?.focus?.({ lat: spot.geo[0], lng: spot.geo[1], zoom: 16 });
+  }, [engine, focusSpotId]);
+
   // Push the user-location dot. Sent separately from the spot markers so
   // location ticks don't re-render hundreds of pins. `null` removes the dot.
   useEffect(() => {
@@ -728,6 +738,7 @@ const SpotMapViewImpl = forwardRef<SpotMapViewHandle, SpotMapViewProps>(function
           center={center}
           zoom={centerZoom}
           markerMode={markerMode === 'dot' ? 'dot' : 'bubble'}
+          clusterDisableAtZoom={CLUSTER_DISABLE_AT.spot}
           offlineOnly={offlineOnly}
           controlsBottomOffset={controlsBottomOffset}
           onMarkerPress={(m) => {
