@@ -78,3 +78,20 @@ Verifiable foundation landed via TDD — every commit is `tsc --noEmit` + lint +
 2. Confirm/fix the OpenFreeMap style slugs in `map-source-prefs.ts` (`positron`/`dark`) against OFM's live catalog — the D7 override means this needs no app release.
 3. Wire the 3 surfaces onto `<MapSurface engine={flag} leafletFallback={…existing…} markers={…via normalize.ts…}>` (smallest-first), per the per-surface plan from the constraints workflow.
 4. Post-validation: port full per-kind marker rendering (anime balloons, gold 88 pins, spot bubble/dot, visited flips, cluster picker) from the placeholder circles; then delete the Leaflet path (spec P4).
+
+### Per-surface wiring plan (from constraints workflow `w722ikyal`)
+
+`MapSurface` ref-delegation fix already landed (`b7ba8f5`), so the parent's ref works in both modes. Sequence smallest/safest first:
+
+1. **SpotMapView** — the one live ref consumer (`app/(tabs)/pilgrimage/[animeId].tsx:570` via `spotMapRef`).
+   - markers: `sceneMarkerToMapMarker` (its `SceneMarkerInput` == the existing `MapMarkerPayload`).
+   - flag: `const [engine,setEngine]=useState(loadMapEngineSync); useEffect(()=>subscribeMapEngine(setEngine),[])`. Pass `engine` + `markers` + `leafletFallback={<existing WebView>}` + `leafletRef`.
+   - ref: move today's Leaflet `recenter/setHeading` onto an internal `leafletHandleRef`, pass as `leafletRef`; `spotMapRef.*` then works in both modes.
+   - riskiest on device: visited flips + bubble/dot — the engine currently renders identical circles (ignores `visited`/`episode`/`markerMode`); wire `updateVisited` + per-kind icons before flipping.
+2. **PilgrimageMapView** — lowest risk: **no live mount** (only its `cityToColor` export is used by `plan.tsx`; exposes no ref).
+   - markers: build `HubMapMarker`-shaped objects → `hubMarkerToMapMarker` (`inCollection` has no `MapMarker` field — accept loss for the spike or add a field later).
+   - riskiest: cluster tap → `ClusterPickerSheet` — the engine doesn't yet emit multi-id `onClusterPress`.
+3. **Hub** — `MapHost.tsx` owns the kept-alive WebView; `map.tsx` drives it via `useMapHost()` context.
+   - Route the flag **inside `MapHost`**: render `<MapSurface … leafletFallback={<HubMapWebView ref={leafletHandleRef}/>}>` and point `hostRef` at `MapSurface`. **`map.tsx` needs ZERO changes** (keeps calling `host.claim/update/recenter`).
+   - markers: `config.markers.map(hubMarkerToMapMarker)` (1:1).
+   - riskiest: (a) the native view must receive pinch/pan/tap in the portal-above-navigator layer (the touch issue that bit the shared host before); (b) the engine doesn't yet emit `onBoundsChange`, so the bounds-driven lazy anime loader stops — wire both before flipping the hub.
