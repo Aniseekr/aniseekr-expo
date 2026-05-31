@@ -8,7 +8,7 @@
 //
 // Pure functions, no runtime deps — `import type` is erased at compile time.
 import type { MapMarker, MapMarkerMode } from './types';
-import type { HubMapMarker } from '../../../../components/pilgrimage/HubMapWebView';
+import type { HubMapMarker } from './hub-marker';
 
 /** Scene marker payload as built today by SpotMapView (`MapMarkerPayload`). */
 export interface SceneMarkerInput {

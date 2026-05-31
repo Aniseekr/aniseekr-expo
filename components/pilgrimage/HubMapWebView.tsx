@@ -43,32 +43,12 @@ import { useMapThemePref } from '../../hooks/useMapThemePref';
 import { type BoundingBox } from '../../libs/services/pilgrimage/anitabi-index';
 import { MAP_LOCATE_ZOOM } from '../../libs/services/pilgrimage/map-nearby';
 import { useT } from '../../libs/i18n';
+// `HubMapMarker` + `RegionBounds` now live in the engine-neutral map layer so
+// the normaliser doesn't import from this Leaflet component. Re-exported below
+// for back-compat with existing call sites until this component is removed.
+import type { HubMapMarker, RegionBounds } from '../../libs/services/pilgrimage/map-engine/hub-marker';
 
-export interface HubMapMarker {
-  /** Unique within a marker set: "bgm:<id>" for Anitabi-centroid markers, "88:<entryId>" for Tourism 88 city pins. */
-  markerId: string;
-  bangumiId: number;
-  lat: number;
-  lng: number;
-  cover: string;
-  title: string;
-  city: string;
-  pointsLength: number;
-  ringColor: string;
-  /** Set when this marker is a Tourism 88 city pin; renders gold with a star overlay. */
-  is88?: boolean;
-  /** Sequential 88 list id (1..N). Surfaced in the popup. */
-  eightyEightId?: number;
-}
-
-// Geographic bounding box used by the camera-fly request. Shared with the hub
-// screen, which builds the per-region boxes (REGION_BOUNDS / JAPAN_BOUNDS).
-export interface RegionBounds {
-  south: number;
-  west: number;
-  north: number;
-  east: number;
-}
+export type { HubMapMarker, RegionBounds };
 
 // Whole-archipelago framing: centre on the Sea of Japan side of central
 // Honshu so Hokkaido and Okinawa both stay on-screen at zoom 5.

@@ -16,7 +16,7 @@ import {
   mapMarkerToSceneMarker,
   type SceneMarkerInput,
 } from '../../../libs/services/pilgrimage/map-engine/normalize';
-import type { HubMapMarker } from '../../../components/pilgrimage/HubMapWebView';
+import type { HubMapMarker } from '../../../libs/services/pilgrimage/map-engine/hub-marker';
 
 const animeHub: HubMapMarker = {
   markerId: 'bgm:265',
