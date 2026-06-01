@@ -1,26 +1,24 @@
-// Map host — keeps exactly ONE hub <MapSurface/> (the MapLibre map) alive for
-// the whole pilgrimage stack so re-entering the hub re-paints instantly with a
-// warm camera + tile cache instead of cold-mounting the native map each time
-// (CLAUDE.md Rule 10 — cold-open feel).
-//
-// LAYERING: the map and the claiming screen's overlays live together in ONE
-// layer ABOVE the navigator, joined by a portal, so the map is the interactive
-// top layer (a surface parented behind react-native-screens can be starved of
-// gestures) and the claiming screen's controls sit in the same box-none layer:
+// Map host — renders the hub <MapSurface/> (the MapLibre map) + the claiming
+// screen's overlays in ONE layer ABOVE the navigator, joined by a portal, so the
+// map is the interactive top layer (a surface parented behind react-native-
+// screens can be starved of gestures) and the screen's controls sit in the same
+// box-none layer:
 //
 //   <PortalProvider>
 //     {children}                          ← navigator (other pilgrimage screens)
 //     <View top-layer, gated by `active`>
-//       <MapSurface/>                      ← the map surface
+//       {active ? <MapSurface/> : null}    ← native map, MOUNTED ONLY WHILE ACTIVE
 //       <PortalHost name={MAP_PORTAL_HOST}/>  ← claiming screen's overlays land here
 //     </View>
 //   </PortalProvider>
 //
 // The hub screen claims the host on focus (teleporting its overlays into
 // MAP_PORTAL_HOST via <Portal>) and releases on blur; the top layer then goes
-// opacity:0 + pointerEvents:none so other pilgrimage screens show through, while
-// the map stays MOUNTED so re-entry is instant. Marker/theme/camera changes flow
-// through props + the imperative handle, never remounting the map.
+// opacity:0 + pointerEvents:none. The native map is UNMOUNTED on blur (not just
+// hidden) — a native GL surface ignores `opacity:0` and would bleed through onto
+// the screen you navigate back to. Native re-mount is cheap (no 200 KB Leaflet
+// parse to amortize, which was the original keep-alive motivation). Marker/theme/
+// camera changes flow through props + the imperative handle while mounted.
 
 import {
   createContext,
@@ -53,11 +51,11 @@ import { CLUSTER_DISABLE_AT } from '../../libs/services/pilgrimage/map-engine/cl
 
 // Portal host id — the claiming screen teleports its overlays here (via
 // <Portal hostName={MAP_PORTAL_HOST}>) so they render in the SAME layer as the
-// kept-alive WebView, above the navigator. See the layering note at the top.
+// map, above the navigator. See the layering note at the top.
 export const MAP_PORTAL_HOST = 'pilgrimage-map';
 
-// The prop-shaped half of HubMapWebView's inputs (everything that is data, not
-// a callback). The claiming screen owns these and pushes them via claim/update.
+// The prop-shaped half of the hub map's inputs (everything that is data, not a
+// callback). The claiming screen owns these and pushes them via claim/update.
 export interface MapHostConfig {
   markers: readonly HubMapMarker[];
   replaceKey: string;
@@ -69,8 +67,8 @@ export interface MapHostConfig {
 }
 
 // The callback half. Stored in a ref so the claiming screen can pass fresh
-// useCallback identities without forcing the host's WebView wrapper to
-// re-create handlers (and never causing a remount of the WebView itself).
+// useCallback identities without forcing the host to re-create the map's
+// handler props.
 export interface MapHostHandlers {
   onAnimePress: (bangumiId: number) => void;
   onBoundsChange: (bounds: BoundingBox) => void;
@@ -84,11 +82,11 @@ export interface MapHostContextValue {
   claim: (claim: MapHostClaim) => void;
   /** Merge a partial config into the live one (markers/theme/camera/etc.). */
   update: (partial: Partial<MapHostConfig>) => void;
-  /** Give up ownership. The WebView stays mounted so re-claim is instant. */
+  /** Give up ownership (drops the active flag; the native map unmounts). */
   release: () => void;
-  /** Imperative camera recenter — forwarded to the live HubMapWebView handle. */
+  /** Imperative camera recenter — forwarded to the live map handle. */
   recenter: (lat: number, lng: number, zoom?: number, opts?: { animate?: boolean }) => void;
-  /** Push the device heading (or null to clear the cone) into the WebView. */
+  /** Push the device heading (or null to clear the cone) into the map. */
   setHeading: (deg: number | null) => void;
 }
 
@@ -119,8 +117,7 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
   const hostRef = useRef<MapSurfaceHandle>(null);
 
   // active=false → unclaimed (empty markers, app theme). We keep config in a
-  // single state object so a claim/update is one setState and one re-render;
-  // HubMapWebView only re-injects from it, never remounts.
+  // single state object so a claim/update is one setState and one re-render.
   const [state, setState] = useState<{ active: boolean; config: MapHostConfig }>(() => ({
     active: false,
     config: {
@@ -134,9 +131,9 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
     },
   }));
 
-  // Handlers in a ref: the host's WebView props read from these via stable
-  // wrappers below, so swapping in fresh useCallback identities from the
-  // claiming screen never re-creates the WebView's own handler props.
+  // Handlers in a ref: the map's callbacks read from these via stable wrappers
+  // below, so swapping in fresh useCallback identities from the claiming screen
+  // never re-creates the handler props.
   const handlersRef = useRef<MapHostHandlers>({
     onAnimePress: () => undefined,
     onBoundsChange: () => undefined,
@@ -181,7 +178,7 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
     hostRef.current?.setHeading(deg);
   }, []);
 
-  // Stable wrappers — read the latest handler from the ref so the WebView's
+  // Stable wrappers — read the latest handler from the ref so the map's
   // onAnimePress/onBoundsChange/onUserPan props never change identity (no
   // remount) yet always call the claiming screen's current callbacks.
   const onAnimePress = useCallback((id: number) => handlersRef.current.onAnimePress(id), []);
@@ -220,38 +217,43 @@ export function MapHostProvider({ children }: { children: React.ReactNode }) {
             detail, album) paint here and stay fully interactive because the top
             layer below is pointerEvents:none while unclaimed. */}
         {children}
-        {/* TOP layer, ABOVE the navigator — the only place the kept-alive
-            WebView both shows AND receives gestures (see the layering note at
-            the top of this file). Gated by `active`: while unclaimed it is
-            invisible + non-interactive so the navigator shows through, but the
-            WebView stays MOUNTED so Leaflet is parsed once per session. */}
+        {/* TOP layer, ABOVE the navigator — where the map both shows AND
+            receives gestures (see the layering note at the top of this file).
+            Gated by `active`: while unclaimed it is invisible + non-interactive
+            so the navigator shows through, and the native map is unmounted (see
+            the per-mount note below — it can't be hidden by opacity alone). */}
         <View
           style={[StyleSheet.absoluteFill, { opacity: state.active ? 1 : 0 }]}
           pointerEvents={state.active ? 'box-none' : 'none'}>
-          {/* WebView at the bottom of the top layer (auto = the hit target for
-              empty-map taps). The parent View gates visibility/interactivity;
-              this stays a plain always-auto holder. */}
-          <View style={StyleSheet.absoluteFill} pointerEvents="auto">
-            <MapSurface
-              ref={hostRef}
-              markers={maplibreMarkers}
-              styleUrl={styleUrl}
-              user={
-                config.userLocation
-                  ? { lat: config.userLocation.latitude, lng: config.userLocation.longitude }
-                  : null
-              }
-              clusterDisableAtZoom={CLUSTER_DISABLE_AT.hub}
-              onMarkerPress={(m) => {
-                if (m.bangumiId != null) onAnimePress(m.bangumiId);
-              }}
-              onBoundsChange={onBoundsChange}
-              onPanned={onUserPan}
-            />
-          </View>
-          {/* Claiming screen's overlays teleport here — rendered AFTER the
-              WebView so they sit on top of it, in the SAME box-none layer, so
-              empty-map taps fall through the overlays to the map beneath. */}
+          {/* The native map is MOUNTED ONLY WHILE ACTIVE. Unlike the old Leaflet
+              WebView (a composited RN view that `opacity:0` hid), a native
+              MapLibre GL surface ignores parent opacity and would bleed through
+              onto whatever screen you navigate back to. Unmounting on blur is the
+              reliable hide; native re-mount is cheap — there's no 200 KB parse to
+              amortize, which was the only reason to keep it alive. */}
+          {state.active ? (
+            <View style={StyleSheet.absoluteFill} pointerEvents="auto">
+              <MapSurface
+                ref={hostRef}
+                markers={maplibreMarkers}
+                styleUrl={styleUrl}
+                user={
+                  config.userLocation
+                    ? { lat: config.userLocation.latitude, lng: config.userLocation.longitude }
+                    : null
+                }
+                clusterDisableAtZoom={CLUSTER_DISABLE_AT.hub}
+                onMarkerPress={(m) => {
+                  if (m.bangumiId != null) onAnimePress(m.bangumiId);
+                }}
+                onBoundsChange={onBoundsChange}
+                onPanned={onUserPan}
+              />
+            </View>
+          ) : null}
+          {/* Claiming screen's overlays teleport here — rendered AFTER the map
+              so they sit on top of it, in the SAME box-none layer, so empty-map
+              taps fall through the overlays to the map beneath. */}
           <PortalHost name={MAP_PORTAL_HOST} />
         </View>
       </MapHostContext.Provider>
