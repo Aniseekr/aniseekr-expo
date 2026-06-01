@@ -48,6 +48,7 @@ import type {
 import CameraErrorBoundary from '../../../../components/pilgrimage/camera/CameraErrorBoundary';
 import { CameraStage } from '../../../../components/pilgrimage/camera/CameraStage';
 import { CompanionOverlay } from '../../../../components/companion/CompanionOverlay';
+import type { CharacterEntry } from '../../../../libs/services/companion/character-library';
 import OverlayLayer from '../../../../components/pilgrimage/camera/OverlayLayer';
 import { FocusReticle } from '../../../../components/pilgrimage/camera/FocusReticle';
 import { LevelHorizon } from '../../../../components/pilgrimage/camera/LevelHorizon';
@@ -235,6 +236,8 @@ export default function CompareCaptureScreen() {
   // Capture-in-flight flag — rendered via `anyCapturing` → ShutterRow.
   const [capturing, setCapturing] = useState(false);
   const [appIsForeground, setAppIsForeground] = useState(() => AppState.currentState === 'active');
+  const [character, setCharacter] = useState<CharacterEntry | null>(null);
+  const [characterPickerOpen, setCharacterPickerOpen] = useState(false);
   // Real device capabilities reported by VisionCamera through the engine. Null
   // until the first device pick resolves; drives zoom range, HDR availability,
   // and the focal-stop pill set on the dial.
@@ -266,7 +269,14 @@ export default function CompareCaptureScreen() {
       subjectFocus: settings.subjectFocus,
       subjectCombine: settings.subjectCombine,
     });
-  }, [settingsHydrated, settings.overlayMode, settings.edgeIntensity, settings.subjectFocus, settings.subjectCombine, setHud]);
+  }, [
+    settingsHydrated,
+    settings.overlayMode,
+    settings.edgeIntensity,
+    settings.subjectFocus,
+    settings.subjectCombine,
+    setHud,
+  ]);
   // Mirror hud → settings on every change after the one-shot seed has run.
   // Guarding on the ref keeps the mirror dormant during the pre-hydration
   // window where hud holds its INITIAL_CAMERA_HUD defaults (not the user's
@@ -438,8 +448,7 @@ export default function CompareCaptureScreen() {
     cohort.ultraWide !== undefined &&
     strategic.activeLens === 'wide';
   const canPinchBackToWide =
-    cohort?.strategy === 'standalone-switch' &&
-    strategic.activeLens === 'ultra-wide';
+    cohort?.strategy === 'standalone-switch' && strategic.activeLens === 'ultra-wide';
   const handlePinchBelowMin = useCallback(() => {
     if (strategic.isSwitching) return;
     handleRequestSwitch('ultra-wide');
@@ -898,7 +907,15 @@ export default function CompareCaptureScreen() {
         setCapturing(false);
       }
     },
-    [buildExifNow, captureFlash, settings.mute, tapFocus, maybeCompositeSubjectShot, recordShot]
+    [
+      buildExifNow,
+      captureFlash,
+      settings.mute,
+      tapFocus,
+      maybeCompositeSubjectShot,
+      recordShot,
+      setHud,
+    ]
   );
 
   const runBurst = useCallback(
@@ -1017,8 +1034,7 @@ export default function CompareCaptureScreen() {
   // `Camera is not active` — the UI looks frozen because the throw kills
   // the takePhoto promise. Cheaper to disable the button than to handle the
   // race on the capture path.
-  const anyCapturing =
-    capturing || burst.capturing || bracket.capturing || strategic.isSwitching;
+  const anyCapturing = capturing || burst.capturing || bracket.capturing || strategic.isSwitching;
 
   const captureForMode = useCallback(
     (source: 'manual' | 'auto'): Promise<CaptureSessionShot | null> => {
@@ -1238,8 +1254,8 @@ export default function CompareCaptureScreen() {
   const dialIsland =
     cohort && cohort.strategy === 'standalone-switch' && cohort.ultraWide
       ? strategic.activeLens === 'wide'
-        ? ({ stop: 0.5 as FocalStop, targetLens: 'ultra-wide' as const })
-        : ({ stop: 1 as FocalStop, targetLens: 'wide' as const })
+        ? { stop: 0.5 as FocalStop, targetLens: 'ultra-wide' as const }
+        : { stop: 1 as FocalStop, targetLens: 'wide' as const }
       : null;
   const focalDial = (
     <ZoomDial
@@ -1268,6 +1284,7 @@ export default function CompareCaptureScreen() {
       edgeIntensity={edgeIntensity}
       subjectFocus={subjectFocus}
       subjectCombine={subjectCombine}
+      characterSelected={character !== null}
       opacity={overlayOpacity}
       flipped={overlayTransform.flipped}
       editMode={editMode}
@@ -1285,6 +1302,7 @@ export default function CompareCaptureScreen() {
       onSelectEdgeIntensity={(i) => setHud({ edgeIntensity: i })}
       onSelectSubjectFocus={(f) => setHud({ subjectFocus: f })}
       onToggleSubjectCombine={() => setHud((h) => ({ subjectCombine: !h.subjectCombine }))}
+      onOpenCharacterPicker={() => setCharacterPickerOpen(true)}
       onChangeOpacity={(o) => setHud({ overlayOpacity: o })}
       onToggleFlip={overlayTransform.toggleFlip}
       onToggleEdit={handleToggleEdit}
@@ -1351,8 +1369,12 @@ export default function CompareCaptureScreen() {
 
         <CompanionOverlay
           parentSize={{ width: winW, height: winH }}
-          themeColor={themeColor}
           editMode={editMode}
+          character={character}
+          pickerOpen={characterPickerOpen}
+          onOpenPicker={() => setCharacterPickerOpen(true)}
+          onClosePicker={() => setCharacterPickerOpen(false)}
+          onSelectCharacter={setCharacter}
         />
 
         <CameraTopBar
@@ -1458,9 +1480,7 @@ export default function CompareCaptureScreen() {
                 styles.autoModeBadge,
                 {
                   borderColor: sceneAnalyzer.hdrRecommended ? themeColor : 'rgba(255,255,255,0.4)',
-                  backgroundColor: sceneAnalyzer.hdrRecommended
-                    ? themeColor
-                    : 'rgba(0,0,0,0.55)',
+                  backgroundColor: sceneAnalyzer.hdrRecommended ? themeColor : 'rgba(0,0,0,0.55)',
                 },
               ]}>
               <ThemedText
