@@ -16,6 +16,7 @@
 //
 const {
   withAppBuildGradle,
+  withAndroidManifest,
   withDangerousMod,
   withMainApplication,
   withXcodeProject,
@@ -189,7 +190,40 @@ function withAndroid(config) {
     return cfg;
   });
 
+  // Eager-download the Subject Segmentation model at install time. Without this
+  // meta-data the model is fetched lazily on first use, so the very first lift
+  // after install fails (model not yet downloaded). See ML Kit docs.
+  config = withAndroidManifest(config, (cfg) => {
+    cfg.modResults = addMlkitDependency(cfg.modResults);
+    return cfg;
+  });
+
   return config;
+}
+
+const MLKIT_META_NAME = 'com.google.mlkit.vision.DEPENDENCIES';
+const MLKIT_META_VALUE = 'subject_segment';
+
+function addMlkitDependency(androidManifest) {
+  const app = androidManifest.manifest.application && androidManifest.manifest.application[0];
+  if (!app) return androidManifest;
+  app['meta-data'] = app['meta-data'] || [];
+  const existing = app['meta-data'].find((m) => m.$ && m.$['android:name'] === MLKIT_META_NAME);
+  if (existing) {
+    const parts = String(existing.$['android:value'] || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!parts.includes(MLKIT_META_VALUE)) {
+      parts.push(MLKIT_META_VALUE);
+      existing.$['android:value'] = parts.join(',');
+    }
+  } else {
+    app['meta-data'].push({
+      $: { 'android:name': MLKIT_META_NAME, 'android:value': MLKIT_META_VALUE },
+    });
+  }
+  return androidManifest;
 }
 
 const withSubjectLifter = (config) => {

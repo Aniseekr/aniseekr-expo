@@ -100,7 +100,11 @@ class {{MODULE_NAME}}Module(private val ctx: ReactApplicationContext) :
         decoded
       } else {
         val matrix = Matrix().apply { postRotate(degrees) }
-        Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        val rotated =
+          Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        // Free the un-rotated source so we don't leak a full-size bitmap.
+        if (rotated != decoded) decoded.recycle()
+        rotated
       }
     } catch (e: Exception) {
       decoded
