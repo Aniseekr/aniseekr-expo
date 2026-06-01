@@ -102,12 +102,16 @@ export function addCharacter(
 }
 
 export function removeCharacter(list: CharacterEntry[], id: string): CharacterEntry[] {
-  return list.filter((c) => c.id !== id);
+  const next = list.filter((c) => c.id !== id);
+  // Return the same reference when nothing matched so the store's
+  // `next === cache` guard can skip a redundant persist + emit.
+  return next.length === list.length ? list : next;
 }
 
 /** Remove every angle variant belonging to a character. */
 export function removeGroup(list: CharacterEntry[], groupId: string): CharacterEntry[] {
-  return list.filter((c) => effectiveGroupId(c) !== groupId);
+  const next = list.filter((c) => effectiveGroupId(c) !== groupId);
+  return next.length === list.length ? list : next;
 }
 
 /** Rename a character — applies the new display name to all its variants. */

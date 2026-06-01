@@ -8,7 +8,7 @@
 // or the device can't segment, the original is kept and honestly badged
 // "Original" rather than faking a cut-out (CLAUDE.md rule 8).
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -63,10 +63,18 @@ export default function CompanionLibraryScreen() {
     [groups, detailId]
   );
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashToast = useCallback((text: string) => {
     setToast(text);
-    setTimeout(() => setToast(null), 2200);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    []
+  );
 
   const runImport = useCallback(
     async (opts: { groupId?: string; displayName?: string }) => {

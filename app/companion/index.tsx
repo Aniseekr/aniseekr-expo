@@ -63,7 +63,10 @@ export default function CompanionScreen() {
     Promise.all([analyzeImage(bgUri), analyzeImage(character.cutoutUri)]).then(([bg, ch]) => {
       if (cancelled) return;
       const m = deriveCharacterTint(bg, ch);
-      setTintMatrix(m === IDENTITY_CHARACTER_TINT ? null : m);
+      // Value compare — deriveCharacterTint returns a fresh array, so a
+      // reference check against IDENTITY_CHARACTER_TINT never matches.
+      const isIdentity = m.every((v, i) => v === IDENTITY_CHARACTER_TINT[i]);
+      setTintMatrix(isIdentity ? null : m);
     });
     return () => {
       cancelled = true;
@@ -73,10 +76,18 @@ export default function CompanionScreen() {
   const stageW = winW - Spacing.md * 2;
   const stageH = Math.min(winH * 0.6, stageW * 1.4);
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashToast = useCallback((text: string) => {
     setToast(text);
-    setTimeout(() => setToast(null), 1800);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 1800);
   }, []);
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    []
+  );
 
   const handlePickBackground = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();

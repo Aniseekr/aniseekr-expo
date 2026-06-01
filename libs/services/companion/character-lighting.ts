@@ -35,9 +35,9 @@ function lerpMatrix(target: number[], t: number): number[] {
 
 /**
  * Build a tame ColorMatrix that nudges the character toward the background
- * lighting. `intensity` (0–1, default 0.55) controls how strongly we apply
+ * lighting. `intensity` (0–1, default 0.45) controls how strongly we apply
  * the per-channel gain — full strength tends to overshoot, so the default
- * stays around half-way between identity and the raw match.
+ * stays under half-way between identity and the raw match.
  */
 export function deriveCharacterTint(
   bg: CharacterRgbMean | null | undefined,
