@@ -18,7 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { Radius, Spacing } from '../../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { ThemedText, readableTextOn, Skeleton } from '../../../components/themed';
-import { cityToColor } from '../../../components/pilgrimage/PilgrimageMapView';
+import { cityToColor } from '../../../libs/services/pilgrimage/region-color';
 import { pilgrimageRepository } from '../../../libs/services/pilgrimage/pilgrimage-repository';
 import { FEATURED_PILGRIMAGE_ANIME } from '../../../libs/services/pilgrimage/featured-anime';
 import { getIndexedById } from '../../../libs/services/pilgrimage/anitabi-index';

@@ -24,6 +24,7 @@ interface OverlayControlsBarProps {
   edgeIntensity: EdgeIntensity;
   subjectFocus: SubjectFocus;
   subjectCombine: boolean;
+  characterSelected: boolean;
   opacity: number;
   flipped: boolean;
   editMode: boolean;
@@ -33,6 +34,7 @@ interface OverlayControlsBarProps {
   onSelectEdgeIntensity: (intensity: EdgeIntensity) => void;
   onSelectSubjectFocus: (focus: SubjectFocus) => void;
   onToggleSubjectCombine: () => void;
+  onOpenCharacterPicker: () => void;
   onChangeOpacity: (opacity: number) => void;
   onToggleFlip: () => void;
   onToggleEdit: () => void;
@@ -63,6 +65,7 @@ export default function OverlayControlsBar({
   edgeIntensity,
   subjectFocus,
   subjectCombine,
+  characterSelected,
   opacity,
   flipped,
   editMode,
@@ -72,6 +75,7 @@ export default function OverlayControlsBar({
   onSelectEdgeIntensity,
   onSelectSubjectFocus,
   onToggleSubjectCombine,
+  onOpenCharacterPicker,
   onChangeOpacity,
   onToggleFlip,
   onToggleEdit,
@@ -170,6 +174,33 @@ export default function OverlayControlsBar({
               weight="700"
               style={{ color: subjectCombine ? readableTextOn(themeColor) : '#fff' }}>
               Combine
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              hapticsBridge.tap();
+              onOpenCharacterPicker();
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={characterSelected ? 'Swap character' : 'Pick character'}
+            accessibilityState={{ selected: characterSelected }}
+            style={({ pressed }) => [
+              styles.characterPill,
+              characterSelected && { backgroundColor: themeColor, borderColor: themeColor },
+              pressed && { opacity: 0.7 },
+            ]}>
+            <Ionicons
+              name={characterSelected ? 'person' : 'person-add-outline'}
+              size={14}
+              color={characterSelected ? readableTextOn(themeColor) : '#fff'}
+            />
+            <ThemedText
+              variant="captionSmall"
+              weight="700"
+              numberOfLines={1}
+              style={{ color: characterSelected ? readableTextOn(themeColor) : '#fff' }}>
+              Character
             </ThemedText>
           </Pressable>
         </View>
@@ -319,6 +350,7 @@ const styles = StyleSheet.create({
   // Sub-row (edge intensity / subject focus)
   subRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -330,6 +362,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 4,
     gap: 3,
+    flexShrink: 1,
     borderRadius: CameraChrome.pillRadius,
     backgroundColor: CameraChrome.controlFill,
     borderWidth: 1,
@@ -350,6 +383,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     height: CameraChrome.subControlHeight,
+    paddingHorizontal: 12,
+    borderRadius: CameraChrome.pillRadius,
+    backgroundColor: CameraChrome.controlFill,
+    borderWidth: 1,
+    borderColor: CameraChrome.border,
+    ...cameraControlShadow,
+  },
+  characterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 36,
     paddingHorizontal: 12,
     borderRadius: CameraChrome.pillRadius,
     backgroundColor: CameraChrome.controlFill,

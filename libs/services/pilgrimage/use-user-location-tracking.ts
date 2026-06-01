@@ -10,10 +10,9 @@
 //               through a ref + delta-gate so we don't re-render React state
 //               at sensor frequency (Rule 9 in CLAUDE.md).
 //
-// User pan/zoom (`onUserPan`) breaks following/compass back to idle — the
-// `userPanned` postMessage emitted from MAP_BASE_JS on Leaflet's `dragstart`
-// is what triggers this. Programmatic moves (setView/flyTo) never fire
-// dragstart, so silent recentres during following don't fight themselves.
+// User pan/zoom (`onUserPan`) breaks following/compass back to idle. Map
+// surfaces call it only for real user gestures; programmatic recentres/flyTo
+// moves stay silent so following does not fight itself.
 //
 // Permission handling:
 //   - First user tap: ask the OS (`requestForegroundPermissionsAsync`).
@@ -37,10 +36,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import * as Location from 'expo-location';
-import {
-  locationService,
-  type LatLng,
-} from './location-service';
+import { locationService, type LatLng } from './location-service';
 import { sameLatLng } from './pilgrimage-screen-state';
 import {
   resolveLocateFabDecision,
@@ -52,8 +48,8 @@ export type { LocateFollowState, LocatePermissionState } from './locate-fab-stat
 
 /**
  * Degrees of heading change required before pushing a new value to the
- * WebView. Magnetometer outputs ~60 Hz; the cone CSS already has a 180 ms
- * transition so sub-2° wobble is invisible anyway.
+ * map handle. Magnetometer outputs ~60 Hz; the native marker already eases
+ * rotation enough that sub-2° wobble is invisible anyway.
  */
 const HEADING_DELTA_DEG = 2;
 
@@ -68,15 +64,15 @@ export const LOCATE_FAB_COMPASS_ZOOM = 17;
 export interface UseUserLocationTrackingOptions {
   /**
    * Called when the hook resolves a new location *while in following or
-   * compass state*. Used by surfaces to call `__recenter(lat, lng)` on the
-   * WebView so the map tracks the user as they move.
+   * compass state*. Used by surfaces to imperatively recenter the map as the
+   * user moves.
    */
   onFollowLocation?: (loc: LatLng, state: 'following' | 'compass') => void;
   /**
    * Called when the device heading changes by more than HEADING_DELTA_DEG
    * (only fires in compass state). Use this to imperatively push the new
-   * angle into the WebView (`window.__updateHeading(deg)`) without going
-   * through React state — sensor frequency is too high to render every tick.
+   * angle into the map handle without going through React state — sensor
+   * frequency is too high to render every tick.
    * Pass `null` to clear the cone (state left compass).
    */
   onHeadingChange?: (deg: number | null) => void;
@@ -96,7 +92,7 @@ export interface UseUserLocationTrackingResult {
   location: LatLng | null;
   /**
    * Live heading ref. Read on a timer / animation frame and push to the
-   * WebView when the delta is meaningful — never bind directly to React JSX.
+   * map handle when the delta is meaningful — never bind directly to React JSX.
    */
   headingRef: MutableRefObject<number | null>;
   /** Permission status as far as we know it. */
@@ -123,9 +119,10 @@ interface InternalState {
   permission: LocatePermissionState;
 }
 
-function mapPermissionStatus(
-  result: { status: Location.PermissionStatus; canAskAgain: boolean }
-): LocatePermissionState {
+function mapPermissionStatus(result: {
+  status: Location.PermissionStatus;
+  canAskAgain: boolean;
+}): LocatePermissionState {
   if (result.status === 'granted') return 'granted';
   if (result.status === 'undetermined') return 'undetermined';
   return result.canAskAgain ? 'denied' : 'blocked';
@@ -173,9 +170,7 @@ export function useUserLocationTracking(
         const status = await Location.getForegroundPermissionsAsync();
         if (cancelled) return;
         const next = mapPermissionStatus(status);
-        setInternal((prev) =>
-          prev.permission === next ? prev : { ...prev, permission: next }
-        );
+        setInternal((prev) => (prev.permission === next ? prev : { ...prev, permission: next }));
       } catch {
         // Permission lookup can fail on older Android emulators; leave
         // state as 'undetermined' so the next tap goes through the prompt.
@@ -283,9 +278,7 @@ export function useUserLocationTracking(
       Location.requestForegroundPermissionsAsync()
         .then((result) => {
           const next = mapPermissionStatus(result);
-          setInternal((prev) =>
-            prev.permission === next ? prev : { ...prev, permission: next }
-          );
+          setInternal((prev) => (prev.permission === next ? prev : { ...prev, permission: next }));
           if (next === 'granted') {
             setInternal((prev) => ({ ...prev, followState: 'following' }));
           } else if (next === 'blocked' && !sheetShownThisSessionRef.current) {
@@ -306,9 +299,7 @@ export function useUserLocationTracking(
 
   const onUserPan = useCallback(() => {
     if (followStateRef.current === 'idle') return;
-    setInternal((prev) =>
-      prev.followState === 'idle' ? prev : { ...prev, followState: 'idle' }
-    );
+    setInternal((prev) => (prev.followState === 'idle' ? prev : { ...prev, followState: 'idle' }));
   }, []);
 
   const dismissPermissionSheet = useCallback(() => {
