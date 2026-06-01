@@ -13,8 +13,9 @@
 //     preview/share will paint the character on top via a separate
 //     compositor (Phase 1C — see plan §3.3).
 
+import type { Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { CharacterLayer } from './CharacterLayer';
+import { CharacterLayer, type CharacterLayerHandle } from './CharacterLayer';
 import { CharacterPickerSheet } from './CharacterPickerSheet';
 import type { CharacterEntry } from '../../libs/services/companion/character-library';
 
@@ -26,6 +27,8 @@ export type CompanionOverlayProps = {
   onOpenPicker: () => void;
   onClosePicker: () => void;
   onSelectCharacter: (entry: CharacterEntry) => void;
+  /** Lets the capture flow read the live transform to bake the cut-out in. */
+  characterLayerRef?: Ref<CharacterLayerHandle>;
 };
 
 export function CompanionOverlay({
@@ -36,12 +39,14 @@ export function CompanionOverlay({
   onOpenPicker,
   onClosePicker,
   onSelectCharacter,
+  characterLayerRef,
 }: CompanionOverlayProps) {
   return (
     <>
       {character ? (
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <CharacterLayer
+            ref={characterLayerRef}
             cutoutUri={character.cutoutUri}
             intrinsicW={character.intrinsicW}
             intrinsicH={character.intrinsicH}

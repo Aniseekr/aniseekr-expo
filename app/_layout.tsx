@@ -174,6 +174,8 @@ export default function RootLayout() {
                   <Stack.Screen name="search" />
                   <Stack.Screen name="trending" />
                   <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="companion/index" />
+                  <Stack.Screen name="companion/library" />
                   <Stack.Screen name="index" />
                 </Stack>
               </SubscriptionProvider>

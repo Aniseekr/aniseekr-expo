@@ -115,9 +115,7 @@ function hasSnapshotSlice<K extends keyof PilgrimageHubSnapshot>(
 }
 
 function buildSeededFeatured(): AnitabiBangumi[] {
-  return buildSeededPilgrimageAnimes(
-    FEATURED_PILGRIMAGE_ANIME.map(({ bangumiId }) => bangumiId)
-  );
+  return buildSeededPilgrimageAnimes(FEATURED_PILGRIMAGE_ANIME.map(({ bangumiId }) => bangumiId));
 }
 
 export default function PilgrimageHubScreen() {
@@ -408,6 +406,11 @@ export default function PilgrimageHubScreen() {
     router.push('/pilgrimage/album');
   }, [router]);
 
+  const handleOpenCharacters = useCallback(() => {
+    Haptics.selectionAsync().catch(() => undefined);
+    router.push('/companion/library');
+  }, [router]);
+
   // "See all" next to the Popular Animes rail keeps the user's list-scanning
   // intent even though the See All route is now map-first by default.
   const handleSeeAllAnimes = useCallback(() => {
@@ -462,8 +465,7 @@ export default function PilgrimageHubScreen() {
         buildPilgrimageDetailRoute(entry.bangumiId, {
           returnTo: 'hub',
           title: entry.titleJa || entry.titleEn,
-          titleSecondary:
-            entry.titleEn && entry.titleEn !== entry.titleJa ? entry.titleEn : null,
+          titleSecondary: entry.titleEn && entry.titleEn !== entry.titleJa ? entry.titleEn : null,
           poster: tourism88Covers.get(entry.bangumiId) ?? null,
         })
       );
@@ -483,6 +485,14 @@ export default function PilgrimageHubScreen() {
             {t('tabs.pilgrimageScreen.title')}
           </ThemedText>
           <View style={styles.headerRight}>
+            <Pressable
+              onPress={handleOpenCharacters}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={t('tabs.pilgrimageScreen.charactersA11y')}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}>
+              <Ionicons name="people-outline" size={18} color={theme.text.primary} />
+            </Pressable>
             <Pressable
               onPress={handleOpenAlbum}
               hitSlop={10}
@@ -728,9 +738,10 @@ function NearbyHero({
             {hasLocation && nearbyCount > 0 && tierLabel
               ? t('tabs.pilgrimageScreen.hero.countLabel', {
                   count: String(nearbyCount),
-                  animeWord: nearbyCount === 1
-                    ? t('tabs.pilgrimageScreen.wordAnime')
-                    : t('tabs.pilgrimageScreen.wordAnimes'),
+                  animeWord:
+                    nearbyCount === 1
+                      ? t('tabs.pilgrimageScreen.wordAnime')
+                      : t('tabs.pilgrimageScreen.wordAnimes'),
                   tier: tierLabel,
                 })
               : t('tabs.pilgrimageScreen.hero.title')}

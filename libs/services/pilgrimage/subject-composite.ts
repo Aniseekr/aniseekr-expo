@@ -2,8 +2,7 @@ import { ImageFormat, Skia } from '@shopify/react-native-skia';
 import type { SkImage } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
 import { embedExifIntoJpegFile } from '../../utils/exif-embed';
-import { buildSubjectImage } from './edge-image-skia';
-import { getSubjectOverlayConfig, type SubjectFocus } from './subject-overlay';
+import { resolveSceneCutout } from './subject-cutout';
 import {
   resolveSubjectCompositePlan,
   type SubjectCompositeTransform,
@@ -17,7 +16,6 @@ export interface CompositeSubjectIntoPhotoInput {
   previewWidth: number;
   previewHeight: number;
   opacity: number;
-  focus: SubjectFocus;
   transform: SubjectCompositeTransform;
   quality?: number;
   exif?: Record<string, unknown> | null;
@@ -56,14 +54,14 @@ export async function compositeSubjectIntoPhoto(
       throw new Error('Photo has zero dimensions');
     }
 
-    const subjectConfig = getSubjectOverlayConfig(input.focus);
-    subjectImage = await buildSubjectImage(
-      input.referenceUri,
-      subjectConfig.radiusX,
-      subjectConfig.radiusY,
-      subjectConfig.feather,
-      subjectConfig.opacity
-    );
+    // Real background removal (去背) — same cut-out the live preview lifted,
+    // not the old elliptical matte. Falls back to the full scene when the
+    // native lifter is unavailable (honest, never a fabricated mask).
+    const cutout = await resolveSceneCutout(input.referenceUri);
+    const subjectData = await Skia.Data.fromURI(cutout.uri);
+    if (!subjectData) throw new Error('Failed to load subject cut-out data');
+    subjectImage = Skia.Image.MakeImageFromEncoded(subjectData);
+    if (!subjectImage) throw new Error('Failed to decode subject cut-out');
 
     const plan = resolveSubjectCompositePlan({
       photoWidth: width,

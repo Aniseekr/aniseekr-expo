@@ -171,7 +171,7 @@ const localUriCache = new Map<string, string>();
 // same URL for the `anime` overlay, so reuse its disk cache first; only fall
 // back to a direct download when that path isn't available. Last resort: the
 // remote URL itself, so a build is attempted rather than failing outright.
-async function resolveLocalUri(remoteUrl: string): Promise<string> {
+export async function resolveLocalUri(remoteUrl: string): Promise<string> {
   if (!/^https?:/i.test(remoteUrl)) return remoteUrl;
 
   const cached = localUriCache.get(remoteUrl);

@@ -6,10 +6,14 @@ import { kvGet, kvSet } from '../storage/app-storage';
 import {
   CHARACTER_LIBRARY_FREE_LIMIT,
   addCharacter,
+  groupCharacters,
   parseLibraryFromJson,
   removeCharacter,
+  removeGroup,
+  renameGroup,
   serializeLibraryToJson,
   type CharacterEntry,
+  type CharacterGroup,
 } from './character-library';
 
 const STORAGE_KEY = 'aniseekr.companion.characters.v1';
@@ -30,6 +34,11 @@ function persist(): void {
 
 export function getCharacters(): CharacterEntry[] {
   return cache;
+}
+
+/** Characters (angle variants folded together), newest first. */
+export function getCharacterGroups(): CharacterGroup[] {
+  return groupCharacters(cache);
 }
 
 export function getCharacterCount(): number {
@@ -55,6 +64,22 @@ export function upsertCharacter(entry: CharacterEntry): boolean {
 
 export function deleteCharacter(id: string): void {
   const next = removeCharacter(cache, id);
+  if (next === cache) return;
+  cache = next;
+  persist();
+}
+
+/** Delete every angle variant of a character. */
+export function deleteCharacterGroup(groupId: string): void {
+  const next = removeGroup(cache, groupId);
+  if (next === cache) return;
+  cache = next;
+  persist();
+}
+
+/** Rename a character (applies to all its angle variants). */
+export function renameCharacterGroup(groupId: string, name: string): void {
+  const next = renameGroup(cache, groupId, name);
   if (next === cache) return;
   cache = next;
   persist();

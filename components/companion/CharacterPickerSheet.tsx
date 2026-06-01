@@ -6,22 +6,15 @@
 // future compare integration) stay in sync.
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Image as RNImage,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText, readableTextOn } from '../themed';
 import { Radius, Spacing } from '../../constants/DesignSystem';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
 import { useTheme } from '../../context/ThemeContext';
+import { useT } from '../../libs/i18n';
 import {
   deleteCharacter,
   getCharacterLimit,
@@ -30,7 +23,7 @@ import {
   upsertCharacter,
 } from '../../libs/services/companion/character-library-store';
 import type { CharacterEntry } from '../../libs/services/companion/character-library';
-import { subjectLifter } from '../../libs/services/companion/subject-lifter';
+import { importCharacterFromLibrary } from '../../libs/services/companion/import-character';
 
 export type CharacterPickerSheetProps = {
   visible: boolean;
@@ -46,6 +39,7 @@ export function CharacterPickerSheet({
   onClose,
 }: CharacterPickerSheetProps) {
   const { theme } = useTheme();
+  const t = useT();
   const accent = theme.accent;
   const accentFg = readableTextOn(accent);
   const [list, setList] = useState<CharacterEntry[]>(() => getCharacters());
@@ -60,45 +54,26 @@ export function CharacterPickerSheet({
     setImporting(true);
     setError(null);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        setError('Photo library access denied');
+      const outcome = await importCharacterFromLibrary();
+      if (outcome.status === 'denied') {
+        setError(t('companion.permissionDenied'));
         return;
       }
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-      });
-      if (picked.canceled || picked.assets.length === 0) return;
-      const asset = picked.assets[0];
-      const lifted = await subjectLifter.lift(asset.uri);
-      // Lifter returns 0/0 dims in the JS fallback; measure here so the layer
-      // knows the aspect ratio before paint.
-      const { width, height } = await measure(lifted.uri, asset);
-      const entry: CharacterEntry = {
-        id: `char_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        displayName: asset.fileName?.replace(/\.[^.]+$/, '') ?? 'Character',
-        sourceUri: asset.uri,
-        cutoutUri: lifted.uri,
-        thumbUri: lifted.uri,
-        intrinsicW: width,
-        intrinsicH: height,
-        createdAt: Date.now(),
-      };
-      const ok = upsertCharacter(entry);
+      if (outcome.status === 'cancelled') return;
+      const ok = upsertCharacter(outcome.entry);
       if (!ok) {
-        setError(`Library full (${limit} max). Remove one first.`);
+        setError(t('companion.libraryFull', { limit }));
         return;
       }
       hapticsBridge.success();
-      onSelect(entry);
+      if (!outcome.cutout) setError(t('companion.cutoutUnavailableBody'));
+      onSelect(outcome.entry);
     } catch (err) {
       setError((err as Error).message ?? 'Import failed');
     } finally {
       setImporting(false);
     }
-  }, [importing, limit, onSelect]);
+  }, [importing, limit, onSelect, t]);
 
   const handleDelete = useCallback((id: string) => {
     hapticsBridge.warning();
@@ -120,7 +95,7 @@ export function CharacterPickerSheet({
             onPress={onClose}
             hitSlop={14}
             accessibilityRole="button"
-            accessibilityLabel="Close character picker"
+            accessibilityLabel={t('common.close')}
             style={({ pressed }) => [
               styles.headerBtn,
               {
@@ -132,21 +107,19 @@ export function CharacterPickerSheet({
             <Ionicons name="close" size={20} color={theme.text.primary} />
           </Pressable>
           <ThemedText variant="titleLarge" weight="700">
-            Characters
+            {t('companion.title')}
           </ThemedText>
           <ThemedText variant="captionSmall" tone="secondary">
-            {`${list.length}/${limit}`}
+            {t('companion.count', { used: list.length, limit })}
           </ThemedText>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.gridWrap}
-          showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.gridWrap} showsVerticalScrollIndicator={false}>
           <Pressable
             onPress={handleImport}
             disabled={importing}
             accessibilityRole="button"
-            accessibilityLabel="Import character"
+            accessibilityLabel={t('companion.import')}
             style={({ pressed }) => [
               styles.importTile,
               {
@@ -157,7 +130,7 @@ export function CharacterPickerSheet({
             ]}>
             <Ionicons name="add" size={24} color={accentFg} />
             <ThemedText variant="bodySmall" weight="700" style={{ color: accentFg }}>
-              {importing ? 'Importing…' : 'Import'}
+              {importing ? t('companion.importing') : t('companion.import')}
             </ThemedText>
           </Pressable>
 
@@ -171,7 +144,7 @@ export function CharacterPickerSheet({
                     onSelect(entry);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Use ${entry.displayName}`}
+                  accessibilityLabel={t('companion.openA11y', { name: entry.displayName })}
                   accessibilityState={{ selected: active }}
                   style={({ pressed }) => [
                     styles.tile,
@@ -187,11 +160,25 @@ export function CharacterPickerSheet({
                     style={StyleSheet.absoluteFillObject}
                     contentFit="contain"
                   />
+                  {entry.hasAlpha !== true ? (
+                    <View
+                      style={[
+                        styles.originalTag,
+                        {
+                          backgroundColor: theme.background.primary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <ThemedText variant="captionSmall" weight="700" tone="secondary">
+                        {t('companion.notCutOut')}
+                      </ThemedText>
+                    </View>
+                  ) : null}
                 </Pressable>
                 <Pressable
                   onPress={() => handleDelete(entry.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove ${entry.displayName}`}
+                  accessibilityLabel={t('companion.deleteAngleA11y')}
                   hitSlop={8}
                   style={({ pressed }) => [
                     styles.deleteBtn,
@@ -229,20 +216,6 @@ export function CharacterPickerSheet({
       </SafeAreaView>
     </Modal>
   );
-}
-
-async function measure(
-  uri: string,
-  asset: ImagePicker.ImagePickerAsset
-): Promise<{ width: number; height: number }> {
-  if (asset.width && asset.height) return { width: asset.width, height: asset.height };
-  return new Promise((resolve) => {
-    RNImage.getSize(
-      uri,
-      (w, h) => resolve({ width: w, height: h }),
-      () => resolve({ width: 512, height: 768 })
-    );
-  });
 }
 
 const styles = StyleSheet.create({
@@ -300,6 +273,15 @@ const styles = StyleSheet.create({
   },
   tileLabel: {
     textAlign: 'center',
+  },
+  originalTag: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
   },
   errorBar: {
     margin: Spacing.md,

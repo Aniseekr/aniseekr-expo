@@ -48,7 +48,9 @@ import type {
 import CameraErrorBoundary from '../../../../components/pilgrimage/camera/CameraErrorBoundary';
 import { CameraStage } from '../../../../components/pilgrimage/camera/CameraStage';
 import { CompanionOverlay } from '../../../../components/companion/CompanionOverlay';
+import type { CharacterLayerHandle } from '../../../../components/companion/CharacterLayer';
 import type { CharacterEntry } from '../../../../libs/services/companion/character-library';
+import { compositeCharacterIntoPhoto } from '../../../../libs/services/companion/character-composite';
 import OverlayLayer from '../../../../components/pilgrimage/camera/OverlayLayer';
 import { FocusReticle } from '../../../../components/pilgrimage/camera/FocusReticle';
 import { LevelHorizon } from '../../../../components/pilgrimage/camera/LevelHorizon';
@@ -218,7 +220,6 @@ export default function CompareCaptureScreen() {
     aspect,
     overlayMode,
     edgeIntensity,
-    subjectFocus,
     subjectCombine,
     overlayOpacity,
     editMode,
@@ -237,6 +238,7 @@ export default function CompareCaptureScreen() {
   const [capturing, setCapturing] = useState(false);
   const [appIsForeground, setAppIsForeground] = useState(() => AppState.currentState === 'active');
   const [character, setCharacter] = useState<CharacterEntry | null>(null);
+  const characterLayerRef = useRef<CharacterLayerHandle>(null);
   const [characterPickerOpen, setCharacterPickerOpen] = useState(false);
   // Real device capabilities reported by VisionCamera through the engine. Null
   // until the first device pick resolves; drives zoom range, HDR availability,
@@ -498,7 +500,6 @@ export default function CompareCaptureScreen() {
     hiResImageUrl,
     themeColor,
     edgeIntensity,
-    subjectFocus,
   });
   const subjectReady = overlayMode === 'subject' && hiResImageUrl.length > 0;
 
@@ -814,7 +815,6 @@ export default function CompareCaptureScreen() {
         previewWidth: winW,
         previewHeight: winH,
         opacity: overlayOpacity,
-        focus: subjectFocus,
         transform: getOverlayTransformSnapshot(),
         quality: qualityToNumber(settings.quality),
         exif,
@@ -834,10 +834,45 @@ export default function CompareCaptureScreen() {
       winW,
       winH,
       overlayOpacity,
-      subjectFocus,
       getOverlayTransformSnapshot,
       settings.quality,
     ]
+  );
+
+  // Phase 1C — bake the placed companion character (去背 cut-out) into the shot
+  // at the live transform the user positioned it with. No-op when no character
+  // is selected. Runs after the subject composite so the character sits on top,
+  // mirroring the live preview (CompanionOverlay renders above OverlayLayer).
+  const maybeCompositeCharacterShot = useCallback(
+    async (
+      shot: { uri: string; width: number; height: number },
+      exif: Record<string, unknown> | null = null
+    ): Promise<{ uri: string; width: number; height: number }> => {
+      if (!character) return shot;
+      const snapshot = characterLayerRef.current?.getTransformSnapshot();
+      if (!snapshot) return shot;
+
+      const composite = await compositeCharacterIntoPhoto({
+        photoUri: shot.uri,
+        photoWidth: shot.width,
+        photoHeight: shot.height,
+        previewWidth: winW,
+        previewHeight: winH,
+        cutoutUri: character.cutoutUri,
+        intrinsicW: character.intrinsicW,
+        intrinsicH: character.intrinsicH,
+        transform: snapshot,
+        quality: qualityToNumber(settings.quality),
+        exif,
+      });
+
+      return {
+        uri: composite.uri,
+        width: composite.width || shot.width,
+        height: composite.height || shot.height,
+      };
+    },
+    [character, winW, winH, settings.quality]
   );
 
   const runSingle = useCallback(
@@ -872,10 +907,11 @@ export default function CompareCaptureScreen() {
         // composite mode this lets the Skia work and the EXIF rewrite
         // overlap, cutting the worst-case shutter→preview latency.
         const embedPromise = embedCaptureMetadata(photo.uri, additionalExif);
-        const output = await maybeCompositeSubjectShot(
+        const subjectOutput = await maybeCompositeSubjectShot(
           { uri: photo.uri, width: photo.width, height: photo.height },
           additionalExif
         );
+        const output = await maybeCompositeCharacterShot(subjectOutput, additionalExif);
         await embedPromise;
         tapFocus.releaseLock();
         // Lens-gate banner: when the capture was taken on the standalone
@@ -913,6 +949,7 @@ export default function CompareCaptureScreen() {
       settings.mute,
       tapFocus,
       maybeCompositeSubjectShot,
+      maybeCompositeCharacterShot,
       recordShot,
       setHud,
     ]
@@ -934,10 +971,11 @@ export default function CompareCaptureScreen() {
       // The other five alternates stay un-tagged in temp; if a later flow
       // ever surfaces one, it can be re-tagged on demand.
       const embedPromise = embedCaptureMetadata(result.uris[idx], additionalExif);
-      const output = await maybeCompositeSubjectShot(
+      const subjectOutput = await maybeCompositeSubjectShot(
         { uri: result.uris[idx], width: result.widths[idx], height: result.heights[idx] },
         additionalExif
       );
+      const output = await maybeCompositeCharacterShot(subjectOutput, additionalExif);
       await embedPromise;
       const burstUris = [...result.uris];
       burstUris[idx] = output.uri;
@@ -953,7 +991,14 @@ export default function CompareCaptureScreen() {
         lensType: result.lensType,
       });
     },
-    [burst, tapFocus, maybeCompositeSubjectShot, recordShot, buildExifNow]
+    [
+      burst,
+      tapFocus,
+      maybeCompositeSubjectShot,
+      maybeCompositeCharacterShot,
+      recordShot,
+      buildExifNow,
+    ]
   );
 
   // Run a real exposure bracket (3 frames at clamped [-2, 0, +2] EV) and
@@ -971,10 +1016,11 @@ export default function CompareCaptureScreen() {
       // there is only ever one piexif rewrite to do; run it alongside the
       // optional subject composite instead of in front of it.
       const embedPromise = embedCaptureMetadata(result.uri, additionalExif);
-      const output = await maybeCompositeSubjectShot(
+      const subjectOutput = await maybeCompositeSubjectShot(
         { uri: result.uri, width: result.width, height: result.height },
         additionalExif
       );
+      const output = await maybeCompositeCharacterShot(subjectOutput, additionalExif);
       await embedPromise;
       return recordShot({
         uri: output.uri,
@@ -988,7 +1034,14 @@ export default function CompareCaptureScreen() {
         lensType: result.lensType,
       });
     },
-    [bracket, tapFocus, maybeCompositeSubjectShot, recordShot, buildExifNow]
+    [
+      bracket,
+      tapFocus,
+      maybeCompositeSubjectShot,
+      maybeCompositeCharacterShot,
+      recordShot,
+      buildExifNow,
+    ]
   );
 
   // Auto mode: route the shot.
@@ -1282,7 +1335,6 @@ export default function CompareCaptureScreen() {
       visible={overlayVisible}
       mode={overlayMode}
       edgeIntensity={edgeIntensity}
-      subjectFocus={subjectFocus}
       subjectCombine={subjectCombine}
       characterSelected={character !== null}
       opacity={overlayOpacity}
@@ -1300,7 +1352,6 @@ export default function CompareCaptureScreen() {
         });
       }}
       onSelectEdgeIntensity={(i) => setHud({ edgeIntensity: i })}
-      onSelectSubjectFocus={(f) => setHud({ subjectFocus: f })}
       onToggleSubjectCombine={() => setHud((h) => ({ subjectCombine: !h.subjectCombine }))}
       onOpenCharacterPicker={() => setCharacterPickerOpen(true)}
       onChangeOpacity={(o) => setHud({ overlayOpacity: o })}
@@ -1370,6 +1421,7 @@ export default function CompareCaptureScreen() {
         <CompanionOverlay
           parentSize={{ width: winW, height: winH }}
           editMode={editMode}
+          characterLayerRef={characterLayerRef}
           character={character}
           pickerOpen={characterPickerOpen}
           onOpenPicker={() => setCharacterPickerOpen(true)}

@@ -1,19 +1,39 @@
-// Track D Phase 1 — SubjectLifter loader.
+// Track D Phase 1 — SubjectLifter loader (on-device background removal / 去背).
 //
-// Detects the Nitro-generated `SubjectLifter` HybridObject at runtime and
-// prefers it when available. Falls back to a JS-only path that returns the
-// input image untouched — per CLAUDE.md rule 8 we'd rather honestly say
-// "no lift performed" than invent alpha pixels.
+// Detects the native `AniseekrSubjectLifter` module (installed by
+// plugins/with-subject-lifter.js during `expo prebuild`) and prefers it when
+// available. Falls back to a JS-only path that returns the input image
+// untouched — per CLAUDE.md rule 8 we'd rather honestly say "no lift
+// performed" (hasAlpha: false) than invent alpha pixels.
 //
-// See `./subject-lifter.nitro.ts` for the Nitrogen spec, and run
-// `bunx nitrogen --paths libs/services/companion` after changing it.
+// Native implementation:
+//   iOS  — Vision: VNGenerateForegroundInstanceMaskRequest (iOS 17+),
+//          VNGeneratePersonSegmentationRequest fallback (iOS 15/16).
+//   Android — ML Kit Subject Segmentation (enableForegroundBitmap).
+// Both write a transparent PNG cutout to the app cache and resolve its uri.
 
-import type { SubjectLifter as NativeSubjectLifter, SubjectLifterResult } from './subject-lifter.nitro';
+import { NativeModules, Platform } from 'react-native';
 
-export type { SubjectLifterResult };
+/**
+ * Output of a subject lift. Width/height match the *cutout* (after subject
+ * extraction). `hasAlpha` is `true` only when the native side actually
+ * performed segmentation; the JS fallback sets it `false`.
+ */
+export interface SubjectLifterResult {
+  uri: string;
+  width: number;
+  height: number;
+  hasAlpha: boolean;
+}
 
 export interface SubjectLifter {
   isSupported(): boolean;
+  lift(imageUri: string): Promise<SubjectLifterResult>;
+}
+
+interface NativeSubjectLifterModule {
+  /** Exported constant — true iff this build can segment on-device. */
+  isSupported?: boolean;
   lift(imageUri: string): Promise<SubjectLifterResult>;
 }
 
@@ -31,39 +51,36 @@ export const jsSubjectLifter: SubjectLifter = {
 };
 
 function tryLoadNative(): SubjectLifter | null {
-  try {
-    // Lazy require so node/bun test environments don't fail on the native
-    // turbomodule install path (NitroModules tries to install at import
-    // time when the module is bound).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('react-native-nitro-modules') as {
-      NitroModules: {
-        createHybridObject<T>(name: string): T;
-      };
-    };
-    const native = mod.NitroModules.createHybridObject<NativeSubjectLifter>('SubjectLifter');
-    if (!native || !native.isSupported) return null;
-    return {
-      isSupported: () => native.isSupported,
-      lift: (uri: string) => native.lift(uri),
-    };
-  } catch {
-    // Module not registered (no native binding generated yet, or this build
-    // doesn't include the Nitro-compiled artefacts; tests also land here).
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
+  const native = (NativeModules as Record<string, unknown>).AniseekrSubjectLifter as
+    | NativeSubjectLifterModule
+    | undefined;
+  // Module missing (no native binding in this build / Expo Go), or the device
+  // reports it can't segment.
+  if (!native || native.isSupported !== true || typeof native.lift !== 'function') {
     return null;
   }
+  return {
+    isSupported: () => true,
+    lift: (uri: string) => {
+      if (!uri || typeof uri !== 'string') {
+        return Promise.reject(new Error('subject-lifter: imageUri must be a non-empty string'));
+      }
+      return native.lift(uri);
+    },
+  };
 }
 
 const nativeLifter = tryLoadNative();
 
 /**
- * Active lifter. Prefer the native implementation; otherwise the JS
- * fallback. The UI never throws on missing native support — it just sees
+ * Active lifter. Prefer the native implementation; otherwise the JS fallback.
+ * The UI never throws on missing native support — it just sees
  * `isSupported() === false` and offers the "Use as-is" path.
  */
 export const subjectLifter: SubjectLifter = nativeLifter ?? jsSubjectLifter;
 
-/** True iff the native Nitro module is wired up and reports support. */
+/** True iff the native module is wired up and reports support. */
 export function hasNativeSubjectLifter(): boolean {
-  return nativeLifter !== null && nativeLifter.isSupported();
+  return nativeLifter !== null;
 }

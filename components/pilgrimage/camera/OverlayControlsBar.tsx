@@ -8,11 +8,6 @@ import {
   edgeIntensityLabel,
   type EdgeIntensity,
 } from '../../../libs/services/pilgrimage/edge-overlay';
-import {
-  SUBJECT_FOCI,
-  subjectFocusLabel,
-  type SubjectFocus,
-} from '../../../libs/services/pilgrimage/subject-overlay';
 import { CameraChrome, cameraControlShadow } from './cameraChrome';
 import type { OverlayMode } from './types';
 
@@ -22,7 +17,6 @@ interface OverlayControlsBarProps {
   visible: boolean;
   mode: OverlayMode;
   edgeIntensity: EdgeIntensity;
-  subjectFocus: SubjectFocus;
   subjectCombine: boolean;
   characterSelected: boolean;
   opacity: number;
@@ -32,7 +26,6 @@ interface OverlayControlsBarProps {
   onSelectOff: () => void;
   onSelectMode: (mode: OverlayMode) => void;
   onSelectEdgeIntensity: (intensity: EdgeIntensity) => void;
-  onSelectSubjectFocus: (focus: SubjectFocus) => void;
   onToggleSubjectCombine: () => void;
   onOpenCharacterPicker: () => void;
   onChangeOpacity: (opacity: number) => void;
@@ -63,7 +56,6 @@ export default function OverlayControlsBar({
   visible,
   mode,
   edgeIntensity,
-  subjectFocus,
   subjectCombine,
   characterSelected,
   opacity,
@@ -73,7 +65,6 @@ export default function OverlayControlsBar({
   onSelectOff,
   onSelectMode,
   onSelectEdgeIntensity,
-  onSelectSubjectFocus,
   onToggleSubjectCombine,
   onOpenCharacterPicker,
   onChangeOpacity,
@@ -144,13 +135,6 @@ export default function OverlayControlsBar({
 
       {visible && mode === 'subject' ? (
         <View style={styles.subRow}>
-          <SubSegment
-            icon="person-outline"
-            options={SUBJECT_FOCI.map((f) => ({ id: f, label: subjectFocusLabel(f) }))}
-            activeId={subjectFocus}
-            themeColor={themeColor}
-            onPick={(id) => onSelectSubjectFocus(id as SubjectFocus)}
-          />
           <Pressable
             onPress={() => {
               hapticsBridge.selection();

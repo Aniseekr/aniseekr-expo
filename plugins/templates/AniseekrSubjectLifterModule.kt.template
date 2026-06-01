@@ -1,0 +1,109 @@
+package {{PACKAGE_NAME}}.subjectlifter
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
+import java.io.File
+import java.io.FileOutputStream
+
+/**
+ * On-device background removal via ML Kit Subject Segmentation. Writes a
+ * transparent PNG cutout to the app cache and resolves its uri + dimensions.
+ * Never fabricates a mask: if segmentation produces no foreground, the promise
+ * rejects with "no_subject" so the JS layer can offer "use as-is".
+ */
+class {{MODULE_NAME}}Module(private val ctx: ReactApplicationContext) :
+  ReactContextBaseJavaModule(ctx) {
+
+  override fun getName() = "{{MODULE_NAME}}"
+
+  override fun getConstants(): Map<String, Any> = mapOf("isSupported" to true)
+
+  @ReactMethod
+  fun lift(imageUri: String, promise: Promise) {
+    val bitmap = decodeOriented(imageUri)
+    if (bitmap == null) {
+      promise.reject("decode_failed", "Could not decode image at $imageUri")
+      return
+    }
+
+    val options = SubjectSegmenterOptions.Builder()
+      .enableForegroundBitmap()
+      .build()
+    val segmenter = SubjectSegmentation.getClient(options)
+    val input = InputImage.fromBitmap(bitmap, 0)
+
+    segmenter.process(input)
+      .addOnSuccessListener { result ->
+        val foreground = result.foregroundBitmap
+        if (foreground == null) {
+          promise.reject("no_subject", "No subject detected in the image")
+          segmenter.close()
+          return@addOnSuccessListener
+        }
+        try {
+          val out = File(
+            ctx.cacheDir,
+            "subject-cutout-${System.currentTimeMillis()}.png"
+          )
+          FileOutputStream(out).use { stream ->
+            foreground.compress(Bitmap.CompressFormat.PNG, 100, stream)
+          }
+          val map = Arguments.createMap().apply {
+            putString("uri", "file://${out.absolutePath}")
+            putInt("width", foreground.width)
+            putInt("height", foreground.height)
+            putBoolean("hasAlpha", true)
+          }
+          promise.resolve(map)
+        } catch (e: Exception) {
+          promise.reject("write_failed", e.localizedMessage, e)
+        } finally {
+          segmenter.close()
+        }
+      }
+      .addOnFailureListener { e ->
+        segmenter.close()
+        promise.reject("lift_failed", e.localizedMessage, e)
+      }
+  }
+
+  /** Decodes a file:// (or bare path) image, applying its EXIF rotation. */
+  private fun decodeOriented(imageUri: String): Bitmap? {
+    val path = when {
+      imageUri.startsWith("file://") -> imageUri.removePrefix("file://")
+      else -> imageUri
+    }
+    val decoded = BitmapFactory.decodeFile(path) ?: return null
+    return try {
+      val exif = ExifInterface(path)
+      val orientation = exif.getAttributeInt(
+        ExifInterface.TAG_ORIENTATION,
+        ExifInterface.ORIENTATION_NORMAL
+      )
+      val degrees = when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+      }
+      if (degrees == 0f) {
+        decoded
+      } else {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+      }
+    } catch (e: Exception) {
+      decoded
+    }
+  }
+}

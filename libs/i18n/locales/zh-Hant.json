@@ -688,6 +688,7 @@
         "caps": "規劃今天行程"
       },
       "myAlbumA11y": "我的聖地相簿",
+      "charactersA11y": "角色",
       "searchA11y": "搜尋",
       "section": {
         "featuredSpots": "精選景點",
@@ -1100,5 +1101,39 @@
       "walkHoursLong": "約 {hours} 小時步行",
       "walkHoursShort": "約 {hours} 小時"
     }
+  },
+  "companion": {
+    "title": "角色",
+    "subtitle": "已去背的角色貼紙",
+    "headerHint": "去背後放進你的巡禮照片",
+    "import": "匯入",
+    "importing": "去背中…",
+    "addAngle": "新增角度",
+    "rename": "重新命名",
+    "renameTitle": "重新命名角色",
+    "delete": "刪除",
+    "deleteConfirmTitle": "刪除角色？",
+    "deleteConfirmBody": "會一併刪除這個角色的所有角度，且無法復原。",
+    "cancel": "取消",
+    "save": "儲存",
+    "count": "{used}/{limit}",
+    "anglesCount": "{count} 個角度",
+    "oneAngle": "1 個角度",
+    "libraryFull": "相簿已滿（最多 {limit} 張），請先刪除一個角色。",
+    "permissionDenied": "需要相簿存取權才能匯入。",
+    "notCutOut": "原圖",
+    "cutoutBadge": "已去背",
+    "cutoutUnavailableTitle": "匯入時未去背",
+    "cutoutUnavailableBody": "無法分離出主體，已保留原圖。去背需要支援的裝置。",
+    "namePlaceholder": "角色名稱",
+    "empty": {
+      "title": "還沒有角色",
+      "body": "匯入一個角色或公仔——系統會自動去背，讓你放進巡禮照片裡。",
+      "cta": "匯入第一個角色"
+    },
+    "openA11y": "開啟 {name}",
+    "deleteAngleA11y": "刪除這個角度",
+    "albumSectionTitle": "我的角色",
+    "albumSectionManage": "管理"
   }
 }

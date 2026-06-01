@@ -1,14 +1,7 @@
 import type { SkImage } from '@shopify/react-native-skia';
-import {
-  useEdgeImage,
-  useSketchImage,
-  useSubjectImage,
-} from '../libs/services/pilgrimage/edge-image-skia';
+import { useEdgeImage, useSketchImage } from '../libs/services/pilgrimage/edge-image-skia';
 import { getEdgeOverlayConfig, type EdgeIntensity } from '../libs/services/pilgrimage/edge-overlay';
-import {
-  getSubjectOverlayConfig,
-  type SubjectFocus,
-} from '../libs/services/pilgrimage/subject-overlay';
+import { useLiftedSubjectImage } from '../libs/services/pilgrimage/subject-cutout';
 import type { OverlayMode } from '../components/pilgrimage/camera/types';
 
 interface UseEdgeOrSketchInput {
@@ -16,7 +9,6 @@ interface UseEdgeOrSketchInput {
   hiResImageUrl: string;
   themeColor: string;
   edgeIntensity: EdgeIntensity;
-  subjectFocus: SubjectFocus;
 }
 
 interface UseEdgeOrSketchOutput {
@@ -31,10 +23,8 @@ export function useEdgeOrSketch({
   hiResImageUrl,
   themeColor,
   edgeIntensity,
-  subjectFocus,
 }: UseEdgeOrSketchInput): UseEdgeOrSketchOutput {
   const edgeConfig = getEdgeOverlayConfig(edgeIntensity);
-  const subjectConfig = getSubjectOverlayConfig(subjectFocus);
   const {
     edgeImage,
     loading: edgeLoading,
@@ -52,11 +42,12 @@ export function useEdgeOrSketch({
     inkColor: '#1A1A1A',
     inkOpacity: 1,
   });
+  // Subject mode = real background removal (去背) of the scene, not an ellipse.
   const {
-    subjectImage,
+    image: subjectImage,
     loading: subjectLoading,
     error: subjectError,
-  } = useSubjectImage(mode === 'subject' ? hiResImageUrl : null, subjectConfig);
+  } = useLiftedSubjectImage(mode === 'subject' ? hiResImageUrl : null);
 
   if (mode === 'edge') {
     return {

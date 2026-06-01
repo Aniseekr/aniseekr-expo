@@ -43,6 +43,11 @@ import {
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
 import { useT } from '../../../libs/i18n';
+import {
+  getCharacterGroups,
+  subscribeCharacters,
+} from '../../../libs/services/companion/character-library-store';
+import type { CharacterGroup } from '../../../libs/services/companion/character-library';
 
 type AlbumEntry = PilgrimageAlbumEntry;
 
@@ -87,11 +92,7 @@ const REGION_ORDER: AnimeTourism88Region[] = [
   'kyushu_okinawa',
 ];
 
-function formatRelative(
-  timestamp: number,
-  now: number,
-  t: ReturnType<typeof useT>
-): string {
+function formatRelative(timestamp: number, now: number, t: ReturnType<typeof useT>): string {
   const delta = Math.max(0, now - timestamp);
   const minute = 60_000;
   const hour = 60 * minute;
@@ -125,6 +126,9 @@ export default function PilgrimageAlbumScreen() {
   const [animes, setAnimes] = useState<AnitabiBangumi[]>([]);
   const [regionFilter, setRegionFilter] = useState<RegionFilter>('all');
   const [selectedAnimeId, setSelectedAnimeId] = useState<string | null>(animeIdParam ?? null);
+  const [characters, setCharacters] = useState<CharacterGroup[]>(() => getCharacterGroups());
+
+  useEffect(() => subscribeCharacters(() => setCharacters(getCharacterGroups())), []);
 
   // Captures are seeded synchronously above; no async reload needed because
   // every writer (camera capture flow, clear actions) updates MMKV directly
@@ -328,8 +332,7 @@ export default function PilgrimageAlbumScreen() {
           returnTo: 'album',
           albumAnimeId: selectedAnimeId,
           title: anime?.title || anime?.cn || null,
-          titleSecondary:
-            anime?.cn && anime.cn !== anime.title ? anime.cn : null,
+          titleSecondary: anime?.cn && anime.cn !== anime.title ? anime.cn : null,
           poster: anime?.cover ?? null,
           themeColor: anime?.color ?? null,
         })
@@ -446,6 +449,98 @@ export default function PilgrimageAlbumScreen() {
               theme={theme}
             />
           </View>
+
+          {!isDetail ? (
+            <View style={styles.charSection}>
+              <View style={styles.charHeader}>
+                <ThemedText variant="titleSmall" weight="700">
+                  {t('companion.albumSectionTitle')}
+                </ThemedText>
+                <Pressable
+                  onPress={() => {
+                    hapticsBridge.selection();
+                    router.push('/companion/library');
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('companion.albumSectionManage')}
+                  style={({ pressed }) => [styles.charManageBtn, pressed && { opacity: 0.6 }]}>
+                  <ThemedText variant="captionSmall" weight="700" style={{ color: theme.accent }}>
+                    {t('companion.albumSectionManage')}
+                  </ThemedText>
+                  <Ionicons name="chevron-forward" size={13} color={theme.accent} />
+                </Pressable>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.charRail}>
+                {characters.map((group) => (
+                  <Pressable
+                    key={group.groupId}
+                    onPress={() => {
+                      hapticsBridge.selection();
+                      router.push('/companion/library');
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('companion.openA11y', { name: group.name })}
+                    style={({ pressed }) => [styles.charTile, pressed && { opacity: 0.85 }]}>
+                    <View
+                      style={[
+                        styles.charThumb,
+                        {
+                          backgroundColor: theme.background.tertiary,
+                          borderColor: theme.glassBorder,
+                        },
+                      ]}>
+                      <Image
+                        source={{ uri: group.cover.thumbUri }}
+                        style={StyleSheet.absoluteFillObject}
+                        contentFit="contain"
+                      />
+                    </View>
+                    <ThemedText
+                      variant="captionSmall"
+                      weight="600"
+                      numberOfLines={1}
+                      style={styles.charTileName}>
+                      {group.name}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+                <Pressable
+                  onPress={() => {
+                    hapticsBridge.selection();
+                    router.push('/companion/library');
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    characters.length === 0 ? t('companion.empty.cta') : t('companion.import')
+                  }
+                  style={({ pressed }) => [
+                    styles.charAddTile,
+                    { borderColor: theme.glassBorder, backgroundColor: theme.background.secondary },
+                    pressed && { opacity: 0.8 },
+                  ]}>
+                  <Ionicons
+                    name={characters.length === 0 ? 'people-outline' : 'add'}
+                    size={22}
+                    color={theme.accent}
+                  />
+                  {characters.length === 0 ? (
+                    <ThemedText
+                      variant="captionSmall"
+                      weight="700"
+                      tone="secondary"
+                      numberOfLines={2}
+                      style={styles.charAddLabel}>
+                      {t('companion.empty.cta')}
+                    </ThemedText>
+                  ) : null}
+                </Pressable>
+              </ScrollView>
+            </View>
+          ) : null}
 
           {!isDetail && (availableRegions.regions.length > 0 || availableRegions.hasOther) ? (
             <ScrollView
@@ -1081,6 +1176,53 @@ function makeStyles(theme: ThemePalette) {
       flexDirection: 'row',
       alignItems: 'flex-end',
       gap: 2,
+    },
+    charSection: {
+      gap: 8,
+    },
+    charHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    charManageBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      paddingVertical: 4,
+    },
+    charRail: {
+      gap: 10,
+      paddingVertical: 2,
+      paddingRight: 4,
+    },
+    charTile: {
+      width: 72,
+      gap: 4,
+    },
+    charThumb: {
+      width: 72,
+      height: 92,
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+    },
+    charTileName: {
+      textAlign: 'center',
+    },
+    charAddTile: {
+      width: 72,
+      height: 92,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingHorizontal: 4,
+    },
+    charAddLabel: {
+      textAlign: 'center',
     },
     chipsRow: {
       gap: 8,

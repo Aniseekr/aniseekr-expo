@@ -688,6 +688,7 @@
         "caps": "PLAN YOUR DAY"
       },
       "myAlbumA11y": "My pilgrimage album",
+      "charactersA11y": "Characters",
       "searchA11y": "Search",
       "section": {
         "featuredSpots": "Featured Spots",
@@ -1100,5 +1101,39 @@
       "walkHoursLong": "~{hours}h walk",
       "walkHoursShort": "~{hours}h"
     }
+  },
+  "companion": {
+    "title": "Characters",
+    "subtitle": "Background-removed stickers for your shots",
+    "headerHint": "Cut out & drop into your pilgrimage photos",
+    "import": "Import",
+    "importing": "Removing background…",
+    "addAngle": "Add angle",
+    "rename": "Rename",
+    "renameTitle": "Rename character",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete character?",
+    "deleteConfirmBody": "This removes all of its angles and can't be undone.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "count": "{used}/{limit}",
+    "anglesCount": "{count} angles",
+    "oneAngle": "1 angle",
+    "libraryFull": "Library full ({limit} max). Delete a character first.",
+    "permissionDenied": "Photo library access is needed to import.",
+    "notCutOut": "Original",
+    "cutoutBadge": "Cut out",
+    "cutoutUnavailableTitle": "Imported without cut-out",
+    "cutoutUnavailableBody": "Couldn't separate a subject, so the original image was kept. Background removal needs a supported device.",
+    "namePlaceholder": "Character name",
+    "empty": {
+      "title": "No characters yet",
+      "body": "Import a character or figure — the background is removed automatically so you can drop it into your pilgrimage shots.",
+      "cta": "Import your first character"
+    },
+    "openA11y": "Open {name}",
+    "deleteAngleA11y": "Delete this angle",
+    "albumSectionTitle": "My characters",
+    "albumSectionManage": "Manage"
   }
 }

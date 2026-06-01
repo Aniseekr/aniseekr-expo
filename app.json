@@ -16,6 +16,7 @@
       "./plugins/with-clarity-proguard.js",
       "./plugins/with-storekit-config.js",
       "./plugins/with-cloudkit-bridge.js",
+      "./plugins/with-subject-lifter.js",
       [
         "react-native-cloud-storage",
         {

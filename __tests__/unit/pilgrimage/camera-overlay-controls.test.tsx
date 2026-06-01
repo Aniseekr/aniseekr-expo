@@ -27,7 +27,6 @@ describe('camera overlay controls', () => {
       visible: true,
       mode: 'subject',
       edgeIntensity: 'low',
-      subjectFocus: 'normal',
       subjectCombine: false,
       characterSelected: false,
       opacity: 0.35,
@@ -37,7 +36,6 @@ describe('camera overlay controls', () => {
       onSelectOff: noop,
       onSelectMode: noop,
       onSelectEdgeIntensity: noop,
-      onSelectSubjectFocus: noop,
       onToggleSubjectCombine: noop,
       onOpenCharacterPicker: () => {
         pickerOpenCount += 1;

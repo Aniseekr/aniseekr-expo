@@ -125,7 +125,7 @@
 - **Nitro 模組 `subject-lifter`**
   - iOS 17+：`VisionKit.ImageAnalyzer` + `VNGenerateForegroundInstanceMaskRequest`
   - iOS 16 fallback：`VNGeneratePersonSegmentationRequest`
-  - Android：`com.google.mlkit:subject-segmentation`
+  - Android：`com.google.android.gms:play-services-mlkit-subject-segmentation`
   - API：
     ```ts
     interface SubjectLifter extends HybridObject {
