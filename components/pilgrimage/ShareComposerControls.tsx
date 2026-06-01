@@ -18,6 +18,7 @@ import {
 import Slider from '@react-native-community/slider';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedText, readableTextOn } from '../themed';
+import { useT } from '../../libs/i18n';
 import type { ThemePalette } from '../../context/ThemeContext';
 import { Radius, Spacing } from '../../constants/DesignSystem';
 import { hapticsBridge } from '../../modules/haptics/hapticsBridge';
@@ -145,6 +146,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
     onOpenManualWarp,
     onResetManualWarp,
   } = props;
+  const t = useT();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const accentFg = readableTextOn(accent);
 
@@ -168,7 +170,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         <Pressable
           onPress={handleSwap}
           accessibilityRole="button"
-          accessibilityLabel="Swap image order"
+          accessibilityLabel={t('pilgrimage.share.a11y.swapOrder')}
           accessibilityState={{ selected: swapOrder }}
           style={({ pressed }) => [
             styles.swapChip,
@@ -187,7 +189,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
             variant="captionSmall"
             weight="700"
             style={{ color: swapOrder ? accentFg : theme.text.primary }}>
-            {swapOrder ? 'REAL first' : 'ANIME first'}
+            {swapOrder ? t('pilgrimage.share.realFirst') : t('pilgrimage.share.animeFirst')}
           </ThemedText>
         </Pressable>
 
@@ -202,7 +204,10 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                   onExportResolutionChange(r.id);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Export ${r.label} (${r.hint})`}
+                accessibilityLabel={t('pilgrimage.share.a11y.export', {
+                  label: r.label,
+                  hint: r.hint,
+                })}
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [
                   styles.resChip,
@@ -229,7 +234,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         <View style={styles.sectionHeader}>
           <Ionicons name="color-filter-outline" size={14} color={theme.text.secondary} />
           <ThemedText variant="captionSmall" tone="secondary" weight="600">
-            Filter
+            {t('pilgrimage.share.filter')}
           </ThemedText>
           <Pressable
             onPress={() => {
@@ -237,7 +242,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               onOpenCrop();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Crop user photo"
+            accessibilityLabel={t('pilgrimage.share.a11y.cropPhoto')}
             style={({ pressed }) => [
               styles.cropChip,
               {
@@ -252,7 +257,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               variant="captionSmall"
               weight="700"
               style={{ color: cropApplied ? accentFg : theme.text.primary }}>
-              {cropApplied ? 'Cropped' : 'Crop'}
+              {cropApplied ? t('pilgrimage.share.cropped') : t('pilgrimage.share.crop')}
             </ThemedText>
           </Pressable>
         </View>
@@ -270,7 +275,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                   onFilterPresetChange(f.id);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Filter ${f.label}`}
+                accessibilityLabel={t('pilgrimage.share.a11y.filter', { label: f.label })}
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [
                   styles.filterChip,
@@ -316,13 +321,13 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
           theme={theme}
           accent={accent}
           icon="color-wand-outline"
-          label="Auto color match"
+          label={t('pilgrimage.share.autoColorMatch')}
           subtitle={
             !autoMatchAvailable
-              ? 'Needs both photos loaded'
+              ? t('pilgrimage.share.autoColorMatchNeed')
               : autoMatchLoading
-                ? 'Analysing…'
-                : 'Match user shot to anime palette'
+                ? t('pilgrimage.share.analysing')
+                : t('pilgrimage.share.autoColorMatchDesc')
           }
           value={autoMatchEnabled}
           disabled={!autoMatchAvailable || autoMatchLoading}
@@ -333,11 +338,11 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
           theme={theme}
           accent={accent}
           icon="scan-outline"
-          label="Auto perspective"
+          label={t('pilgrimage.share.autoPerspective')}
           subtitle={
             autoWarpAvailable
-              ? 'Correct tilt from capture sensors'
-              : 'No sensor data on this capture'
+              ? t('pilgrimage.share.autoPerspectiveDesc')
+              : t('pilgrimage.share.autoPerspectiveNoData')
           }
           value={autoWarpEnabled}
           disabled={!autoWarpAvailable}
@@ -354,10 +359,12 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
           </View>
           <View style={{ flex: 1 }}>
             <ThemedText variant="bodyMedium" weight="600">
-              Manual warp
+              {t('pilgrimage.share.manualWarp')}
             </ThemedText>
             <ThemedText variant="captionSmall" tone="secondary">
-              {manualWarpApplied ? '4-corner warp applied' : 'Drag corners to align'}
+              {manualWarpApplied
+                ? t('pilgrimage.share.manualWarpApplied')
+                : t('pilgrimage.share.manualWarpHint')}
             </ThemedText>
           </View>
           {manualWarpApplied ? (
@@ -368,7 +375,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               }}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Reset manual warp"
+              accessibilityLabel={t('pilgrimage.share.a11y.resetWarp')}
               style={({ pressed }) => [
                 styles.cropChip,
                 {
@@ -386,7 +393,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               onOpenManualWarp();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open manual warp editor"
+            accessibilityLabel={t('pilgrimage.share.a11y.openWarp')}
             style={({ pressed }) => [
               styles.cropChip,
               {
@@ -396,7 +403,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               },
             ]}>
             <ThemedText variant="captionSmall" weight="700" style={{ color: accentFg }}>
-              Edit
+              {t('pilgrimage.share.edit')}
             </ThemedText>
           </Pressable>
         </View>
@@ -407,7 +414,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         <View style={styles.sectionHeader}>
           <Ionicons name="color-palette-outline" size={14} color={theme.text.secondary} />
           <ThemedText variant="captionSmall" tone="secondary" weight="600">
-            Background
+            {t('pilgrimage.share.background')}
           </ThemedText>
         </View>
         <ScrollView
@@ -421,7 +428,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                 key={s.id}
                 onPress={() => handlePickColor(s.hex)}
                 accessibilityRole="button"
-                accessibilityLabel={`Background ${s.label}`}
+                accessibilityLabel={t('pilgrimage.share.a11y.bgSwatch', { label: s.label })}
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [
                   styles.swatch,
@@ -449,7 +456,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         <View style={styles.sectionHeader}>
           <Ionicons name="text-outline" size={14} color={theme.text.secondary} />
           <ThemedText variant="captionSmall" tone="secondary" weight="600">
-            Watermark
+            {t('pilgrimage.share.watermark')}
           </ThemedText>
           <ThemedText
             variant="captionSmall"
@@ -461,7 +468,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
         <TextInput
           value={watermarkInput}
           onChangeText={(v) => onWatermarkInputChange(v.slice(0, WATERMARK_MAX_LENGTH))}
-          placeholder="@your_handle, trip name, …"
+          placeholder={t('pilgrimage.share.watermarkPlaceholder')}
           placeholderTextColor={theme.text.tertiary}
           maxLength={WATERMARK_MAX_LENGTH}
           style={[
@@ -486,7 +493,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                       onWatermarkPositionChange(p);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Watermark position ${p}`}
+                    accessibilityLabel={t('pilgrimage.share.a11y.watermarkPosition', { label: p })}
                     accessibilityState={{ selected: active }}
                     style={({ pressed }) => [
                       styles.positionChip,
@@ -536,7 +543,9 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                       onWatermarkFontChange(f.id);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Watermark font ${f.label}`}
+                    accessibilityLabel={t('pilgrimage.share.a11y.watermarkFont', {
+                      label: f.label,
+                    })}
                     accessibilityState={{ selected: active }}
                     style={({ pressed }) => [
                       styles.fontChip,
@@ -575,7 +584,9 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                       onWatermarkColorChange(c.hex);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Watermark color ${c.label}`}
+                    accessibilityLabel={t('pilgrimage.share.a11y.watermarkColor', {
+                      label: c.label,
+                    })}
                     accessibilityState={{ selected: active }}
                     style={({ pressed }) => [
                       styles.swatch,

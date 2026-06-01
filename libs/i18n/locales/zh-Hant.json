@@ -975,6 +975,39 @@
   },
 
   "pilgrimage": {
+    "share": {
+      "realFirst": "實景在前",
+      "animeFirst": "動漫在前",
+      "filter": "濾鏡",
+      "crop": "裁切",
+      "cropped": "已裁切",
+      "background": "背景",
+      "watermark": "浮水印",
+      "watermarkPlaceholder": "@你的帳號、旅程名稱…",
+      "autoColorMatch": "自動配色",
+      "autoColorMatchNeed": "需要兩張圖都載入",
+      "analysing": "分析中…",
+      "autoColorMatchDesc": "把實拍調成動漫色調",
+      "autoPerspective": "自動透視",
+      "autoPerspectiveDesc": "用拍攝感測器校正傾斜",
+      "autoPerspectiveNoData": "這張沒有感測器資料",
+      "manualWarp": "手動透視",
+      "manualWarpApplied": "已套用四角變形",
+      "manualWarpHint": "拖曳四角對齊",
+      "edit": "編輯",
+      "a11y": {
+        "swapOrder": "交換圖片順序",
+        "export": "匯出 {label}（{hint}）",
+        "cropPhoto": "裁切實拍照片",
+        "filter": "濾鏡 {label}",
+        "resetWarp": "重設手動透視",
+        "openWarp": "開啟手動透視編輯器",
+        "bgSwatch": "背景 {label}",
+        "watermarkPosition": "浮水印位置 {label}",
+        "watermarkFont": "浮水印字體 {label}",
+        "watermarkColor": "浮水印顏色 {label}"
+      }
+    },
     "album": {
       "addPhotoA11y": "在此資料夾新增照片",
       "addPilgrimage": "新增巡禮",

@@ -975,6 +975,39 @@
   },
 
   "pilgrimage": {
+    "share": {
+      "realFirst": "REAL first",
+      "animeFirst": "ANIME first",
+      "filter": "Filter",
+      "crop": "Crop",
+      "cropped": "Cropped",
+      "background": "Background",
+      "watermark": "Watermark",
+      "watermarkPlaceholder": "@your_handle, trip name, …",
+      "autoColorMatch": "Auto color match",
+      "autoColorMatchNeed": "Needs both photos loaded",
+      "analysing": "Analysing…",
+      "autoColorMatchDesc": "Match user shot to anime palette",
+      "autoPerspective": "Auto perspective",
+      "autoPerspectiveDesc": "Correct tilt from capture sensors",
+      "autoPerspectiveNoData": "No sensor data on this capture",
+      "manualWarp": "Manual warp",
+      "manualWarpApplied": "4-corner warp applied",
+      "manualWarpHint": "Drag corners to align",
+      "edit": "Edit",
+      "a11y": {
+        "swapOrder": "Swap image order",
+        "export": "Export {label} ({hint})",
+        "cropPhoto": "Crop user photo",
+        "filter": "Filter {label}",
+        "resetWarp": "Reset manual warp",
+        "openWarp": "Open manual warp editor",
+        "bgSwatch": "Background {label}",
+        "watermarkPosition": "Watermark position {label}",
+        "watermarkFont": "Watermark font {label}",
+        "watermarkColor": "Watermark color {label}"
+      }
+    },
     "album": {
       "addPhotoA11y": "Add photo to this folder",
       "addPilgrimage": "Add Pilgrimage",
