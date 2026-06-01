@@ -1121,6 +1121,7 @@
     "oneAngle": "1 angle",
     "libraryFull": "Library full ({limit} max). Delete a character first.",
     "permissionDenied": "Photo library access is needed to import.",
+    "importFailed": "Import failed",
     "notCutOut": "Original",
     "cutoutBadge": "Cut out",
     "cutoutUnavailableTitle": "Imported without cut-out",

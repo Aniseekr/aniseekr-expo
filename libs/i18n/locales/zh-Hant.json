@@ -1121,6 +1121,7 @@
     "oneAngle": "1 個角度",
     "libraryFull": "相簿已滿（最多 {limit} 張），請先刪除一個角色。",
     "permissionDenied": "需要相簿存取權才能匯入。",
+    "importFailed": "匯入失敗",
     "notCutOut": "原圖",
     "cutoutBadge": "已去背",
     "cutoutUnavailableTitle": "匯入時未去背",

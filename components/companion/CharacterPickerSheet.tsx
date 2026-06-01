@@ -66,10 +66,17 @@ export function CharacterPickerSheet({
         return;
       }
       hapticsBridge.success();
-      if (!outcome.cutout) setError(t('companion.cutoutUnavailableBody'));
+      // No去背: the entry is already in the library (badged "Original"); keep the
+      // sheet open with the notice instead of auto-selecting + closing, which
+      // would discard the message the user needs to see.
+      if (!outcome.cutout) {
+        setError(t('companion.cutoutUnavailableBody'));
+        return;
+      }
       onSelect(outcome.entry);
     } catch (err) {
-      setError((err as Error).message ?? 'Import failed');
+      console.warn('[companion] import failed', err);
+      setError(t('companion.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -179,7 +186,7 @@ export function CharacterPickerSheet({
                   onPress={() => handleDelete(entry.id)}
                   accessibilityRole="button"
                   accessibilityLabel={t('companion.deleteAngleA11y')}
-                  hitSlop={8}
+                  hitSlop={11}
                   style={({ pressed }) => [
                     styles.deleteBtn,
                     {
@@ -208,7 +215,10 @@ export function CharacterPickerSheet({
               styles.errorBar,
               { backgroundColor: theme.status.error, borderColor: theme.status.error },
             ]}>
-            <ThemedText variant="captionSmall" weight="700" style={{ color: '#fff' }}>
+            <ThemedText
+              variant="captionSmall"
+              weight="700"
+              style={{ color: readableTextOn(theme.status.error) }}>
               {error}
             </ThemedText>
           </View>
