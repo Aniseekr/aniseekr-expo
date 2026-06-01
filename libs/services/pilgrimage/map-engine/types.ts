@@ -1,10 +1,8 @@
 // Engine-neutral data model + surface contract for the pilgrimage map.
 //
 // The three map surfaces (hub fullscreen, reusable detail map, spot detail map)
-// currently each talk to Leaflet-in-WebView through their own bespoke bridge.
-// This module defines the SINGLE engine-agnostic vocabulary they converge on so
-// a `MapSurface` can render via MapLibre (primary) or Leaflet (rollout-safety)
-// without the screens knowing which. See the MapLibre migration spec §4–§5.
+// share this single vocabulary so screens stay decoupled from the concrete
+// MapLibre Native renderer. See the MapLibre migration spec §4-§5.
 //
 // Pure types only — no runtime, no engine import. Verified by `tsc`.
 import type * as React from 'react';
@@ -120,7 +118,7 @@ export interface MapSurfaceProps {
   clusterDisableAtZoom?: number;
   /** Style/source URL (resolved via `map-source-prefs.resolveMapStyleUrl`). */
   styleUrl?: string;
-  /** On-location offline-only mode (Leaflet path today). */
+  /** On-location offline-only mode. Reserved until explicit MapLibre packs land. */
   offlineOnly?: boolean;
   /** Pixels to lift in-map controls/attribution off the bottom edge. */
   controlsBottomOffset?: number;

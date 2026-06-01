@@ -1,9 +1,8 @@
 // Hub anime-balloon / Tourism-88 marker shape + region bounding box.
 //
-// Re-homed out of `components/pilgrimage/HubMapWebView.tsx` so the engine-neutral
-// layer (`normalize.ts`) no longer imports from a Leaflet WebView component —
-// that coupling blocked deleting the Leaflet hub. `HubMapWebView` re-exports
-// these for back-compat until it is removed. Pure types, no runtime.
+// Re-homed out of the deleted Leaflet WebView so the engine-neutral layer
+// (`normalize.ts`) no longer imports from a concrete map component. Pure types,
+// no runtime.
 
 export interface HubMapMarker {
   /** Unique within a marker set: "bgm:<id>" for Anitabi-centroid markers, "88:<entryId>" for Tourism 88 city pins. */

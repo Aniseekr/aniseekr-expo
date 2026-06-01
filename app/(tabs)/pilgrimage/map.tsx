@@ -1,13 +1,13 @@
 // Pilgrimage hub map. Map-first design mirroring the per-anime detail screen
-// (app/(tabs)/pilgrimage/[animeId].tsx) so the user perceives the hub → detail
+// (app/(tabs)/pilgrimage/[animeId].tsx) so the user perceives the hub -> detail
 // transition as a continuous focus shift instead of a hard page change:
 //
-//   • Full-bleed Leaflet WebView is the primary surface.
-//   • A floating top overlay carries back + album + an in-page search field,
+//   - Full-bleed MapLibre Native is the primary surface.
+//   - A floating top overlay carries back + album + an in-page search field,
 //     plus a region chip strip for the Anime Tourism 88 selection.
-//   • A persistent pull-up bottom sheet (PilgrimageHubSheet) hosts the
+//   - A persistent pull-up bottom sheet (PilgrimageHubSheet) hosts the
 //     focused-anime card, hub stats, and the nearby anime list.
-//   • A floating bottom chrome (filter chips + Grid/Rows toggle) is anchored
+//   - A floating bottom chrome (filter chips + Grid/Rows toggle) is anchored
 //     to the sheet's top edge via a shared value so it hugs the handle as the
 //     user drags.
 //
@@ -21,25 +21,11 @@
 // Route params:
 //   - focus?: number — bangumi id to focus the map on (initial centre)
 
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import {
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Portal } from '@gorhom/portal';
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
@@ -61,12 +47,29 @@ import {
 } from '../../../libs/services/pilgrimage/anime88-repository';
 import { getNumberParam } from '../../../libs/utils/route-params';
 import type { AnitabiBangumi } from '../../../libs/services/pilgrimage/types';
-import type { HubMapMarker, RegionBounds } from '../../../libs/services/pilgrimage/map-engine/hub-marker';
+import type {
+  HubMapMarker,
+  RegionBounds,
+} from '../../../libs/services/pilgrimage/map-engine/hub-marker';
 import { OFFICIAL_88_GOLD } from '../../../libs/services/pilgrimage/region-color';
-import { MAP_PORTAL_HOST, useMapHost } from '../../../components/pilgrimage/MapHost';
+import {
+  MapSurface,
+  type MapMarker,
+  type MapSurfaceHandle,
+} from '../../../components/pilgrimage/map';
+import { hubMarkerToMapMarker } from '../../../libs/services/pilgrimage/map-engine/normalize';
+import { CLUSTER_DISABLE_AT } from '../../../libs/services/pilgrimage/map-engine/cluster-style';
+import {
+  loadMapStyleOverrideSync,
+  resolveMapStyleUrl,
+  subscribeMapStyleOverride,
+} from '../../../libs/services/pilgrimage/map-source-prefs';
+import { resolveMapMode } from '../../../libs/services/pilgrimage/map-theme-prefs';
+import { useMapThemePref } from '../../../hooks/useMapThemePref';
 import { getPilgrimageAnimeTitles } from '../../../libs/services/pilgrimage/pilgrimage-localization';
 import { buildPilgrimageDetailRoute } from '../../../libs/services/pilgrimage/pilgrimage-navigation';
 import { getPilgrimageHubSnapshot } from '../../../libs/services/pilgrimage/pilgrimage-hub-cache';
+import { resolvePilgrimageHubInitialView } from '../../../libs/services/pilgrimage/pilgrimage-hub-initial-view';
 import { resolvePilgrimageMapInitialMode } from '../../../libs/services/pilgrimage/pilgrimage-design-flow';
 import { usePilgrimageHubData } from '../../../hooks/usePilgrimageHubData';
 import {
@@ -93,7 +96,7 @@ const REGION_88_LABELS: Record<AnimeTourism88Region, string> = {
 // regional view (not a city zoom): a region tap should let the user see "the
 // whole Kanto / whole Kyushu" before they drill into a specific anime.
 // Tokyo Metro is the 23-ward area so it stays distinct from the wider Kanto.
-// RegionBounds is exported from HubMapWebView (the WebView's __flyToBounds payload shape).
+// RegionBounds is the MapSurface fitBounds payload shape.
 const REGION_BOUNDS: Record<AnimeTourism88Region, RegionBounds> = {
   hokkaido_tohoku: { south: 37.0, west: 139.4, north: 45.6, east: 146.0 },
   kanto: { south: 35.0, west: 138.7, north: 37.0, east: 141.0 },
@@ -112,9 +115,6 @@ const JAPAN_BOUNDS: RegionBounds = {
   north: 45.6,
   east: 146.0,
 };
-
-// OFFICIAL_88_GOLD (the 88-selection mark colour) is imported from
-// HubMapWebView — shared between build88Markers here and the WebView's pin CSS.
 
 function build88Markers(entries: readonly AnimeTourism88EntryWithCoords[]): HubMapMarker[] {
   const out: HubMapMarker[] = [];
@@ -157,34 +157,39 @@ export default function PilgrimageMapScreen() {
   const router = useRouter();
   const t = useT();
   const params = useLocalSearchParams();
-  const initialMode = useMemo(
-    () => resolvePilgrimageMapInitialMode(params.mode),
-    [params.mode]
-  );
+  const initialMode = useMemo(() => resolvePilgrimageMapInitialMode(params.mode), [params.mode]);
   const focusBangumiIdParam = getNumberParam(params, 'focus');
-  const { theme } = useTheme();
+  const { theme, effectiveMode } = useTheme();
+  const { pref: mapThemePref } = useMapThemePref();
   const styles = useMemo(() => makeStyles(theme, insets.top), [theme, insets.top]);
   const themeColor = theme.accent;
   const themeColorFg = readableTextOn(themeColor);
 
-  // The single shared Leaflet WebView lives in the pilgrimage layout
-  // (MapHostProvider). This screen claims it on focus and drives it through
-  // host.update/recenter/setHeading instead of rendering its own instance —
-  // so the 200KB parse is paid once per session (CLAUDE.md Rule 10).
-  const host = useMapHost();
+  // The hub renders its own native <MapSurface> inline (no portal). Because the
+  // pilgrimage stack keeps THIS screen mounted when detail is pushed on top, the
+  // map stays warm across hub→detail→back; and a native map inside the screen is
+  // correctly hidden by the navigator when covered, so it can't bleed through
+  // (which the old portal-above-navigator layer couldn't prevent for a native
+  // GL surface). recenter/heading/focus are driven imperatively (Rule 9).
+  const mapRef = useRef<MapSurfaceHandle>(null);
 
-  // The locate FAB and the WebView's user-marker share a single hook so the
-  // dot, the cone, the recentre, and the permission sheet all stay in sync.
-  // Snapshot-seeded `initialLocation` keeps the dot visible on warm starts.
-  // Read once at mount — the data hook reads the same module snapshot for its
-  // own seed; this narrow read just feeds the tracking dot.
+  // Resolved MapLibre style URL (D7 seam) — repaints in place on theme/source change.
+  const [styleOverride, setStyleOverride] = useState(loadMapStyleOverrideSync);
+  useEffect(() => subscribeMapStyleOverride(setStyleOverride), []);
+  const styleUrl = resolveMapStyleUrl(resolveMapMode(mapThemePref, effectiveMode), styleOverride);
+
+  const [initialSnapshot] = useState(() => getPilgrimageHubSnapshot());
+
+  // The locate FAB and the map's user puck share a single hook so the dot, the
+  // cone, the recentre, and the permission sheet all stay in sync. Snapshot-
+  // seeded `initialLocation` keeps the dot visible on warm starts.
   const [initialUserLocation] = useState<LatLng | null>(
-    () => getPilgrimageHubSnapshot()?.userLocation ?? null
+    () => initialSnapshot?.userLocation ?? null
   );
   const tracking = useUserLocationTracking({
     initialLocation: initialUserLocation,
     onFollowLocation: (loc, fs) => {
-      host.recenter(
+      mapRef.current?.recenter(
         loc.latitude,
         loc.longitude,
         fs === 'compass' ? LOCATE_FAB_COMPASS_ZOOM : LOCATE_FAB_ZOOM,
@@ -192,24 +197,28 @@ export default function PilgrimageMapScreen() {
       );
     },
     onHeadingChange: (deg) => {
-      host.setHeading(deg);
+      mapRef.current?.setHeading(deg);
     },
   });
   const userLocation = tracking.location;
+
+  // Frame-1 camera seed: align the native Camera's initialViewState with the
+  // first focused card candidate so the map does not open at whole-Japan and
+  // immediately animate elsewhere on cold devices.
+  const [initialView] = useState(() =>
+    resolvePilgrimageHubInitialView({
+      focusBangumiId: focusBangumiIdParam,
+      snapshot: initialSnapshot,
+    })
+  );
 
   // ─── Data cluster (collection + featured + lazy index, MMKV-seeded) ──────
   // Lifted into usePilgrimageHubData so this screen stays a view orchestrator
   // (CLAUDE.md Rule 9). The hook owns the snapshot/index seed, the loading
   // transitions, the bounds-/location-driven lazy loading, and the synchronous
   // visited/capture seeding; it consumes the live userLocation we feed in.
-  const {
-    knownAnimes,
-    collectionIds,
-    loading,
-    visited,
-    captureCount,
-    handleBoundsChange,
-  } = usePilgrimageHubData({ focusBangumiId: focusBangumiIdParam, userLocation });
+  const { knownAnimes, collectionIds, loading, visited, captureCount, handleBoundsChange } =
+    usePilgrimageHubData({ focusBangumiId: focusBangumiIdParam, userLocation });
 
   // ─── View state (parent-owned) ──────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -386,13 +395,8 @@ export default function PilgrimageMapScreen() {
     return build88Markers(filtered);
   }, [official88Mode, focusedRegion, all88WithCoords, baseAnitabiMarkers]);
 
-  // Bumped whenever the marker set fundamentally changes so the WebView
-  // clears stale markers instead of additively merging: gold 88 city pins ↔
-  // anitabi centroids, and search-filtered subsets.
-  const refitNonce = useMemo(
-    () => `${hubFilter}:${focusedRegion ?? 'any'}:${deferredSearchQuery.trim().toLowerCase()}`,
-    [hubFilter, focusedRegion, deferredSearchQuery]
-  );
+  // Engine-neutral markers fed to the inline MapSurface (1:1 from HubMapMarker).
+  const maplibreMarkers = useMemo<MapMarker[]>(() => markers.map(hubMarkerToMapMarker), [markers]);
 
   // Camera-fly request derived from focusedRegion + flyTick. Whole-Japan
   // when no region is focused; the region's bounds otherwise. flyTick
@@ -402,10 +406,6 @@ export default function PilgrimageMapScreen() {
     const bounds = focusedRegion ? REGION_BOUNDS[focusedRegion] : JAPAN_BOUNDS;
     return { key: `${focusedRegion ?? 'jp'}#${flyTick}`, bounds };
   }, [focusedRegion, flyTick]);
-
-  // When the focused anime changes (via swap or sheet row preview), fly the
-  // map to it so the sheet + map track together — that's the "silky" feel.
-  const focusBangumiId = focusedAnime?.anime.id ?? null;
 
   // ─── Hub stats (top of sheet) ──────────────────────────────────────────
   const stats = useMemo<HubStats>(() => {
@@ -448,8 +448,7 @@ export default function PilgrimageMapScreen() {
         buildPilgrimageDetailRoute(bangumiId, {
           returnTo: 'map',
           title: anime?.title || anime?.cn || null,
-          titleSecondary:
-            anime?.cn && anime.cn !== anime.title ? anime.cn : null,
+          titleSecondary: anime?.cn && anime.cn !== anime.title ? anime.cn : null,
           poster: anime?.cover ?? null,
           themeColor: anime?.color ?? null,
         })
@@ -532,252 +531,224 @@ export default function PilgrimageMapScreen() {
   // (Currently unused — kept for an eventual "long-press = preview" path.)
   void sheetIndex;
 
-  // ─── Drive the shared map host (CLAUDE.md Rule 10) ──────────────────────
-  // Claim the layout's persistent WebView on focus with the current snapshot,
-  // release on blur (WebView stays mounted). Handler identities are stable
-  // useCallbacks, so claim wires them once; the separate update effect below
-  // keeps the data/camera in sync without re-claiming (avoids an update loop —
-  // claim is focus-driven, update is dependency-driven).
-  useFocusEffect(
-    useCallback(() => {
-      host.claim({
-        markers,
-        replaceKey: refitNonce,
-        userLocation,
-        ringColor: themeColor,
-        theme,
-        focusBangumiId,
-        flyBoundsRequest,
-        onAnimePress: handleMarkerPress,
-        onBoundsChange: handleBoundsChange,
-        onUserPan: tracking.onUserPan,
-      });
-      return () => host.release();
-      // Claim only on focus/blur + handler-identity change. The config values
-      // are pushed by the update effect below, so they are intentionally not
-      // deps here (re-claiming on every marker/camera change would thrash).
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [host, handleMarkerPress, handleBoundsChange, tracking.onUserPan])
-  );
-
-  // Push derived config into the host whenever it changes while focused. The
-  // host ignores updates once released, so a blurred screen can't repaint it.
+  // ─── Drive the inline map camera (Rule 9 — imperative, off React state) ──
+  // Fly to the focused anime when it changes (swap / sheet-row preview) so the
+  // sheet + map track together.
   useEffect(() => {
-    host.update({
-      markers,
-      replaceKey: refitNonce,
-      userLocation,
-      ringColor: themeColor,
-      theme,
-      focusBangumiId,
-      flyBoundsRequest,
-    });
-  }, [
-    host,
-    markers,
-    refitNonce,
-    userLocation,
-    themeColor,
-    theme,
-    focusBangumiId,
-    flyBoundsRequest,
-  ]);
+    const anime = focusedAnime?.anime;
+    if (anime && isValidGeo(anime.geo)) {
+      mapRef.current?.focus?.({ lat: anime.geo[0], lng: anime.geo[1], zoom: 11 });
+    }
+  }, [focusedAnime]);
+
+  // Fly to a region's bounds on a region-chip tap. `flyBoundsRequest` gets a
+  // fresh identity per tap so re-taps re-run this.
+  useEffect(() => {
+    if (flyBoundsRequest) mapRef.current?.fitBounds?.(flyBoundsRequest.bounds);
+  }, [flyBoundsRequest]);
 
   return (
     <>
-      {/* Screen options register against the navigator (NOT portaled). The map
-          screen paints nothing itself — its UI is teleported into MapHost's top
-          layer, the only place the kept-alive WebView both shows AND receives
-          gestures (a WebView parented behind the native-stack navigator can't
-          get touches — that's what broke pinch-zoom). */}
       <Stack.Screen
         options={{
           headerShown: false,
-          contentStyle: { backgroundColor: 'transparent' },
+          contentStyle: { backgroundColor: theme.background.primary },
         }}
       />
-      {/* Teleport the overlays into MapHost's top layer so they share ONE
-          box-none touch layer with the kept-alive WebView, above the navigator.
-          box-none lets empty-map taps fall through these overlays to the map;
-          search pill / region chips / bottom chrome / FABs / sheet stay real
-          hit targets. */}
-      <Portal hostName={MAP_PORTAL_HOST}>
-        <View style={styles.root} pointerEvents="box-none">
-
-      {loading ? (
-        <View style={styles.loadingBox}>
-          <Skeleton.MapList mapHeight={400} listCount={4} />
+      {/* root is box-none so empty-map taps fall through the overlays to the
+          full-bleed native map beneath; the search pill / region chips / bottom
+          chrome / FABs / sheet stay real hit targets. */}
+      <View style={styles.root} pointerEvents="box-none">
+        {/* Layer 1 — the native map, inline. Rendered directly in this screen
+            (not a portal) so it stays warm across hub→detail→back and is hidden
+            correctly by the navigator when detail covers it — a native GL
+            surface can't be hidden by opacity, which is why the old portal
+            layer bled through on back-navigation. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="auto">
+          <MapSurface
+            ref={mapRef}
+            markers={maplibreMarkers}
+            styleUrl={styleUrl}
+            user={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null}
+            center={initialView.center}
+            zoom={initialView.zoom}
+            clusterDisableAtZoom={CLUSTER_DISABLE_AT.hub}
+            onMarkerPress={(m) => {
+              if (m.bangumiId != null) handleMarkerPress(m.bangumiId);
+            }}
+            onBoundsChange={handleBoundsChange}
+            onPanned={tracking.onUserPan}
+          />
         </View>
-      ) : (
-        <>
-          {/* Layer 1 — the full-bleed Leaflet map is the shared host WebView,
-              which sits at the BOTTOM of MapHost's top layer (beneath these
-              portaled overlays). This screen claims + drives it via useMapHost
-              instead of mounting its own. */}
 
-          {/* Layer 2 — floating top overlay (back / album + search + region chips). */}
-          <View style={styles.topOverlay} pointerEvents="box-none">
-            <View style={styles.headerActions}>
-              <RoundHeaderButton
-                icon="chevron-back"
-                onPress={handleBack}
-                accessibilityLabel={t('common.back')}
-                tint={theme.text.primary}
-                theme={theme}
-              />
-              <View style={styles.headerRightGroup}>
-                <RoundHeaderButton
-                  icon="albums-outline"
-                  onPress={handleOpenAlbum}
-                  accessibilityLabel={t('pilgrimage.map.openAlbumA11y')}
-                  tint={themeColor}
-                  theme={theme}
-                />
-              </View>
-            </View>
-
-            <View style={styles.searchPill}>
-              <Ionicons name="search" size={16} color={theme.text.tertiary} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-                placeholder={t('pilgrimage.map.searchPlaceholder')}
-                placeholderTextColor={theme.text.tertiary}
-                returnKeyType="search"
-                autoCorrect={false}
-                autoCapitalize="none"
-                selectionColor={themeColor}
-                clearButtonMode="never"
-                accessibilityLabel={t('pilgrimage.map.searchA11y')}
-                style={[styles.searchInput, { color: theme.text.primary }]}
-              />
-              {searchQuery.length > 0 ? (
-                <Pressable
-                  onPress={handleSearchClear}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('pilgrimage.map.clearSearchA11y')}
-                  style={({ pressed }) => [styles.searchClearBtn, pressed && { opacity: 0.7 }]}>
-                  <Ionicons name="close-circle" size={18} color={theme.text.tertiary} />
-                </Pressable>
-              ) : null}
-            </View>
-
-            <RegionChipStrip
-              theme={theme}
-              focusedRegion={focusedRegion}
-              onPickRegion={handlePickRegion}
-              onResetToJapan={handleResetToJapan}
-            />
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <Skeleton.MapList mapHeight={400} listCount={4} />
           </View>
-
-          {/* Layer 3+4 — floating bottom chrome anchored to the sheet's top
-              edge. Filter chips + layout toggle in a single Animated.View. */}
-          <Animated.View
-            style={[styles.bottomChromeWrap, chromeAnimatedStyle]}
-            pointerEvents="box-none">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}>
-              <FilterPill
-                label={t('pilgrimage.map.filter.all')}
-                active={hubFilter === 'all'}
-                badge={filterCounts.all}
-                themeColor={themeColor}
-                themeColorFg={themeColorFg}
-                theme={theme}
-                onPress={() => handlePickFilter('all')}
-              />
-              <FilterPill
-                label={t('pilgrimage.map.filter.collection')}
-                active={hubFilter === 'collection'}
-                badge={filterCounts.collection}
-                themeColor={themeColor}
-                themeColorFg={themeColorFg}
-                theme={theme}
-                icon="bookmark"
-                onPress={() => handlePickFilter('collection')}
-              />
-              <FilterPill
-                label={t('pilgrimage.map.filter.official88')}
-                active={hubFilter === 'official88'}
-                badge={filterCounts.official88}
-                themeColor={themeColor}
-                themeColorFg={themeColorFg}
-                theme={theme}
-                onPress={() => handlePickFilter('official88')}
-              />
-            </ScrollView>
-            <View style={styles.viewModeWrapInner}>
-              <View style={styles.viewModeBar}>
-                <LayoutToggleSegment
-                  icon="reorder-three"
-                  label={t('pilgrimage.map.layout.rows')}
-                  count={filteredEntries.length}
-                  active={listLayout === 'rows'}
-                  themeColor={themeColor}
-                  themeColorFg={themeColorFg}
+        ) : (
+          <>
+            {/* Layer 2 — floating top overlay (back / album + search + region chips). */}
+            <View style={styles.topOverlay} pointerEvents="box-none">
+              <View style={styles.headerActions}>
+                <RoundHeaderButton
+                  icon="chevron-back"
+                  onPress={handleBack}
+                  accessibilityLabel={t('common.back')}
+                  tint={theme.text.primary}
                   theme={theme}
-                  styles={styles}
-                  onPress={() => handlePickLayout('rows')}
                 />
-                <LayoutToggleSegment
-                  icon="apps"
-                  label={t('pilgrimage.map.layout.grid')}
-                  count={filteredEntries.length}
-                  active={listLayout === 'grid'}
-                  themeColor={themeColor}
-                  themeColorFg={themeColorFg}
-                  theme={theme}
-                  styles={styles}
-                  onPress={() => handlePickLayout('grid')}
-                />
+                <View style={styles.headerRightGroup}>
+                  <RoundHeaderButton
+                    icon="albums-outline"
+                    onPress={handleOpenAlbum}
+                    accessibilityLabel={t('pilgrimage.map.openAlbumA11y')}
+                    tint={themeColor}
+                    theme={theme}
+                  />
+                </View>
               </View>
+
+              <View style={styles.searchPill}>
+                <Ionicons name="search" size={16} color={theme.text.tertiary} />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={handleSearchChange}
+                  placeholder={t('pilgrimage.map.searchPlaceholder')}
+                  placeholderTextColor={theme.text.tertiary}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  selectionColor={themeColor}
+                  clearButtonMode="never"
+                  accessibilityLabel={t('pilgrimage.map.searchA11y')}
+                  style={[styles.searchInput, { color: theme.text.primary }]}
+                />
+                {searchQuery.length > 0 ? (
+                  <Pressable
+                    onPress={handleSearchClear}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('pilgrimage.map.clearSearchA11y')}
+                    style={({ pressed }) => [styles.searchClearBtn, pressed && { opacity: 0.7 }]}>
+                    <Ionicons name="close-circle" size={18} color={theme.text.tertiary} />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <RegionChipStrip
+                theme={theme}
+                focusedRegion={focusedRegion}
+                onPickRegion={handlePickRegion}
+                onResetToJapan={handleResetToJapan}
+              />
             </View>
-          </Animated.View>
 
-          {/* Locate FAB — anchors to the sheet so it never sits behind the
+            {/* Layer 3+4 — floating bottom chrome anchored to the sheet's top
+              edge. Filter chips + layout toggle in a single Animated.View. */}
+            <Animated.View
+              style={[styles.bottomChromeWrap, chromeAnimatedStyle]}
+              pointerEvents="box-none">
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}>
+                <FilterPill
+                  label={t('pilgrimage.map.filter.all')}
+                  active={hubFilter === 'all'}
+                  badge={filterCounts.all}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  onPress={() => handlePickFilter('all')}
+                />
+                <FilterPill
+                  label={t('pilgrimage.map.filter.collection')}
+                  active={hubFilter === 'collection'}
+                  badge={filterCounts.collection}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  icon="bookmark"
+                  onPress={() => handlePickFilter('collection')}
+                />
+                <FilterPill
+                  label={t('pilgrimage.map.filter.official88')}
+                  active={hubFilter === 'official88'}
+                  badge={filterCounts.official88}
+                  themeColor={themeColor}
+                  themeColorFg={themeColorFg}
+                  theme={theme}
+                  onPress={() => handlePickFilter('official88')}
+                />
+              </ScrollView>
+              <View style={styles.viewModeWrapInner}>
+                <View style={styles.viewModeBar}>
+                  <LayoutToggleSegment
+                    icon="reorder-three"
+                    label={t('pilgrimage.map.layout.rows')}
+                    count={filteredEntries.length}
+                    active={listLayout === 'rows'}
+                    themeColor={themeColor}
+                    themeColorFg={themeColorFg}
+                    theme={theme}
+                    styles={styles}
+                    onPress={() => handlePickLayout('rows')}
+                  />
+                  <LayoutToggleSegment
+                    icon="apps"
+                    label={t('pilgrimage.map.layout.grid')}
+                    count={filteredEntries.length}
+                    active={listLayout === 'grid'}
+                    themeColor={themeColor}
+                    themeColorFg={themeColorFg}
+                    theme={theme}
+                    styles={styles}
+                    onPress={() => handlePickLayout('grid')}
+                  />
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Locate FAB — anchors to the sheet so it never sits behind the
               handle, and drives idle / following / compass via the hook. */}
-          <LocateFab
-            state={tracking.state}
-            onPress={tracking.cycleState}
-            sheetAnimatedPosition={sheetPosition}
-            screenHeight={screenHeight}
-            bottomInset={sheetPeekOffset}
-            loading={tracking.isRequestingPermission}
-          />
+            <LocateFab
+              state={tracking.state}
+              onPress={tracking.cycleState}
+              sheetAnimatedPosition={sheetPosition}
+              screenHeight={screenHeight}
+              bottomInset={sheetPeekOffset}
+              loading={tracking.isRequestingPermission}
+            />
 
-          {/* Layer 5 — persistent pull-up sheet with focused-anime card,
+            {/* Layer 5 — persistent pull-up sheet with focused-anime card,
               hub stats and the nearby anime list. */}
-          <PilgrimageHubSheet
-            nearbyAnimes={filteredEntries}
-            focusedAnime={focusedAnime}
-            canSwap={filteredEntries.length > 1}
-            stats={stats}
-            listLayout={listLayout}
-            themeColor={themeColor}
-            themeColorFg={themeColorFg}
-            theme={theme}
-            searchQuery={searchQuery}
-            initialIndex={initialSheetIndex}
-            animatedPosition={sheetPosition}
-            onSheetIndexChange={handleSheetIndexChange}
-            onAnimePress={handleSheetAnimePress}
-            onSwapFocused={handleSwapFocused}
-          />
-        </>
-      )}
+            <PilgrimageHubSheet
+              nearbyAnimes={filteredEntries}
+              focusedAnime={focusedAnime}
+              canSwap={filteredEntries.length > 1}
+              stats={stats}
+              listLayout={listLayout}
+              themeColor={themeColor}
+              themeColorFg={themeColorFg}
+              theme={theme}
+              searchQuery={searchQuery}
+              initialIndex={initialSheetIndex}
+              animatedPosition={sheetPosition}
+              onSheetIndexChange={handleSheetIndexChange}
+              onAnimePress={handleSheetAnimePress}
+              onSwapFocused={handleSwapFocused}
+            />
+          </>
+        )}
 
-      {/* Permanently-denied permission sheet. Lives outside the loading
+        {/* Permanently-denied permission sheet. Lives outside the loading
           branch so dismissing it during a re-render doesn't unmount it
           mid-animation. */}
-      <LocationPermissionSheet
-        visible={tracking.permissionSheetVisible}
-        onDismiss={tracking.dismissPermissionSheet}
-      />
-        </View>
-      </Portal>
+        <LocationPermissionSheet
+          visible={tracking.permissionSheetVisible}
+          onDismiss={tracking.dismissPermissionSheet}
+        />
+      </View>
     </>
   );
 }
@@ -931,10 +902,10 @@ function makeChipStyles(theme: ThemePalette) {
 
 function makeStyles(theme: ThemePalette, topInset: number) {
   return StyleSheet.create({
-    // Transparent so the shared host WebView (rendered behind this screen by
-    // MapHostProvider) shows through. Combined with pointerEvents="box-none"
-    // on the root View, empty-map taps reach the host. The loading skeleton
-    // keeps an opaque bg so the pre-warming host doesn't flash through.
+    // Transparent so the inline full-bleed native map remains visible behind
+    // overlays. Combined with pointerEvents="box-none" on the root View,
+    // empty-map taps reach the map. The loading skeleton keeps an opaque bg
+    // while the native map preloads behind it.
     root: { flex: 1, backgroundColor: 'transparent' },
     loadingBox: {
       flex: 1,

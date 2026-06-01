@@ -6,13 +6,13 @@
 //   black UI just feels like a missing tile flash. We default to 'light' here
 //   and let users opt into 'dark' or 'auto' (follow app theme) from settings.
 //
-// The 3 map surfaces (PilgrimageMapView, hub fullscreen map, spot detail map)
-// all subscribe to changes here so toggling the pref repaints in place — no
-// WebView remount, no lost camera state, no tile-cache miss.
+// The map surfaces resolve this on the first frame and repaint in place when
+// subscribed callers receive a pref change: no map remount, no lost camera
+// state, no tile-cache miss.
 //
 // Storage: a single MMKV key (see app-storage). The synchronous read lets the
-// map screens push the correct tile theme into the WebView on the first frame
-// instead of flashing the default and re-injecting after an async resolve.
+// map screens push the correct tile theme into MapLibre on the first frame
+// instead of flashing the default and re-resolving after an async read.
 import { kvGet, kvSet } from '../storage/app-storage';
 import { MAP_THEME_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
@@ -38,7 +38,7 @@ export const DEFAULT_MAP_THEME: MapThemePref = 'light';
  */
 export function resolveMapMode(
   pref: MapThemePref,
-  effectiveMode: 'light' | 'dark',
+  effectiveMode: 'light' | 'dark'
 ): 'light' | 'dark' {
   if (pref === 'auto') return effectiveMode;
   return pref;
