@@ -132,7 +132,11 @@ export default function ShareComparisonScreen() {
     loadAutoColorMatrix(imageUrl, effectiveShotUri)
       .then((res) => {
         if (cancelled) return;
-        setAutoMatchMatrix(res.matrix === IDENTITY_COLOR_MATRIX ? null : res.matrix);
+        // Compare by VALUE — applyAutoColorMatrix returns a fresh identity array
+        // on no-data, so a reference check would never null out and an identity
+        // matrix would silently override the user's chosen preset filter.
+        const isIdentity = res.matrix.every((v, i) => v === IDENTITY_COLOR_MATRIX[i]);
+        setAutoMatchMatrix(isIdentity ? null : res.matrix);
       })
       .catch(() => {
         if (!cancelled) setAutoMatchMatrix(null);
@@ -146,7 +150,9 @@ export default function ShareComparisonScreen() {
   }, [autoMatchEnabled, imageUrl, effectiveShotUri]);
 
   // Track C #8 — auto perspective from capture sensors + manual 4-corner warp.
-  const tiltDeg = getNumberParam(params, 'tiltDeg');
+  // `tilt`/`headingDeltaDeg` are forwarded by preview.tsx from the shot's sensor
+  // snapshot; the toggle stays disabled until both are present.
+  const tiltDeg = getNumberParam(params, 'tilt');
   const headingDeltaDeg = getNumberParam(params, 'headingDeltaDeg');
   const autoWarpAvailable = tiltDeg !== null && headingDeltaDeg !== null;
   const [autoWarpEnabled, setAutoWarpEnabled] = useState(false);

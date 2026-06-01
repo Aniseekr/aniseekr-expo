@@ -492,6 +492,12 @@ export default function ComparePreviewScreen() {
       spotLat: spotLat ?? '',
       spotLng: spotLng ?? '',
     };
+    // Forward the shot's sensor snapshot so the share screen's auto-perspective
+    // (Track C #8) can correct tilt/heading without re-measuring.
+    if (focusedShot.tilt != null) shareParams.tilt = String(focusedShot.tilt);
+    if (focusedShot.headingDeltaDeg != null) {
+      shareParams.headingDeltaDeg = String(focusedShot.headingDeltaDeg);
+    }
     if (frameMatch?.total != null) {
       shareParams.matchScore = String(Math.round(frameMatch.total * 100));
     }
