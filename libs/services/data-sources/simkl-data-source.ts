@@ -285,9 +285,3 @@ export class SimklDataSource implements AnimeDataSource {
     return defaultStatsStub().fetchStatistics(_id);
   }
 }
-
-export const __test__ = {
-  buildItem,
-  buildPlatformData,
-  parseAirDate,
-};

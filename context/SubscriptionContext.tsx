@@ -1,12 +1,4 @@
-import {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { createContext, ReactNode, use, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ANONYMOUS_STATE,
   subscriptionService,
@@ -97,7 +89,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 }
 
 export function useSubscription(): SubscriptionContextValue {
-  const ctx = useContext(SubscriptionContext);
+  const ctx = use(SubscriptionContext);
   const base: SubscriptionContextValue = ctx ?? {
     ...ANONYMOUS_STATE,
     offerings: [],

@@ -18,8 +18,6 @@ import { kvGet, kvSet } from '../storage/app-storage';
 import { MAP_SOURCE_STYLE_OVERRIDE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
-export { MAP_SOURCE_STYLE_OVERRIDE_KEY };
-
 /**
  * Phase-1 default style URLs — OpenFreeMap public styles (OpenMapTiles schema).
  * `positron` ≈ CARTO-Voyager light look; the dark style ≈ Dark-Matter slate.

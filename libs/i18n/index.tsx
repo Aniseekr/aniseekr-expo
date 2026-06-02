@@ -7,7 +7,7 @@
 //   memoization key is the language id so unrelated state changes don't
 //   invalidate consumer callbacks.
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { NativeModules, Platform } from 'react-native';
 import { kvGet, kvSet } from '../services/storage/app-storage';
 import { APP_LANGUAGE_KEY } from '../services/storage/keys';
@@ -23,8 +23,9 @@ import type {
 function readSystemLanguage(): LanguageId {
   if (Platform.OS === 'ios') {
     const settings =
-      (NativeModules?.SettingsManager?.settings as { AppleLocale?: string; AppleLanguages?: string[] } | undefined) ??
-      undefined;
+      (NativeModules?.SettingsManager?.settings as
+        | { AppleLocale?: string; AppleLanguages?: string[] }
+        | undefined) ?? undefined;
     const tag = settings?.AppleLocale ?? settings?.AppleLanguages?.[0];
     return resolveSystemLanguage(tag);
   }
@@ -94,7 +95,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 }
 
 export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nContext);
+  const ctx = use(I18nContext);
   if (!ctx) {
     throw new Error('useI18n must be called inside <I18nProvider>');
   }

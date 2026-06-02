@@ -39,7 +39,7 @@ export function normalizeAdultLabel(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-export function hasAdultRatingSignal(rating: string | null | undefined): boolean {
+function hasAdultRatingSignal(rating: string | null | undefined): boolean {
   if (!rating) return false;
   const normalized = normalizeAdultLabel(rating);
   return (
@@ -66,7 +66,7 @@ export function hasAdultContentSignal(item: SFWContentLike): boolean {
   return false;
 }
 
-export function isSFWContent(item: SFWContentLike): boolean {
+function isSFWContent(item: SFWContentLike): boolean {
   return !hasAdultContentSignal(item);
 }
 

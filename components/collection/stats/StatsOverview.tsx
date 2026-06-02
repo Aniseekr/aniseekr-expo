@@ -57,10 +57,7 @@ export function StatsOverview({
       try {
         setLoading(true);
         setError(null);
-        const [rows, ach] = await Promise.all([
-          loadUserAnimeRows(),
-          achievementService.list(),
-        ]);
+        const [rows, ach] = await Promise.all([loadUserAnimeRows(), achievementService.list()]);
         if (cancelled) return;
         const s = summarize(rows);
         setSummary(s);
@@ -220,20 +217,22 @@ export function StatsOverview({
           Tap into any exhibit to dig deeper, or share it as a card.
         </ThemedText>
         <View style={styles.exhibitGrid}>
-          {exhibits
-            .filter((e) => summary.total >= e.minTotal)
-            .map((e) => (
-              <ExhibitCard
-                key={e.id}
-                title={e.title}
-                subtitle={e.subtitle}
-                icon={e.icon}
-                gradientFrom={e.gradientFrom}
-                gradientTo={e.gradientTo}
-                featured={e.featured}
-                onPress={() => router.push(e.route as never)}
-              />
-            ))}
+          {exhibits.flatMap((e) =>
+            summary.total >= e.minTotal
+              ? [
+                  <ExhibitCard
+                    key={e.id}
+                    title={e.title}
+                    subtitle={e.subtitle}
+                    icon={e.icon}
+                    gradientFrom={e.gradientFrom}
+                    gradientTo={e.gradientTo}
+                    featured={e.featured}
+                    onPress={() => router.push(e.route as never)}
+                  />,
+                ]
+              : []
+          )}
         </View>
       </View>
     </>

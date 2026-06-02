@@ -59,7 +59,7 @@ const SYSTEM_FOLDERS: Omit<CollectionFolder, 'animeCount' | 'sharedBy' | 'create
   },
 ];
 
-export class CollectionService {
+class CollectionService {
   private static instance: CollectionService;
 
   static getInstance(): CollectionService {

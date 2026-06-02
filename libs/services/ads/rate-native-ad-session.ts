@@ -3,7 +3,7 @@ import { RATE_NATIVE_AD_SUPPRESS_UNTIL_KEY } from '../storage/keys';
 
 export const RATE_NATIVE_AD_LOAD_TIMEOUT_MS = 5_000;
 export const RATE_NATIVE_AD_PROGRESS_MS = 1_500;
-export const RATE_NATIVE_AD_FAILURE_COOLDOWN_MS = 30 * 60_000;
+const RATE_NATIVE_AD_FAILURE_COOLDOWN_MS = 30 * 60_000;
 
 export type RateNativeAdSuppressionReason =
   | 'load-failed'

@@ -318,6 +318,10 @@ export class MultiPlatformSyncService {
     const platforms = authService.getConnectedPlatforms();
     const queueJobs: Parameters<typeof offlineQueueService.enqueueBatch>[0] = [];
 
+    const originalByKey = new Map(
+      original.map((o) => [`${o.source}:${o.platformIds[o.source]}`, o])
+    );
+
     for (const item of merged) {
       for (const platform of platforms) {
         const provider = getProvider(platform);
@@ -326,9 +330,7 @@ export class MultiPlatformSyncService {
         const platformId = item.platformIds[platform];
         if (!platformId) continue;
 
-        const originalItem = original.find(
-          (o) => o.source === platform && o.platformIds[platform] === platformId
-        );
+        const originalItem = originalByKey.get(`${platform}:${platformId}`);
 
         if (originalItem) {
           if (originalItem.progress < item.progress) {

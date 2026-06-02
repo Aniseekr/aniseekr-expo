@@ -317,19 +317,20 @@ export default function CollectionScreen() {
       }>(
         'SELECT anime_id, title, image_url, score, started_at, completed_at, status FROM user_anime'
       );
-      const items: ShareSourceItem[] = rows
-        .filter((r) => !!r.title)
-        .map((r) => {
-          const ts = r.completed_at ?? r.started_at ?? null;
-          return {
+      const items: ShareSourceItem[] = rows.flatMap((r) => {
+        if (!r.title) return [];
+        const ts = r.completed_at ?? r.started_at ?? null;
+        return [
+          {
             id: r.anime_id,
             title: r.title || 'Untitled',
             coverUrl: r.image_url || undefined,
             score: typeof r.score === 'number' ? r.score : undefined,
             year: ts ? new Date(ts).getFullYear() : undefined,
             status: r.status ?? undefined,
-          };
-        });
+          },
+        ];
+      });
       setShareSource(items);
     } catch (error) {
       console.error('Failed to load share source:', error);
@@ -397,10 +398,16 @@ export default function CollectionScreen() {
       await Share.share(
         {
           url: uri,
-          message: t('tabs.collectionScreen.share.myTemplateOnAniseekr', { template: shareBuild.template.title }),
+          message: t('tabs.collectionScreen.share.myTemplateOnAniseekr', {
+            template: shareBuild.template.title,
+          }),
           title: `Aniseekr · ${shareBuild.template.title}`,
         },
-        { dialogTitle: t('tabs.collectionScreen.share.dialogTitle', { template: shareBuild.template.title }) }
+        {
+          dialogTitle: t('tabs.collectionScreen.share.dialogTitle', {
+            template: shareBuild.template.title,
+          }),
+        }
       );
     } catch (error) {
       console.error('Share capture failed:', error);
@@ -579,8 +586,12 @@ export default function CollectionScreen() {
                 style={styles.sectionHeaderRight}>
                 <ThemedText variant="captionSmall" tone="secondary">
                   {visibleFolders.length === 1
-                    ? t('tabs.collectionScreen.folderCount.one', { count: String(visibleFolders.length) })
-                    : t('tabs.collectionScreen.folderCount.other', { count: String(visibleFolders.length) })}
+                    ? t('tabs.collectionScreen.folderCount.one', {
+                        count: String(visibleFolders.length),
+                      })
+                    : t('tabs.collectionScreen.folderCount.other', {
+                        count: String(visibleFolders.length),
+                      })}
                 </ThemedText>
                 <MaterialIcons name="chevron-right" size={14} color={theme.text.tertiary} />
               </Pressable>
@@ -631,7 +642,9 @@ export default function CollectionScreen() {
                 <ThemedText variant="titleMedium" weight="700" align="center">
                   {selectedCategory === 'All'
                     ? t('tabs.collectionScreen.emptyFolderTitle.all')
-                    : t('tabs.collectionScreen.emptyFolderTitle.category', { category: selectedCategory.toLowerCase() })}
+                    : t('tabs.collectionScreen.emptyFolderTitle.category', {
+                        category: selectedCategory.toLowerCase(),
+                      })}
                 </ThemedText>
                 <ThemedText variant="bodySmall" tone="secondary" align="center">
                   {selectedCategory === 'All'
@@ -708,7 +721,9 @@ export default function CollectionScreen() {
               <ThemedText variant="titleMedium" weight="700">
                 {selectedCategory === 'All'
                   ? t('tabs.collectionScreen.recentAnime')
-                  : t('tabs.collectionScreen.recentAnimeForCategory', { category: selectedCategory })}
+                  : t('tabs.collectionScreen.recentAnimeForCategory', {
+                      category: selectedCategory,
+                    })}
               </ThemedText>
               {animeCards.length > ANIME_PREVIEW_LIMIT ? (
                 <Pressable
@@ -747,7 +762,9 @@ export default function CollectionScreen() {
                 <ThemedText variant="bodySmall" tone="secondary" align="center">
                   {selectedCategory === 'All'
                     ? t('tabs.collectionScreen.emptyAnimeBody.all')
-                    : t('tabs.collectionScreen.emptyAnimeBody.category', { category: selectedCategory.toLowerCase() })}
+                    : t('tabs.collectionScreen.emptyAnimeBody.category', {
+                        category: selectedCategory.toLowerCase(),
+                      })}
                 </ThemedText>
               </View>
             )}

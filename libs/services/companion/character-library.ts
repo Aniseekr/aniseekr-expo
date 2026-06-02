@@ -44,7 +44,7 @@ export interface CharacterGroup {
 export const CHARACTER_LIBRARY_FREE_LIMIT = 20;
 
 /** The groupId an entry belongs to — its own id when ungrouped (legacy). */
-export function effectiveGroupId(entry: CharacterEntry): string {
+function effectiveGroupId(entry: CharacterEntry): string {
   return entry.groupId && entry.groupId.length > 0 ? entry.groupId : entry.id;
 }
 

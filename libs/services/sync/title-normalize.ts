@@ -133,7 +133,7 @@ export function similarTitles(a: string, b: string, opts: SimilarOpts = {}): boo
   return false;
 }
 
-export function levenshtein(a: string, b: string): number {
+function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;

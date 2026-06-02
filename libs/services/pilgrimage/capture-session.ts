@@ -71,7 +71,7 @@ export interface BuildLibraryCaptureSessionShotInput {
   note?: string | null;
 }
 
-export const CAPTURE_NOTE_MAX_LENGTH = 280;
+const CAPTURE_NOTE_MAX_LENGTH = 280;
 
 function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;

@@ -162,6 +162,8 @@ export function useAutoCapture(input: UseAutoCaptureInput): UseAutoCaptureOutput
       }
       setRemainingMs(remaining);
     }, TICK_MS);
+
+    return clearInterval_;
   }, [
     scoreTotal,
     armThreshold,

@@ -161,7 +161,3 @@ export function buildShareTemplate(
       return buildMasterpiece(items, options);
   }
 }
-
-export function getStarterTags(): string[] {
-  return [...STARTER_TAGS];
-}

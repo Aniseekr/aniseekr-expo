@@ -1,4 +1,4 @@
-import { characterService, Character } from './character-service';
+import { characterService } from './character-service';
 import { kvGet, kvSet } from './storage/app-storage';
 import { GACHA_USER_DATA_KEY } from './storage/keys';
 
@@ -260,4 +260,3 @@ class GachaService {
 }
 
 export const gachaService = GachaService.getInstance();
-export const PULL_COST_CONST = PULL_COST;

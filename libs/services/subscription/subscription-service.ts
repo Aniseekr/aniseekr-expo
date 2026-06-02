@@ -140,7 +140,7 @@ async function loadPurchases(): Promise<PurchasesModule | null> {
 
 type Listener = (state: SubscriptionState) => void;
 
-export class SubscriptionService {
+class SubscriptionService {
   private static instance: SubscriptionService;
   private listeners = new Set<Listener>();
   private cached: SubscriptionState = ANONYMOUS_STATE;

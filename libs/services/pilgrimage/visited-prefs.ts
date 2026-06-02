@@ -10,8 +10,6 @@ import { kvGet, kvSet } from '../storage/app-storage';
 import { VISITED_SPOTS_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
-export { VISITED_SPOTS_STORAGE_KEY };
-
 export type VisitedMap = Record<string, true>;
 
 function sanitizeVisited(parsed: unknown): VisitedMap {

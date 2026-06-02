@@ -54,8 +54,3 @@ export function getCityCentroid(
   if (!prefecture || !city) return null;
   return getIndex().get(`${prefecture}\t${city}`) ?? null;
 }
-
-/** All entries — useful for diagnostics. Do NOT mutate. */
-export function getAllCityCentroids(): readonly JpCityCentroid[] {
-  return getData().entries;
-}

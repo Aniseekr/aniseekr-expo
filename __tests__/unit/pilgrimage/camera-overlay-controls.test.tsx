@@ -3,9 +3,7 @@ import * as React from 'react';
 import { findAll, render } from './render-helpers';
 
 mock.module('@react-native-community/slider', () => ({
-  default: React.forwardRef((props: unknown, ref: React.Ref<unknown>) =>
-    React.createElement('Slider', { ...(props as object), ref })
-  ),
+  default: (props: Record<string, unknown>) => React.createElement('Slider', props),
 }));
 
 mock.module('../../../components/themed', () => ({

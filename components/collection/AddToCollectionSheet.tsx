@@ -1,12 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  ActivityIndicator,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +15,81 @@ import type { CollectionFolder } from '../../types';
 import type { AnimeStatus } from '../../libs/services/auth/types';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
+
+// ---------------------------------------------------------------------------
+// Module-level sub-components (hoisted to avoid remounting on every parent render)
+// ---------------------------------------------------------------------------
+
+interface SectionLabelProps {
+  children: string;
+}
+
+function SectionLabel({ children }: SectionLabelProps) {
+  return (
+    <ThemedText variant="captionSmall" tone="tertiary" style={styles.sectionLabel}>
+      {children.toUpperCase()}
+    </ThemedText>
+  );
+}
+
+interface FolderRowProps {
+  folder: CollectionFolder;
+  selected: boolean;
+  busy: boolean;
+  onPress: () => void;
+}
+
+function FolderRow({ folder, selected, busy, onPress }: FolderRowProps) {
+  const { theme } = useTheme();
+  const fallbackIcon: IoniconName = 'folder';
+  const icon = FOLDER_ICONS[folder.id] ?? ((folder.icon as IoniconName) || fallbackIcon);
+  const checkColor = readableTextOn(theme.accent);
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: pressed ? theme.background.tertiary : 'transparent',
+          opacity: busy ? 0.6 : 1,
+        },
+      ]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={folder.name}>
+      <View
+        style={[
+          styles.rowIcon,
+          {
+            backgroundColor: selected ? theme.accent : theme.background.tertiary,
+            borderColor: selected ? theme.accent : theme.glassBorder,
+          },
+        ]}>
+        <Ionicons name={icon} size={18} color={selected ? checkColor : theme.text.secondary} />
+      </View>
+      <View style={styles.rowText}>
+        <ThemedText variant="titleSmall" weight={selected ? '700' : '500'}>
+          {folder.name}
+        </ThemedText>
+        {folder.animeCount > 0 ? (
+          <ThemedText variant="caption" tone="tertiary">
+            {folder.animeCount} items
+          </ThemedText>
+        ) : null}
+      </View>
+      {busy ? (
+        <ActivityIndicator color={theme.text.secondary} />
+      ) : selected ? (
+        <Ionicons name="checkmark" size={20} color={theme.accent} />
+      ) : (
+        <Ionicons name="add" size={20} color={theme.text.tertiary} />
+      )}
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 export interface AddToCollectionAnime {
   id: string;
@@ -202,10 +270,7 @@ function AddToCollectionSheetComponent({
 
   const { statusFolders, favoritesFolder, customFolders } = useMemo(() => {
     const status = folders.filter(
-      (f) =>
-        f.isSystemFolder &&
-        f.id !== 'system_all' &&
-        f.id !== 'system_favorites'
+      (f) => f.isSystemFolder && f.id !== 'system_all' && f.id !== 'system_favorites'
     );
     const favorites = folders.find((f) => f.id === 'system_favorites') ?? null;
     const custom = folders.filter((f) => !f.isSystemFolder);
@@ -292,82 +357,6 @@ function AddToCollectionSheetComponent({
       </Pressable>
     </Modal>
   );
-
-  function SectionLabel({ children }: { children: string }) {
-    return (
-      <ThemedText
-        variant="captionSmall"
-        tone="tertiary"
-        style={styles.sectionLabel}>
-        {children.toUpperCase()}
-      </ThemedText>
-    );
-  }
-
-  function FolderRow({
-    folder,
-    selected,
-    busy,
-    onPress,
-  }: {
-    folder: CollectionFolder;
-    selected: boolean;
-    busy: boolean;
-    onPress: () => void;
-  }) {
-    const fallbackIcon: IoniconName = 'folder';
-    const icon =
-      FOLDER_ICONS[folder.id] ??
-      ((folder.icon as IoniconName) || fallbackIcon);
-    const checkColor = readableTextOn(theme.accent);
-    return (
-      <Pressable
-        onPress={onPress}
-        disabled={busy}
-        style={({ pressed }) => [
-          styles.row,
-          {
-            backgroundColor: pressed ? theme.background.tertiary : 'transparent',
-            opacity: busy ? 0.6 : 1,
-          },
-        ]}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: selected }}
-        accessibilityLabel={folder.name}>
-        <View
-          style={[
-            styles.rowIcon,
-            {
-              backgroundColor: selected ? theme.accent : theme.background.tertiary,
-              borderColor: selected ? theme.accent : theme.glassBorder,
-            },
-          ]}>
-          <Ionicons
-            name={icon}
-            size={18}
-            color={selected ? checkColor : theme.text.secondary}
-          />
-        </View>
-        <View style={styles.rowText}>
-          <ThemedText variant="titleSmall" weight={selected ? '700' : '500'}>
-            {folder.name}
-          </ThemedText>
-          {folder.animeCount > 0 ? (
-            <ThemedText variant="caption" tone="tertiary">
-              {folder.animeCount} items
-            </ThemedText>
-          ) : null}
-        </View>
-        {busy ? (
-          <ActivityIndicator color={theme.text.secondary} />
-        ) : selected ? (
-          <Ionicons name="checkmark" size={20} color={theme.accent} />
-        ) : (
-          <Ionicons name="add" size={20} color={theme.text.tertiary} />
-        )}
-      </Pressable>
-    );
-  }
 }
 
 const styles = StyleSheet.create({

@@ -21,9 +21,7 @@ const isPlatformType = (value: unknown): value is PlatformType =>
   typeof value === 'string' && (PLATFORM_KEYS as string[]).includes(value);
 
 const isPersistedCredentialEntry = (value: unknown): value is PersistedCredentialEntry =>
-  isObject(value) &&
-  isPlatformType(value.platform) &&
-  typeof value.connectedAt === 'string';
+  isObject(value) && isPlatformType(value.platform) && typeof value.connectedAt === 'string';
 
 const isPersistedCredentialList = (value: unknown): value is PersistedCredentialEntry[] =>
   Array.isArray(value) && value.every(isPersistedCredentialEntry);
@@ -36,9 +34,7 @@ const isUser = (value: unknown): value is User =>
   Array.isArray(value.connectedPlatforms);
 
 const isTokenData = (value: unknown): value is TokenData =>
-  isObject(value) &&
-  typeof value.accessToken === 'string' &&
-  typeof value.tokenType === 'string';
+  isObject(value) && typeof value.accessToken === 'string' && typeof value.tokenType === 'string';
 
 const REFRESH_SKEW_MS = 60_000;
 
@@ -61,8 +57,7 @@ const REDIRECT_PATHS: Partial<Record<PlatformType, string>> = {
 // MAL is the only provider that demands PKCE with `code_challenge_method=plain`
 // (S256 returns 400). expo-auth-session's AuthRequest hard-rejects Plain via
 // an invariant, so we bypass its PKCE generator and hand-roll the verifier.
-const PKCE_VERIFIER_CHARSET =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const PKCE_VERIFIER_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 function generatePlainPkceVerifier(length = 64): string {
   const bytes = Crypto.getRandomValues(new Uint8Array(length));
@@ -73,7 +68,7 @@ function generatePlainPkceVerifier(length = 64): string {
   return out;
 }
 
-export class AuthService {
+class AuthService {
   private static instance: AuthService;
   private currentUser: User | null = null;
   private credentials: Map<PlatformType, PlatformCredentials> = new Map();
@@ -193,7 +188,9 @@ export class AuthService {
         status: response.status,
         body: body.slice(0, 500),
       });
-      throw new Error(`Authentication failed (${response.status}): ${body.slice(0, 200) || 'no body'}`);
+      throw new Error(
+        `Authentication failed (${response.status}): ${body.slice(0, 200) || 'no body'}`
+      );
     }
 
     const data = await response.json();
@@ -402,7 +399,9 @@ export class AuthService {
     });
 
     if (!clientId) {
-      console.error(`${tag} clientId is EMPTY — env var EXPO_PUBLIC_${platform.toUpperCase()}_CLIENT_ID not set or not bundled`);
+      console.error(
+        `${tag} clientId is EMPTY — env var EXPO_PUBLIC_${platform.toUpperCase()}_CLIENT_ID not set or not bundled`
+      );
     }
 
     const request = new AuthSession.AuthRequest({
@@ -428,8 +427,7 @@ export class AuthService {
     const promptMs = Date.now() - promptStart;
     console.log(`${tag} promptAsync result (after ${promptMs}ms)`, {
       type: result.type,
-      params:
-        result.type === 'success' ? result.params : undefined,
+      params: result.type === 'success' ? result.params : undefined,
       error:
         result.type === 'error'
           ? { msg: result.error?.message, code: result.errorCode, desc: result.error?.description }

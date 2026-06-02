@@ -30,13 +30,10 @@ import {
   type WatermarkFontId,
   type WatermarkPosition,
 } from '../../libs/services/pilgrimage/share-composer';
-import {
-  FILTER_PRESETS,
-  type FilterPresetId,
-} from '../../libs/services/pilgrimage/share-filters';
+import { FILTER_PRESETS, type FilterPresetId } from '../../libs/services/pilgrimage/share-filters';
 
 // Watermark ink swatches. `null` means "auto" — derive from canvas contrast.
-export const WATERMARK_COLORS: { id: string; hex: string | null; label: string }[] = [
+const WATERMARK_COLORS: { id: string; hex: string | null; label: string }[] = [
   { id: 'auto', hex: null, label: 'Auto' },
   { id: 'white', hex: '#FFFFFF', label: 'White' },
   { id: 'black', hex: '#0E0A06', label: 'Black' },
@@ -50,7 +47,7 @@ export const WATERMARK_COLORS: { id: string; hex: string | null; label: string }
 // Curated palette: keeps callers from having to know hex codes. The first
 // entry is "reset to template default"; the rest cover warm/cool/neutral so
 // users find a fit for any template without a colour wheel.
-export const BG_SWATCHES: { id: string; hex: string | null; label: string }[] = [
+const BG_SWATCHES: { id: string; hex: string | null; label: string }[] = [
   { id: 'reset', hex: null, label: 'Reset' },
   { id: 'beige', hex: '#F5F1E8', label: 'Beige' },
   { id: 'white', hex: '#FFFFFF', label: 'White' },
@@ -250,11 +247,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                 marginLeft: 'auto',
               },
             ]}>
-            <Ionicons
-              name="crop"
-              size={13}
-              color={cropApplied ? accentFg : theme.text.primary}
-            />
+            <Ionicons name="crop" size={13} color={cropApplied ? accentFg : theme.text.primary} />
             <ThemedText
               variant="captionSmall"
               weight="700"
@@ -572,7 +565,8 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.swatchRow}>
               {WATERMARK_COLORS.map((c) => {
-                const active = c.hex === watermarkColor || (c.hex === null && watermarkColor === null);
+                const active =
+                  c.hex === watermarkColor || (c.hex === null && watermarkColor === null);
                 return (
                   <Pressable
                     key={c.id}
@@ -596,10 +590,7 @@ export function ShareComposerControls(props: ShareComposerControlsProps) {
                     ]}>
                     {c.hex === null ? (
                       <View
-                        style={[
-                          styles.swatchFill,
-                          { backgroundColor: theme.background.tertiary },
-                        ]}>
+                        style={[styles.swatchFill, { backgroundColor: theme.background.tertiary }]}>
                         <Ionicons name="contrast" size={12} color={theme.text.secondary} />
                       </View>
                     ) : (

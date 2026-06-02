@@ -12,9 +12,9 @@ export const SCENE_SHADOW_CLIP_THRESHOLD = 13;
 /** Luma threshold for "highlight clipped" pixels (0..255). */
 export const SCENE_HIGHLIGHT_CLIP_THRESHOLD = 242;
 /** Fraction of pixels in shadow clip that flags the scene as high-DR. */
-export const SCENE_SHADOW_CLIP_RATIO = 0.08;
+const SCENE_SHADOW_CLIP_RATIO = 0.08;
 /** Fraction of pixels in highlight clip that flags the scene as high-DR. */
-export const SCENE_HIGHLIGHT_CLIP_RATIO = 0.05;
+const SCENE_HIGHLIGHT_CLIP_RATIO = 0.05;
 /** How many consecutive same-direction frames before we flip the recommendation. */
 export const SCENE_HYSTERESIS_COUNT = 3;
 
@@ -34,9 +34,7 @@ export interface LumaHistogramResult {
  * `.length` and numeric indexing). When the buffer is empty, both ratios are
  * `0` and `needsHdr` is `false` (no scene = nothing to recommend).
  */
-export function analyzeLumaHistogram(
-  luma: ArrayLike<number>
-): LumaHistogramResult {
+export function analyzeLumaHistogram(luma: ArrayLike<number>): LumaHistogramResult {
   const total = luma.length;
   if (total === 0) {
     return { shadowClip: 0, highlightClip: 0, needsHdr: false };

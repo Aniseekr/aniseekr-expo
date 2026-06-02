@@ -16,7 +16,7 @@ export interface UserAnimeStatus {
   rewatchCount?: number;
 }
 
-export class TrackingService {
+class TrackingService {
   private static instance: TrackingService;
 
   static getInstance(): TrackingService {
@@ -69,9 +69,7 @@ export class TrackingService {
 
     this.trackedIdsPromise = (async () => {
       const db = await LocalDB.getDatabase();
-      const rows = await db.getAllAsync<{ anime_id: string }>(
-        'SELECT anime_id FROM user_anime'
-      );
+      const rows = await db.getAllAsync<{ anime_id: string }>('SELECT anime_id FROM user_anime');
       const set = new Set(rows.map((r) => r.anime_id));
       this.trackedIdsCache = set;
       this.trackedIdsPromise = null;

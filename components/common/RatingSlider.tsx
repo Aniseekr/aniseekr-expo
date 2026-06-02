@@ -23,6 +23,10 @@ interface RatingSliderProps {
   style?: ViewStyle;
 }
 
+const triggerHaptic = () => {
+  hapticsBridge.selection();
+};
+
 function RatingSliderComponent({
   value,
   onChange,
@@ -44,10 +48,6 @@ function RatingSliderComponent({
     offsetX.value = withSpring(ratio * innerWidth, { damping: 18, stiffness: 200 });
     lastInteger.value = Math.round(value);
   }, [value, innerWidth, max, min, offsetX, lastInteger]);
-
-  const triggerHaptic = () => {
-    hapticsBridge.selection();
-  };
 
   const updateValue = (raw: number) => {
     const ratio = Math.min(1, Math.max(0, raw / innerWidth));

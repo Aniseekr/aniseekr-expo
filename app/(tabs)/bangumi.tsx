@@ -44,11 +44,7 @@ import {
   loadBangumiPrefsSync,
   saveBangumiPrefs,
 } from '../../libs/services/bangumi-prefs';
-import {
-  loadUserPrefs,
-  loadUserPrefsSync,
-  patchUserPrefs,
-} from '../../libs/services/user-prefs';
+import { loadUserPrefs, loadUserPrefsSync, patchUserPrefs } from '../../libs/services/user-prefs';
 import { trackingService } from '../../libs/services/tracking/tracking-service';
 import { FontFamily, Radius, Spacing, Typography } from '../../constants/DesignSystem';
 import { useTheme, type ThemePalette } from '../../context/ThemeContext';
@@ -260,61 +256,67 @@ export default function BangumiScreen() {
     void patchUserPrefs({ allowAdultContent: value });
   }, []);
 
-  const handleQuickAddWishlist = useCallback(async (anime: Anime) => {
-    try {
-      await trackingService.upsertTracking({
-        animeId: anime.id,
-        status: 'planned',
-        title: anime.title,
-        imageUrl: anime.image,
-        totalEpisodes: anime.episodes,
-      });
-      hapticsBridge.success();
-      setSnackbar({
-        key: Date.now(),
-        message: t('tabs.bangumiScreen.snackbar.addedToWishlist', { title: anime.title }),
-        icon: 'bookmark-added',
-        actionLabel: t('tabs.bangumiScreen.snackbar.undo'),
-        onAction: () => {
-          void trackingService.removeTracking(anime.id);
-        },
-      });
-    } catch (e) {
-      console.warn('[bangumi] quick wishlist failed', e);
-      hapticsBridge.warning();
-      setSnackbar({
-        key: Date.now(),
-        message: t('tabs.bangumiScreen.snackbar.couldntAddToWishlist'),
-        icon: 'error-outline',
-      });
-    }
-  }, [t]);
-
-  const handleToggleReminder = useCallback(async (anime: Anime, currentlyScheduled: boolean) => {
-    try {
-      if (currentlyScheduled) {
-        await animeNotificationService.cancelAnimeNotification(anime.id);
-        setSnackbar({
-          key: Date.now(),
-          message: t('tabs.bangumiScreen.snackbar.reminderCancelled'),
-          icon: 'notifications-off',
+  const handleQuickAddWishlist = useCallback(
+    async (anime: Anime) => {
+      try {
+        await trackingService.upsertTracking({
+          animeId: anime.id,
+          status: 'planned',
+          title: anime.title,
+          imageUrl: anime.image,
+          totalEpisodes: anime.episodes,
         });
-      } else {
-        const id = await animeNotificationService.scheduleAnimeNotification(anime);
+        hapticsBridge.success();
         setSnackbar({
           key: Date.now(),
-          message: id
-            ? t('tabs.bangumiScreen.snackbar.reminderSet', { title: anime.title })
-            : t('tabs.bangumiScreen.snackbar.noUpcomingEpisode', { title: anime.title }),
-          icon: id ? 'notifications-active' : 'info',
+          message: t('tabs.bangumiScreen.snackbar.addedToWishlist', { title: anime.title }),
+          icon: 'bookmark-added',
+          actionLabel: t('tabs.bangumiScreen.snackbar.undo'),
+          onAction: () => {
+            void trackingService.removeTracking(anime.id);
+          },
+        });
+      } catch (e) {
+        console.warn('[bangumi] quick wishlist failed', e);
+        hapticsBridge.warning();
+        setSnackbar({
+          key: Date.now(),
+          message: t('tabs.bangumiScreen.snackbar.couldntAddToWishlist'),
+          icon: 'error-outline',
         });
       }
-      hapticsBridge.selection();
-    } catch (e) {
-      console.warn('[bangumi] reminder toggle failed', e);
-      hapticsBridge.warning();
-    }
-  }, [t]);
+    },
+    [t]
+  );
+
+  const handleToggleReminder = useCallback(
+    async (anime: Anime, currentlyScheduled: boolean) => {
+      try {
+        if (currentlyScheduled) {
+          await animeNotificationService.cancelAnimeNotification(anime.id);
+          setSnackbar({
+            key: Date.now(),
+            message: t('tabs.bangumiScreen.snackbar.reminderCancelled'),
+            icon: 'notifications-off',
+          });
+        } else {
+          const id = await animeNotificationService.scheduleAnimeNotification(anime);
+          setSnackbar({
+            key: Date.now(),
+            message: id
+              ? t('tabs.bangumiScreen.snackbar.reminderSet', { title: anime.title })
+              : t('tabs.bangumiScreen.snackbar.noUpcomingEpisode', { title: anime.title }),
+            icon: id ? 'notifications-active' : 'info',
+          });
+        }
+        hapticsBridge.selection();
+      } catch (e) {
+        console.warn('[bangumi] reminder toggle failed', e);
+        hapticsBridge.warning();
+      }
+    },
+    [t]
+  );
 
   const dismissSnackbar = useCallback(() => setSnackbar(null), []);
   const openYearPicker = useCallback(() => setShowYearPicker(true), []);
@@ -544,10 +546,7 @@ export default function BangumiScreen() {
     }
   }, [selectedSeason]);
 
-  const seasonDisplayName = useMemo(
-    () => `${selectedYear} ${selectedSeason.charAt(0).toUpperCase() + selectedSeason.slice(1)}`,
-    [selectedSeason, selectedYear]
-  );
+  const seasonDisplayName = `${selectedYear} ${selectedSeason.charAt(0).toUpperCase() + selectedSeason.slice(1)}`;
 
   const totalCount = useMemo(
     () => groupedAnime.reduce((acc, g) => acc + g.anime.length, 0),
@@ -632,7 +631,9 @@ export default function BangumiScreen() {
     return (
       <SpecialContentSection
         title={t('tabs.bangumiScreen.movieAndSpecialsTitle')}
-        subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', { count: String(specialAnime.length) })}
+        subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', {
+          count: String(specialAnime.length),
+        })}
         icon="movie-creation"
         anime={specialAnime}
       />
@@ -695,7 +696,9 @@ export default function BangumiScreen() {
                 },
               ]}
               hitSlop={8}>
-              <Text style={[styles.retryText, { color: retryFg }]}>{t('tabs.bangumiScreen.retry')}</Text>
+              <Text style={[styles.retryText, { color: retryFg }]}>
+                {t('tabs.bangumiScreen.retry')}
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -779,7 +782,9 @@ export default function BangumiScreen() {
                 {specialAnime.length > 0 ? (
                   <SpecialContentSection
                     title={t('tabs.bangumiScreen.movieAndSpecialsTitle')}
-                    subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', { count: String(specialAnime.length) })}
+                    subtitle={t('tabs.bangumiScreen.movieAndSpecialsSubtitle', {
+                      count: String(specialAnime.length),
+                    })}
                     icon="movie-creation"
                     anime={specialAnime}
                   />
@@ -793,8 +798,8 @@ export default function BangumiScreen() {
               <BangumiCardDeckSkeleton />
             ) : (
               <BangumiCardDeck
+                key={`${selectedSeason}-${selectedYear}-${filterMode}-${typeFilter}`}
                 anime={filteredAnime}
-                resetKey={`${selectedSeason}-${selectedYear}-${filterMode}-${typeFilter}`}
                 onSwipeRemind={(a) =>
                   handleToggleReminder(a, animeNotificationService.isAnimeScheduled(a.id))
                 }

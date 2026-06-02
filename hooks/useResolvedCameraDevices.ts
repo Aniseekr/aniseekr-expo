@@ -24,10 +24,7 @@ import { useEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useCameraDevices, type CameraDevice } from 'react-native-vision-camera';
 import { classifyCohort, type DeviceCohort } from '../libs/services/pilgrimage/device-cohort';
-import type {
-  CohortFacing,
-  CohortSnapshot,
-} from '../libs/services/pilgrimage/device-cohort-cache';
+import type { CohortFacing, CohortSnapshot } from '../libs/services/pilgrimage/device-cohort-cache';
 import type { CameraEngineFacing } from '../libs/services/pilgrimage/camera-engine-parity';
 import { useDeviceCohortCache } from './useDeviceCohortCache';
 
@@ -81,9 +78,7 @@ function deviceIdentity(facing: CameraEngineFacing): {
  * `logical`. On Android we re-classify because VisionCamera's stock
  * picker doesn't expose multi-device structure.
  */
-export function useResolvedCameraDevices(
-  facing: CameraEngineFacing
-): ResolvedCameraDevicesResult {
+export function useResolvedCameraDevices(facing: CameraEngineFacing): ResolvedCameraDevicesResult {
   const devices = useCameraDevices();
   const identity = useMemo(() => deviceIdentity(facing), [facing]);
   const { snapshot, save } = useDeviceCohortCache(identity);
@@ -99,9 +94,7 @@ export function useResolvedCameraDevices(
       // front devices, so without this filter we could occasionally bind
       // the preview to a tiny luminance sensor and hand the user a black
       // preview / broken AE-AF.
-      const wideFront = devices.find(
-        (d) => d.position === 'front' && d.type === 'wide-angle'
-      );
+      const wideFront = devices.find((d) => d.position === 'front' && d.type === 'wide-angle');
       const fallbackFront = wideFront ?? devices.find((d) => d.position === 'front');
       return fallbackFront ? { strategy: 'wide-only', primary: fallbackFront } : null;
     }
@@ -133,20 +126,4 @@ export function useResolvedCameraDevices(
     () => ({ cohort, devices, cachedSnapshot: snapshot }),
     [cohort, devices, snapshot]
   );
-}
-
-/**
- * Convenience helper: returns the cohort's `primary` device (or `undefined`
- * during enumeration). Equivalent to `useResolvedCameraDevices(facing).cohort?.primary`
- * but stable across renders.
- *
- * The legacy hook lives at `hooks/useResolvedCameraDevice.ts` (singular)
- * and is preserved for the existing `CameraStage.tsx` call site. New code
- * should import from this file.
- */
-export function usePrimaryCameraDevice(
-  facing: CameraEngineFacing
-): CameraDevice | undefined {
-  const { cohort } = useResolvedCameraDevices(facing);
-  return cohort?.primary;
 }

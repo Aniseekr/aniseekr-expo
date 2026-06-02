@@ -6,8 +6,8 @@ import { describe, expect, it } from 'bun:test';
 import { MapLibreEngine } from '../../../components/pilgrimage/map/engines/MapLibreEngine';
 
 describe('MapLibreEngine module', () => {
-  it('loads and exports a forwardRef component', () => {
+  it('loads and exports a component', () => {
     expect(MapLibreEngine).toBeDefined();
-    expect(typeof MapLibreEngine).toBe('object');
+    expect(typeof MapLibreEngine).toBe('function');
   });
 });

@@ -165,4 +165,3 @@ function serializeKey(key: QueryKeyInput): string {
 }
 
 export const queryClient = QueryClient.getInstance();
-export { serializeKey as __serializeKey };

@@ -60,16 +60,6 @@ export const Colors = {
   },
 };
 
-export function ratingColor(score: number | null | undefined): string {
-  if (score == null || Number.isNaN(score)) return Colors.text.tertiary;
-  if (score >= 9.0) return Colors.rating.s;
-  if (score >= 8.0) return Colors.rating.a;
-  if (score >= 7.0) return Colors.rating.b;
-  if (score >= 6.0) return Colors.rating.c;
-  if (score >= 5.0) return Colors.rating.d;
-  return Colors.rating.e;
-}
-
 export const Spacing = {
   xxs: 4,
   xs: 8,
@@ -138,13 +128,6 @@ export const TabBar = {
   iconSize: 20,
   labelSize: 10,
   itemGap: 4,
-} as const;
-
-export const Opacity = {
-  disabled: 0.3,
-  inactive: 0.6,
-  active: 1.0,
-  glass: 0.8,
 } as const;
 
 export const FontFamily = {

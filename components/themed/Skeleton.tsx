@@ -28,7 +28,7 @@ function Col({ children, style }: { children: React.ReactNode; style?: ViewStyle
 
 // ---------- Anime card list (vertical, list of poster + 2-3 lines) ----------
 
-export interface SkeletonAnimeCardListProps extends CountProps {
+interface SkeletonAnimeCardListProps extends CountProps {
   horizontal?: boolean;
   paddingHorizontal?: number;
 }
@@ -46,12 +46,7 @@ function AnimeCardListBase({
   const items = Array.from({ length: visibleCount });
   if (horizontal) {
     return (
-      <View
-        style={[
-          styles.hRow,
-          paddingHorizontal != null ? { paddingHorizontal } : null,
-          style,
-        ]}>
+      <View style={[styles.hRow, paddingHorizontal != null ? { paddingHorizontal } : null, style]}>
         {items.map((_, i) => (
           <Col key={i} style={styles.hCard}>
             <ShimmerEffect width={140} height={186} borderRadius={Radius.md} />
@@ -77,11 +72,11 @@ function AnimeCardListBase({
     </View>
   );
 }
-export const SkeletonAnimeCardList = memo(AnimeCardListBase);
+const SkeletonAnimeCardList = memo(AnimeCardListBase);
 
 // ---------- Poster grid (square-ish posters in N columns) ----------
 
-export interface SkeletonPosterGridProps extends CountProps {
+interface SkeletonPosterGridProps extends CountProps {
   columns?: number;
   aspectRatio?: number; // height / width; default 1.4 ~ 2:3 poster
   gap?: number;
@@ -111,11 +106,11 @@ function PosterGridBase({
     </View>
   );
 }
-export const SkeletonPosterGrid = memo(PosterGridBase);
+const SkeletonPosterGrid = memo(PosterGridBase);
 
 // ---------- Hero detail (banner + meta + paragraphs) — anime/[id], pilgrimage/[animeId] ----------
 
-export interface SkeletonHeroDetailProps {
+interface SkeletonHeroDetailProps {
   showEpisodes?: boolean;
   style?: ViewStyle;
 }
@@ -155,11 +150,11 @@ function HeroDetailBase({ showEpisodes = true, style }: SkeletonHeroDetailProps)
     </View>
   );
 }
-export const SkeletonHeroDetail = memo(HeroDetailBase);
+const SkeletonHeroDetail = memo(HeroDetailBase);
 
 // ---------- Stats dashboard (badge + hero card + chart + grid) ----------
 
-export interface SkeletonStatsDashboardProps {
+interface SkeletonStatsDashboardProps {
   style?: ViewStyle;
 }
 
@@ -195,7 +190,12 @@ function StatsDashboardBase({ style }: SkeletonStatsDashboardProps) {
           { backgroundColor: theme.background.secondary, borderColor: theme.glassBorder },
         ]}>
         <ShimmerEffect width={140} height={14} />
-        <ShimmerEffect width="100%" height={160} borderRadius={Radius.md} style={{ marginTop: Spacing.md }} />
+        <ShimmerEffect
+          width="100%"
+          height={160}
+          borderRadius={Radius.md}
+          style={{ marginTop: Spacing.md }}
+        />
       </View>
       <View
         style={[
@@ -212,14 +212,20 @@ function StatsDashboardBase({ style }: SkeletonStatsDashboardProps) {
     </View>
   );
 }
-export const SkeletonStatsDashboard = memo(StatsDashboardBase);
+const SkeletonStatsDashboard = memo(StatsDashboardBase);
 
 // ---------- Rating card (single swipe card placeholder) — (rate)/rating ----------
 
 function SkeletonRatingCardBase({ style }: { style?: ViewStyle }) {
   return (
     <View style={[styles.ratingCard, style]}>
-      <ShimmerEffect width="100%" height="100%" borderRadius={Radius.xl} intensity="low" style={styles.ratingPoster} />
+      <ShimmerEffect
+        width="100%"
+        height="100%"
+        borderRadius={Radius.xl}
+        intensity="low"
+        style={styles.ratingPoster}
+      />
       <View style={styles.ratingMeta}>
         <ShimmerEffect width="70%" height={20} />
         <ShimmerEffect width="45%" height={13} style={{ marginTop: 8 }} />
@@ -228,16 +234,21 @@ function SkeletonRatingCardBase({ style }: { style?: ViewStyle }) {
     </View>
   );
 }
-export const SkeletonRatingCard = memo(SkeletonRatingCardBase);
+const SkeletonRatingCard = memo(SkeletonRatingCardBase);
 
 // ---------- List row (avatar/rank + two lines) — hall-of-fame, persona, profile platforms ----------
 
-export interface SkeletonListRowProps extends CountProps {
+interface SkeletonListRowProps extends CountProps {
   avatarSize?: number;
   avatarShape?: 'circle' | 'square';
 }
 
-function ListRowBase({ count = 6, avatarSize = 44, avatarShape = 'circle', style }: SkeletonListRowProps) {
+function ListRowBase({
+  count = 6,
+  avatarSize = 44,
+  avatarShape = 'circle',
+  style,
+}: SkeletonListRowProps) {
   const items = Array.from({ length: count });
   return (
     <View style={[styles.list, style]}>
@@ -258,11 +269,11 @@ function ListRowBase({ count = 6, avatarSize = 44, avatarShape = 'circle', style
     </View>
   );
 }
-export const SkeletonListRow = memo(ListRowBase);
+const SkeletonListRow = memo(ListRowBase);
 
 // ---------- Map list (map placeholder + list) ----------
 
-export interface SkeletonMapListProps {
+interface SkeletonMapListProps {
   mapHeight?: number;
   listCount?: number;
   style?: ViewStyle;
@@ -286,11 +297,11 @@ function MapListBase({ mapHeight = 320, listCount = 5, style }: SkeletonMapListP
     </View>
   );
 }
-export const SkeletonMapList = memo(MapListBase);
+const SkeletonMapList = memo(MapListBase);
 
 // ---------- Timeline / plan (vertical step list) ----------
 
-export interface SkeletonTimelineProps extends CountProps {
+interface SkeletonTimelineProps extends CountProps {
   showHeader?: boolean;
 }
 
@@ -319,14 +330,14 @@ function TimelineBase({ count = 5, showHeader = true, style }: SkeletonTimelineP
     </View>
   );
 }
-export const SkeletonTimeline = memo(TimelineBase);
+const SkeletonTimeline = memo(TimelineBase);
 
 // ---------- Profile card (single card: avatar ring + name + currency pill) ----------
 // Mirrors the profileCard block in app/(tabs)/profile.tsx so the swap to data
 // has no layout shift. Stats row, premium CTA, shortcuts and settings row are
 // rendered alongside their own data and do not need a skeleton here.
 
-export interface SkeletonProfileProps {
+interface SkeletonProfileProps {
   style?: ViewStyle;
 }
 
@@ -350,7 +361,7 @@ function ProfileBase({ style }: SkeletonProfileProps) {
     </View>
   );
 }
-export const SkeletonProfile = memo(ProfileBase);
+const SkeletonProfile = memo(ProfileBase);
 
 // ---------- Namespace export ----------
 

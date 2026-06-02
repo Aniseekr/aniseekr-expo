@@ -8,8 +8,6 @@
 
 import { groupPointsIntoSpots } from './anitabi-points';
 import type { LatLng } from './location-service';
-import { getNearbyMapEntries } from './map-nearby';
-import { pilgrimageRepository } from './pilgrimage-repository';
 import type { AnitabiBangumi } from './types';
 
 export interface NearbySpot {
@@ -35,17 +33,6 @@ export interface NearbySpot {
   ringColor: string;
 }
 
-export interface LoadNearbySpotsOptions {
-  /** Radius (km) for the nearby-anime search. Default 30. */
-  radiusKm?: number;
-  /** Max anime expanded into individual spots. Default 14. */
-  maxAnime?: number;
-  /** Cap on the number of spots returned. Default 80. */
-  maxSpots?: number;
-}
-
-const DEFAULT_RADIUS_KM = 30;
-const DEFAULT_MAX_ANIME = 14;
 const DEFAULT_MAX_SPOTS = 80;
 const EARTH_RADIUS_KM = 6371;
 
@@ -60,18 +47,13 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
 }
 
 function hasGeo(geo: readonly [number, number]): boolean {
-  return (
-    Number.isFinite(geo[0]) &&
-    Number.isFinite(geo[1]) &&
-    !(geo[0] === 0 && geo[1] === 0)
-  );
+  return Number.isFinite(geo[0]) && Number.isFinite(geo[1]) && !(geo[0] === 0 && geo[1] === 0);
 }
 
 /**
  * Pure transform: collapse already-fetched anime payloads into a
  * distance-sorted {@link NearbySpot} list. Anime with no usable points or geo
- * are skipped. Exported for unit testing; {@link loadNearbySpots} wraps it with
- * the network fetch.
+ * are skipped.
  */
 export function buildNearbySpots(
   bangumiList: ReadonlyArray<AnitabiBangumi | null | undefined>,
@@ -110,33 +92,4 @@ export function buildNearbySpots(
   }
   out.sort((a, b) => a.distanceKm - b.distanceKm);
   return out.slice(0, Math.max(0, maxSpots));
-}
-
-/**
- * Resolve the individual pilgrimage spots near {@link userLocation}.
- *
- * Finds the closest anime in the offline index, fetches each one's lite
- * pilgrimage payload (repository-cached), and expands them into distance-sorted
- * spots. Returns `[]` when location is unknown or nothing is in range — callers
- * render an explicit empty/loading state rather than a placeholder.
- */
-export async function loadNearbySpots(
-  userLocation: LatLng | null | undefined,
-  options: LoadNearbySpotsOptions = {}
-): Promise<NearbySpot[]> {
-  if (!userLocation) return [];
-  const radiusKm = options.radiusKm ?? DEFAULT_RADIUS_KM;
-  const maxAnime = options.maxAnime ?? DEFAULT_MAX_ANIME;
-  const maxSpots = options.maxSpots ?? DEFAULT_MAX_SPOTS;
-
-  const nearbyAnime = getNearbyMapEntries(userLocation, { radiusKm }).slice(0, maxAnime);
-  if (nearbyAnime.length === 0) return [];
-
-  const bangumiList = await Promise.all(
-    nearbyAnime.map((entry) =>
-      pilgrimageRepository.getSpotsByBangumiId(entry.id).catch(() => null)
-    )
-  );
-
-  return buildNearbySpots(bangumiList, userLocation, maxSpots);
 }

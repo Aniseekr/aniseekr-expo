@@ -41,11 +41,11 @@ interface AsyncStorageLike {
 // memory FakeStorage through the `storage` option below.
 const defaultStorage: AsyncStorageLike = mmkvAsyncStorageAdapter;
 
-export const COHORT_CACHE_PREFIX = 'aniseekr.pilgrimage.cohort.v1';
+const COHORT_CACHE_PREFIX = 'aniseekr.pilgrimage.cohort.v1';
 /** 30-day TTL — comfortably longer than any plausible "I left my phone
  *  in a drawer for a few weeks" gap, short enough that a firmware update
  *  doesn't keep stale classifications around forever. */
-export const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type CohortFacing = 'back' | 'front';
 

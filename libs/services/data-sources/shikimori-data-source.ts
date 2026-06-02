@@ -240,9 +240,9 @@ export class ShikimoriDataSource implements AnimeDataSource {
 
   async fetchGenres(): Promise<AnimeGenre[]> {
     const items = await ShikimoriClient.get<ShikimoriGenre[]>('/genres', {});
-    return (items ?? [])
-      .filter((g) => g.kind === 'anime' || g.kind == null)
-      .map((g) => ({ id: g.id, name: g.name }));
+    return (items ?? []).flatMap((g) =>
+      g.kind === 'anime' || g.kind == null ? [{ id: g.id, name: g.name }] : []
+    );
   }
 
   async fetchTopAnime(page?: number): Promise<UnifiedAnimeItem[]> {
@@ -333,10 +333,3 @@ export class ShikimoriDataSource implements AnimeDataSource {
     return defaultStatsStub().fetchStatistics(_id);
   }
 }
-
-export const __test__ = {
-  buildShikimoriItem,
-  parseShikimoriScore,
-  stripShikimoriDescription,
-  pickShikimoriFormat,
-};

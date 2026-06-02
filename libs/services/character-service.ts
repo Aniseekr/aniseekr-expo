@@ -28,7 +28,7 @@ interface AnimeCharacter {
   favorites?: number;
 }
 
-export class CharacterService {
+class CharacterService {
   private static instance: CharacterService;
   private gachaPool: Character[] = [];
   private poolLastUpdated: Date | null = null;

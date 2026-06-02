@@ -10,7 +10,7 @@ export interface DirtyRecord {
   markedAt: number;
 }
 
-export class SyncDirtyTracker {
+class SyncDirtyTracker {
   private static instance: SyncDirtyTracker;
 
   static getInstance(): SyncDirtyTracker {

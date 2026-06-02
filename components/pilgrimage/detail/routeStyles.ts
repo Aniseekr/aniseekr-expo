@@ -11,12 +11,6 @@ import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Typography } from '../../../constants/DesignSystem';
 import type { ThemePalette } from '../../../context/ThemeContext';
 
-// Kept for backwards-compat / tests that depend on these tokens. The new
-// layout no longer uses HERO_HEIGHT (the parallax hero was removed when the
-// route flipped to a map-first design with a pull-up sheet).
-export const HERO_HEIGHT = 320;
-export const HEADER_HEIGHT = 56;
-
 // Approximate height of the floating segmented view-mode toggle that sits
 // just above the bottom sheet handle. Used to pad the sheet peek so the
 // toggle doesn't clip behind it.

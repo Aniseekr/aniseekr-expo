@@ -118,29 +118,19 @@ export function hydrateFromRuntime(file: CrossIndexFile): void {
   rebuildIndices(file);
 }
 
-/** Generated-at timestamp of the shipped cross-index (epoch ms). */
-export function getCrossIndexGeneratedAt(): number {
-  return ensureBuilt().generatedAt;
-}
-
-/** Number of rows in the shipped cross-index. */
-export function getCrossIndexSize(): number {
-  return ensureBuilt().entries.length;
-}
-
 export function lookupByBangumiId(bangumiId: number): AnitabiCrossIndexEntry | null {
   if (!Number.isFinite(bangumiId) || bangumiId <= 0) return null;
   ensureBuilt();
   return byBangumi.get(bangumiId) ?? null;
 }
 
-export function lookupByAnilistId(anilistId: number): AnitabiCrossIndexEntry | null {
+function lookupByAnilistId(anilistId: number): AnitabiCrossIndexEntry | null {
   if (!Number.isFinite(anilistId) || anilistId <= 0) return null;
   ensureBuilt();
   return byAnilist.get(anilistId) ?? null;
 }
 
-export function lookupByMalId(malId: number): AnitabiCrossIndexEntry | null {
+function lookupByMalId(malId: number): AnitabiCrossIndexEntry | null {
   if (!Number.isFinite(malId) || malId <= 0) return null;
   ensureBuilt();
   return byMal.get(malId) ?? null;
@@ -151,10 +141,7 @@ export function lookupByMalId(malId: number): AnitabiCrossIndexEntry | null {
  * via the cross-index. Returns `null` when no entry matches or the platform
  * isn't supported by this index.
  */
-export function lookupBangumiByPlatformId(
-  platform: string,
-  rawId: string | number
-): number | null {
+export function lookupBangumiByPlatformId(platform: string, rawId: string | number): number | null {
   const numeric = typeof rawId === 'number' ? rawId : Number(rawId);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
   if (platform === 'anilist') {

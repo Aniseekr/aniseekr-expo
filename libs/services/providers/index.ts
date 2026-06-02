@@ -19,7 +19,7 @@ export * from './simkl-provider';
 export * from './annict-provider';
 export * from './kavita-provider';
 
-export const PROVIDERS: Record<PlatformType, AnimeSourceProvider> = {
+const PROVIDERS: Record<PlatformType, AnimeSourceProvider> = {
   myanimelist: malProvider,
   anilist: anilistProvider,
   bangumi: bangumiProvider,

@@ -18,12 +18,6 @@ const USER_PREFS_KEY = 'aniseekr.user.prefs.v1';
 const COLLECTION_SORT_MODE_KEY = 'aniseekr.collection.sortMode.v1';
 const BANGUMI_PREFS_KEY = 'aniseekr.bangumi.prefs.v1';
 
-export const BACKUP_PREFS_KEYS = [
-  USER_PREFS_KEY,
-  COLLECTION_SORT_MODE_KEY,
-  BANGUMI_PREFS_KEY,
-] as const;
-
 export interface BackupAsyncStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -215,11 +209,7 @@ export class BackupService {
   }
 }
 
-function diffRows<T extends object>(
-  local: T[],
-  incoming: T[],
-  keyOf: (row: T) => string
-): RowDiff {
+function diffRows<T extends object>(local: T[], incoming: T[], keyOf: (row: T) => string): RowDiff {
   const byKey = new Map<string, T>();
   for (const row of local) byKey.set(keyOf(row), row);
 

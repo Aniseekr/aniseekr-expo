@@ -36,7 +36,7 @@ interface ProcessResult {
   dead: number;
 }
 
-export class OfflineQueueService {
+class OfflineQueueService {
   private static instance: OfflineQueueService;
   private running = false;
 

@@ -13,8 +13,8 @@
 import { rateLimiter } from '../services/rate-limiter';
 import { DataSourceError } from '../services/data-sources/data-source-error';
 
-export const BANGUMI_BASE_URL = 'https://api.bgm.tv';
-export const BANGUMI_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
+const BANGUMI_BASE_URL = 'https://api.bgm.tv';
+const BANGUMI_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
 
 // MARK: - Wire types (Bangumi v0 subject + search responses)
 

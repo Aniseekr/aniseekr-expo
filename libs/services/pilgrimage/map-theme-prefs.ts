@@ -17,8 +17,6 @@ import { kvGet, kvSet } from '../storage/app-storage';
 import { MAP_THEME_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
-export { MAP_THEME_STORAGE_KEY };
-
 /**
  * User-facing pilgrimage map theme override.
  * - 'light': force CARTO Voyager (warm Google-Maps-Light look)
@@ -26,8 +24,6 @@ export { MAP_THEME_STORAGE_KEY };
  * - 'auto': follow the global app theme via effectiveMode
  */
 export type MapThemePref = 'light' | 'dark' | 'auto';
-
-export const MAP_THEME_PREFS: readonly MapThemePref[] = ['light', 'dark', 'auto'] as const;
 
 /** Default map is white — see file header for rationale. */
 export const DEFAULT_MAP_THEME: MapThemePref = 'light';

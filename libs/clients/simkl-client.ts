@@ -13,7 +13,7 @@ const USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
  * requires the key; test environments lack it (we still fire requests with
  * an empty value so unit tests can run without secrets).
  */
-export function getSimklClientId(): string {
+function getSimklClientId(): string {
   return process.env.EXPO_PUBLIC_SIMKL_CLIENT_ID || '';
 }
 

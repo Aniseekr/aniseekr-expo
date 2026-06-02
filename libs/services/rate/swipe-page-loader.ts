@@ -53,15 +53,16 @@ export async function loadNextUsableSwipePage<T>({
     currentPage = page;
     hasMore = hasPotentialNextSwipePage(items.length);
 
-    const usablePhotos = items.map(mapItemToPhoto).filter((photo) => {
-      if (!photo.url) return false;
-      if (scannedIds.has(photo.id)) return false;
+    const usablePhotos = items.flatMap((item) => {
+      const photo = mapItemToPhoto(item);
+      if (!photo.url) return [];
+      if (scannedIds.has(photo.id)) return [];
       if (!includeSeen && seenIds.has(photo.id)) {
         releasableSeenIds.add(photo.id);
-        return false;
+        return [];
       }
       scannedIds.add(photo.id);
-      return true;
+      return [photo];
     });
 
     if (usablePhotos.length > 0) {

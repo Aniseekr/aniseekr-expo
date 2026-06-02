@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle } from 'react';
+import { useImperativeHandle, type Ref } from 'react';
 
 export interface NativeAdCardRef {
   swipe: (direction: 'left' | 'right') => void;
@@ -8,9 +8,10 @@ interface Props {
   isTop?: boolean;
   onSwipe: (direction: 'left' | 'right') => void;
   activeTranslation?: unknown;
+  ref?: Ref<NativeAdCardRef>;
 }
 
-export const NativeAdCard = forwardRef<NativeAdCardRef, Props>(({ onSwipe }, ref) => {
+export function NativeAdCard({ onSwipe, ref }: Props) {
   useImperativeHandle(
     ref,
     () => ({
@@ -20,6 +21,4 @@ export const NativeAdCard = forwardRef<NativeAdCardRef, Props>(({ onSwipe }, ref
   );
 
   return null;
-});
-
-NativeAdCard.displayName = 'NativeAdCard';
+}

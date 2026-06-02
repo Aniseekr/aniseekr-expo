@@ -56,6 +56,13 @@ const SORT_OPTIONS = [
   { id: 'id', label: 'ID' },
 ];
 
+const rarityColor = {
+  SSR: '#fbbf24',
+  SR: '#a78bfa',
+  R: '#f97316',
+  N: '#6b7280',
+};
+
 export function CardDetailView({ visible, card, onClose, onShardExchange }: CardDetailViewProps) {
   const [showFullStats, setShowFullStats] = useState(false);
 
@@ -66,13 +73,6 @@ export function CardDetailView({ visible, card, onClose, onShardExchange }: Card
   };
 
   if (!visible || !card) return null;
-
-  const rarityColor = {
-    SSR: '#fbbf24',
-    SR: '#a78bfa',
-    R: '#f97316',
-    N: '#6b7280',
-  };
 
   return (
     <Modal

@@ -124,7 +124,7 @@ export class PilgrimageSearchService {
   }
 }
 
-export function searchLocalPilgrimageIndex(
+function searchLocalPilgrimageIndex(
   query: string,
   entries: readonly AnitabiIndexEntry[],
   limit: number = DEFAULT_LIMIT,

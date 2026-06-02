@@ -19,7 +19,7 @@ export interface LedgerEntry {
 
 type Listener = (balance: EconomyBalance) => void;
 
-export class EconomyService {
+class EconomyService {
   private static instance: EconomyService;
   private listeners = new Set<Listener>();
   private cached: EconomyBalance = { coins: 0, shards: 0 };

@@ -25,16 +25,14 @@ export function StatsHeroCard({ badge, highlight, values }: Props) {
       colors={[`${theme.accent}33`, `${theme.background.secondary}E6`]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={[styles.card, { borderColor: theme.glassBorder }]}
-    >
+      style={[styles.card, { borderColor: theme.glassBorder }]}>
       <View style={styles.headerRow}>
         {badge ? (
           <ThemedText
             variant="captionSmall"
             tone="secondary"
             weight="700"
-            style={[styles.badge, { letterSpacing: 2 }]}
-          >
+            style={[styles.badge, { letterSpacing: 2 }]}>
             {badge}
           </ThemedText>
         ) : (
@@ -45,28 +43,27 @@ export function StatsHeroCard({ badge, highlight, values }: Props) {
             <ThemedText
               variant="captionSmall"
               weight="700"
-              style={[styles.highlightText, { color: onAccent }]}
-            >
+              style={[styles.highlightText, { color: onAccent }]}>
               {highlight}
             </ThemedText>
           </View>
         ) : null}
       </View>
       <View style={styles.valueRow}>
-        {values
-          .filter((v) => !v.hidden)
-          .map((v) => (
-            <View key={v.label} style={styles.valueCol}>
-              <ThemedText
-                style={[styles.value, { color: theme.text.primary }]}
-              >
-                {v.value}
-              </ThemedText>
-              <ThemedText variant="captionSmall" tone="tertiary" style={styles.valueLabel}>
-                {v.label}
-              </ThemedText>
-            </View>
-          ))}
+        {values.flatMap((v) =>
+          v.hidden
+            ? []
+            : [
+                <View key={v.label} style={styles.valueCol}>
+                  <ThemedText style={[styles.value, { color: theme.text.primary }]}>
+                    {v.value}
+                  </ThemedText>
+                  <ThemedText variant="captionSmall" tone="tertiary" style={styles.valueLabel}>
+                    {v.label}
+                  </ThemedText>
+                </View>,
+              ]
+        )}
       </View>
     </LinearGradient>
   );

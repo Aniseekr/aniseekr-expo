@@ -74,8 +74,7 @@ export function resolveWatchOptions(input: ResolveInput): WatchOption[] {
 
   for (const entry of anilistStreaming) {
     if (!entry || !entry.url) continue;
-    const spec =
-      matchStreamingPlatformByUrl(entry.url) ?? matchStreamingPlatformBySite(entry.site);
+    const spec = matchStreamingPlatformByUrl(entry.url) ?? matchStreamingPlatformBySite(entry.site);
 
     if (spec) {
       // Dedup: first URL wins for a given platform.
@@ -120,17 +119,18 @@ export function resolveWatchOptions(input: ResolveInput): WatchOption[] {
   // Order: primary first; then user-enabled order (mix of official + search);
   // then unenabled AniList officials; then unknown-site AniList officials.
   const primary = prefs.primary;
+  const searchByPlatform = new Map(searchOptions.map((o) => [o.platformId, o]));
   const enabledOrdered: WatchOption[] = [];
   if (primary) {
     const fromOfficial = officialByPlatform.get(primary);
-    const fromSearch = searchOptions.find((o) => o.platformId === primary);
+    const fromSearch = searchByPlatform.get(primary);
     const opt = fromOfficial ?? fromSearch;
     if (opt) enabledOrdered.push(opt);
   }
   for (const id of prefs.enabled) {
     if (id === primary) continue;
     const fromOfficial = officialByPlatform.get(id);
-    const fromSearch = searchOptions.find((o) => o.platformId === id);
+    const fromSearch = searchByPlatform.get(id);
     const opt = fromOfficial ?? fromSearch;
     if (opt) enabledOrdered.push(opt);
   }
@@ -151,7 +151,7 @@ function buildOption(
   prefs: StreamingPrefs,
   enabledSet: Set<StreamingPlatformId>
 ): WatchOption {
-  const deepLink = prefs.preferAppDeepLink ? buildDeepLink(spec.id, url) ?? undefined : undefined;
+  const deepLink = prefs.preferAppDeepLink ? (buildDeepLink(spec.id, url) ?? undefined) : undefined;
   return {
     platformId: spec.id,
     displayName: spec.displayName,

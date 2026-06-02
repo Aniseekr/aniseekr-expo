@@ -7,8 +7,7 @@ import * as React from 'react';
 
 (globalThis as { __DEV__?: boolean }).__DEV__ = false;
 
-const animatedPassthrough = (tag: string) =>
-  React.forwardRef((props: any, ref: any) => React.createElement(tag, { ...props, ref }));
+const animatedPassthrough = (tag: string) => (props: any) => React.createElement(tag, props);
 
 mock.module('react-native-reanimated', () => {
   const Animated = {
@@ -571,9 +570,7 @@ mock.module('expo-location', () => ({
 // expo-image: render as RN Image + cache-clearing stubs used by ImageDiskBucket /
 // ImageMemoryBucket.
 mock.module('expo-image', () => {
-  const ImageComponent: any = React.forwardRef((props: any, ref: any) =>
-    React.createElement('Image', { ...props, ref })
-  );
+  const ImageComponent: any = (props: any) => React.createElement('Image', props);
   ImageComponent.clearDiskCache = async () => true;
   ImageComponent.clearMemoryCache = async () => true;
   return { Image: ImageComponent };
@@ -583,8 +580,7 @@ mock.module('expo-image', () => {
 // substitute a minimal subset that returns plain React.createElement nodes.
 // Only the surface used by our components needs to exist.
 mock.module('react-native', () => {
-  const passthrough = (tag: string) =>
-    React.forwardRef((props: any, ref: any) => React.createElement(tag, { ...props, ref }));
+  const passthrough = (tag: string) => (props: any) => React.createElement(tag, props);
 
   const StyleSheet = {
     create<T extends Record<string, unknown>>(styles: T): T {
@@ -713,10 +709,7 @@ mock.module('expo-tracking-transparency', () => ({
 }));
 
 mock.module('@expo/vector-icons', () => {
-  const Icon = (name: string) =>
-    React.forwardRef((props: any, ref: any) =>
-      React.createElement(`Icon:${name}`, { ...props, ref })
-    );
+  const Icon = (name: string) => (props: any) => React.createElement(`Icon:${name}`, props);
   return {
     Ionicons: Icon('Ionicons'),
     MaterialIcons: Icon('MaterialIcons'),
@@ -736,9 +729,7 @@ for (const iconName of [
   'Entypo',
 ]) {
   mock.module(`@expo/vector-icons/${iconName}`, () => {
-    const Icon = React.forwardRef((props: any, ref: any) =>
-      React.createElement(`Icon:${iconName}`, { ...props, ref })
-    );
+    const Icon = (props: any) => React.createElement(`Icon:${iconName}`, props);
     return { default: Icon };
   });
 }
@@ -759,9 +750,7 @@ mock.module('@shopify/react-native-skia', () => ({
 
 mock.module('expo-linear-gradient', () => {
   return {
-    LinearGradient: React.forwardRef((props: any, ref: any) =>
-      React.createElement('LinearGradient', { ...props, ref })
-    ),
+    LinearGradient: (props: any) => React.createElement('LinearGradient', props),
   };
 });
 

@@ -13,7 +13,6 @@ export const THEME_TINT_INTENSITY_KEY = '@aniseekr/tintIntensity';
 export const THEME_INCREASE_CONTRAST_KEY = '@aniseekr/increaseContrast';
 export const MAP_THEME_STORAGE_KEY = 'aniseekr.pilgrimage.mapTheme.v1';
 export const MAP_SOURCE_STYLE_OVERRIDE_KEY = 'aniseekr.pilgrimage.mapSource.styleOverride.v1';
-export const MAP_ENGINE_STORAGE_KEY = 'aniseekr.pilgrimage.mapEngine.v1';
 export const VISITED_SPOTS_STORAGE_KEY = 'aniseekr.pilgrimage.visited.v1';
 export const SPOT_INTENTS_STORAGE_KEY = 'aniseekr.pilgrimage.spot-intents.v1';
 export const CAPTURES_STORAGE_KEY = '@aniseekr/pilgrimage/captures/v1';

@@ -20,7 +20,7 @@ const LABEL: Record<EdgeIntensity, string> = {
   high: 'Edge Max',
 };
 
-export function isEdgeIntensity(value: unknown): value is EdgeIntensity {
+function isEdgeIntensity(value: unknown): value is EdgeIntensity {
   return value === 'low' || value === 'mid' || value === 'high';
 }
 

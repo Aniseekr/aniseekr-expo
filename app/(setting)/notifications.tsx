@@ -71,16 +71,20 @@ function bucketize(date?: Date): GroupKey {
   return 'later';
 }
 
-function formatScheduled(date: Date | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+const scheduledFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+function formatScheduled(
+  date: Date | undefined,
+  t: (k: string, v?: Record<string, string | number>) => string
+): string {
   if (!date) return t('settings.notificationsScreen.pending');
-  const formatter = new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  return formatter.format(date).replace(',', ' ·');
+  return scheduledFormatter.format(date).replace(',', ' ·');
 }
 
 function extractScheduled(n: Notifications.NotificationRequest): Date | undefined {
@@ -251,7 +255,10 @@ export default function NotificationsScreen() {
   return (
     <SettingsScreenLayout
       title={t('settings.notifications')}
-      subtitle={t('settings.notificationsScreen.subtitle', { count: pending.length, status: permissionLabel })}
+      subtitle={t('settings.notificationsScreen.subtitle', {
+        count: pending.length,
+        status: permissionLabel,
+      })}
       refreshing={refreshing}
       onRefresh={onRefresh}>
       {!permission.granted ? (
@@ -348,7 +355,9 @@ export default function NotificationsScreen() {
       <SettingsSection
         title={
           pending.length > 0
-            ? t('settings.notificationsScreen.section.scheduledWithCount', { count: pending.length })
+            ? t('settings.notificationsScreen.section.scheduledWithCount', {
+                count: pending.length,
+              })
             : t('settings.notificationsScreen.section.scheduled')
         }>
         {pendingLoading && pending.length === 0 ? (
@@ -372,7 +381,11 @@ export default function NotificationsScreen() {
               ) : null}
               {group.items.map((item, idx) => (
                 <View key={item.identifier}>
-                  <ScheduledRow item={item} onDelete={() => handleDeleteOne(item.identifier)} t={t} />
+                  <ScheduledRow
+                    item={item}
+                    onDelete={() => handleDeleteOne(item.identifier)}
+                    t={t}
+                  />
                   {idx < group.items.length - 1 ? <Divider /> : null}
                 </View>
               ))}
@@ -411,7 +424,15 @@ function Divider() {
   return <View style={{ height: 1, marginLeft: 56, backgroundColor: theme.glassBorder }} />;
 }
 
-function ScheduledRow({ item, onDelete, t }: { item: PendingNotification; onDelete: () => void; t: (k: string, v?: Record<string, string | number>) => string }) {
+function ScheduledRow({
+  item,
+  onDelete,
+  t,
+}: {
+  item: PendingNotification;
+  onDelete: () => void;
+  t: (k: string, v?: Record<string, string | number>) => string;
+}) {
   const { theme } = useTheme();
   const display = item.animeTitle ?? item.title;
   return (

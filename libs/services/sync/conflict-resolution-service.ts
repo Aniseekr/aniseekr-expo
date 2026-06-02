@@ -40,7 +40,7 @@ const STATUS_PRIORITY: Record<AnimeStatus, number> = {
   planned: 1,
 };
 
-export class ConflictResolutionService {
+class ConflictResolutionService {
   private static instance: ConflictResolutionService;
 
   static getInstance(): ConflictResolutionService {
@@ -237,9 +237,9 @@ export class ConflictResolutionService {
   }
 
   private composeAnimeId(group: UniversalAnimeItem[]): string {
-    const ids = Object.entries(group[0].platformIds)
-      .filter(([, v]) => Boolean(v))
-      .map(([platform, id]) => `${platform}:${id}`);
+    const ids = Object.entries(group[0].platformIds).flatMap(([platform, id]) =>
+      Boolean(id) ? [`${platform}:${id}`] : []
+    );
     return ids.length > 0 ? ids.join('|') : group[0].id;
   }
 }

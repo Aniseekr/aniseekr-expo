@@ -16,7 +16,7 @@
 // Offline: MapLibre's automatic ambient cache reproduces Leaflet's
 // cache-as-you-browse; explicit `offlineOnly` / per-region `createPack` UX is
 // reserved (spec P3), so `offlineOnly` is accepted but not yet enforced here.
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useCallback, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   Map as MapLibreMap,
@@ -58,24 +58,22 @@ const DEFAULT_CENTER: [number, number] = [138.0, 36.5];
 /** Recompute clusters + emit bounds only on settle, not per frame (Rule 9). */
 const BOUNDS_DEBOUNCE_MS = 300;
 
-export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(function MapLibreEngine(
-  {
-    markers,
-    user,
-    center,
-    zoom = 5,
-    markerMode = 'bubble',
-    visitedIds,
-    clusterDisableAtZoom = CLUSTER_DISABLE_AT.default,
-    styleUrl,
-    controlsBottomOffset = 0,
-    onMarkerPress,
-    onClusterPress,
-    onPanned,
-    onBoundsChange,
-  },
-  ref
-) {
+export function MapLibreEngine({
+  markers,
+  user,
+  center,
+  zoom = 5,
+  markerMode = 'bubble',
+  visitedIds,
+  clusterDisableAtZoom = CLUSTER_DISABLE_AT.default,
+  styleUrl,
+  controlsBottomOffset = 0,
+  onMarkerPress,
+  onClusterPress,
+  onPanned,
+  onBoundsChange,
+  ref,
+}: MapSurfaceProps & { ref?: Ref<MapSurfaceHandle> }) {
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,4 +211,4 @@ export const MapLibreEngine = forwardRef<MapSurfaceHandle, MapSurfaceProps>(func
       </MapLibreMap>
     </View>
   );
-});
+}

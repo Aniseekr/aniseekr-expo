@@ -79,7 +79,8 @@ export function summarize(rows: UserAnimeRow[]): StatsSummary {
         break;
     }
     if (typeof r.score === 'number' && r.score > 0) scores.push(r.score);
-    const eps = r.status === 'completed' ? r.total_episodes ?? r.progress ?? 0 : r.progress ?? 0;
+    const eps =
+      r.status === 'completed' ? (r.total_episodes ?? r.progress ?? 0) : (r.progress ?? 0);
     episodesWatched += Math.max(0, eps);
     if (r.started_at) startedDates.push(r.started_at);
     if (r.completed_at) completedDates.push(r.completed_at);
@@ -175,14 +176,4 @@ export function ratioOfNightUpdates(updatedAt: number[]): number {
     return h >= 22 || h < 5;
   }).length;
   return night / updatedAt.length;
-}
-
-export function firstActivity(rows: UserAnimeRow[]): number | null {
-  let min = Infinity;
-  for (const r of rows) {
-    for (const t of [r.started_at, r.completed_at, r.updated_at]) {
-      if (typeof t === 'number' && t > 0 && t < min) min = t;
-    }
-  }
-  return min === Infinity ? null : min;
 }

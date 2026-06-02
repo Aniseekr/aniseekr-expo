@@ -31,7 +31,7 @@ export interface ShortcutSpec {
   route: string;
 }
 
-export const SHORTCUT_CATALOG: Record<ShortcutId, ShortcutSpec> = {
+const SHORTCUT_CATALOG: Record<ShortcutId, ShortcutSpec> = {
   notifications: {
     id: 'notifications',
     label: 'Notifications',

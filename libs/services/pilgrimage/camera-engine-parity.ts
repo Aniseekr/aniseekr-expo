@@ -25,7 +25,9 @@ function isPositiveFinite(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
-function validDimensions(dimensions: PhotoDimensions | null | undefined): dimensions is PhotoDimensions {
+function validDimensions(
+  dimensions: PhotoDimensions | null | undefined
+): dimensions is PhotoDimensions {
   return isPositiveFinite(dimensions?.width) && isPositiveFinite(dimensions?.height);
 }
 
@@ -41,7 +43,7 @@ export function pickResolvedPhotoDimensions({
   return { width: 0, height: 0 };
 }
 
-export async function decodePhotoDimensions(uri: string): Promise<PhotoDimensions | null> {
+async function decodePhotoDimensions(uri: string): Promise<PhotoDimensions | null> {
   let image: ReturnType<typeof Skia.Image.MakeImageFromEncoded> | null = null;
   try {
     const data = await Skia.Data.fromURI(uri);

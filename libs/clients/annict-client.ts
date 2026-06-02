@@ -14,8 +14,8 @@
 import { rateLimiter } from '../services/rate-limiter';
 import { DataSourceError } from '../services/data-sources/data-source-error';
 
-export const ANNICT_BASE_URL = 'https://api.annict.com';
-export const ANNICT_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
+const ANNICT_BASE_URL = 'https://api.annict.com';
+const ANNICT_USER_AGENT = 'Aniseekr/1.0 (https://github.com/Aniseekr)';
 
 // MARK: - Wire types
 

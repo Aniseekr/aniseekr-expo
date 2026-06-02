@@ -21,10 +21,7 @@ import {
   loadUserPrefsSync,
   patchUserPrefs,
 } from '../../libs/services/user-prefs';
-import {
-  normalizeProfileShortcuts,
-  type ShortcutId,
-} from '../../libs/services/profile-shortcuts';
+import { normalizeProfileShortcuts, type ShortcutId } from '../../libs/services/profile-shortcuts';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Radius, Spacing } from '../../constants/DesignSystem';
@@ -45,6 +42,11 @@ const PLATFORM_INITIAL: Record<PlatformType, string> = {
 
 const DEFAULT_PLATFORM_ID = '__default__';
 
+const handleOpenSettings = () => {
+  hapticsBridge.tap();
+  router.push('/(setting)/settings');
+};
+
 export default function ProfileScreen() {
   const { top } = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -58,15 +60,15 @@ export default function ProfileScreen() {
   // Seed sync from MMKV so the platform switcher renders on the user's
   // chosen primary on frame 1 instead of momentarily showing `DEFAULT`.
   const [selectedPlatform, setSelectedPlatform] = useState<string>(
-    () => UserRepository.getPrimaryPlatformSync() ?? DEFAULT_PLATFORM_ID,
+    () => UserRepository.getPrimaryPlatformSync() ?? DEFAULT_PLATFORM_ID
   );
   const [connectedPlatforms, setConnectedPlatforms] = useState<PlatformInfo[]>([]);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [nameSheetVisible, setNameSheetVisible] = useState(false);
   // Seed shortcuts synchronously from MMKV so the dock renders the user's
   // chosen layout on frame 1 instead of `DEFAULT_USER_PREFS.profileShortcuts`.
-  const [shortcuts, setShortcuts] = useState<ShortcutId[]>(
-    () => normalizeProfileShortcuts(loadUserPrefsSync().profileShortcuts),
+  const [shortcuts, setShortcuts] = useState<ShortcutId[]>(() =>
+    normalizeProfileShortcuts(loadUserPrefsSync().profileShortcuts)
   );
 
   const loadConnectedPlatforms = useCallback(async () => {
@@ -150,7 +152,8 @@ export default function ProfileScreen() {
     return switcherPlatforms.find((p) => p.id === selectedPlatform) ?? switcherPlatforms[0];
   }, [switcherPlatforms, selectedPlatform]);
 
-  const headerUsername = activePlatform?.username || user?.username || t('tabs.profileScreen.anonName');
+  const headerUsername =
+    activePlatform?.username || user?.username || t('tabs.profileScreen.anonName');
   const headerAvatar = activePlatform?.avatarUrl || user?.avatarUrl || '';
   const isEditable = selectedPlatform === DEFAULT_PLATFORM_ID;
 
@@ -172,11 +175,6 @@ export default function ProfileScreen() {
     if (!isEditable) return;
     hapticsBridge.tap();
     setNameSheetVisible(true);
-  };
-
-  const handleOpenSettings = () => {
-    hapticsBridge.tap();
-    router.push('/(setting)/settings');
   };
 
   const handleOpenPremium = () => {
@@ -337,23 +335,14 @@ export default function ProfileScreen() {
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.statsHeroContent}>
-              <View
-                style={[
-                  styles.statsHeroIcon,
-                  { backgroundColor: 'rgba(255,255,255,0.18)' },
-                ]}>
+              <View style={[styles.statsHeroIcon, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
                 <MaterialIcons name="bar-chart" size={20} color={ctaFg} />
               </View>
               <View style={styles.statsHeroText}>
-                <ThemedText
-                  variant="titleMedium"
-                  weight="700"
-                  style={{ color: ctaFg }}>
+                <ThemedText variant="titleMedium" weight="700" style={{ color: ctaFg }}>
                   {t('tabs.profileScreen.statsHero.title')}
                 </ThemedText>
-                <ThemedText
-                  variant="bodySmall"
-                  style={{ color: ctaFg, opacity: 0.85 }}>
+                <ThemedText variant="bodySmall" style={{ color: ctaFg, opacity: 0.85 }}>
                   {t('tabs.profileScreen.statsHero.subtitle')}
                 </ThemedText>
               </View>
@@ -380,7 +369,9 @@ export default function ProfileScreen() {
                       variant="titleMedium"
                       weight="700"
                       style={[styles.premiumTitle, { color: ctaFg }]}>
-                      {isPro ? t('tabs.profileScreen.premium.active') : t('tabs.profileScreen.premium.unlock')}
+                      {isPro
+                        ? t('tabs.profileScreen.premium.active')
+                        : t('tabs.profileScreen.premium.unlock')}
                     </ThemedText>
                   </View>
                   <ThemedText
@@ -396,7 +387,9 @@ export default function ProfileScreen() {
                     variant="titleSmall"
                     weight="700"
                     style={{ color: theme.text.primary }}>
-                    {isPro ? t('tabs.profileScreen.premium.manage') : t('tabs.profileScreen.premium.upgrade')}
+                    {isPro
+                      ? t('tabs.profileScreen.premium.manage')
+                      : t('tabs.profileScreen.premium.upgrade')}
                   </ThemedText>
                 </View>
               </View>
@@ -415,10 +408,7 @@ export default function ProfileScreen() {
               radius={Radius.lg}
               style={[styles.settingsRow, { borderColor: theme.glassBorder }]}>
               <View
-                style={[
-                  styles.settingsIconWrap,
-                  { backgroundColor: theme.background.tertiary },
-                ]}>
+                style={[styles.settingsIconWrap, { backgroundColor: theme.background.tertiary }]}>
                 <Ionicons name="settings-outline" size={18} color={theme.text.primary} />
               </View>
               <View style={styles.settingsLabel}>

@@ -79,8 +79,3 @@ const nativeLifter = tryLoadNative();
  * `isSupported() === false` and offers the "Use as-is" path.
  */
 export const subjectLifter: SubjectLifter = nativeLifter ?? jsSubjectLifter;
-
-/** True iff the native module is wired up and reports support. */
-export function hasNativeSubjectLifter(): boolean {
-  return nativeLifter !== null;
-}

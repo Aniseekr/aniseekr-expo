@@ -251,7 +251,7 @@ export function convertSubjectToUnifiedItem(subject: BangumiV0Subject): UnifiedA
   }
 
   const startDate = parseBangumiDate(subject.date);
-  const tags = (subject.tags ?? []).map((t) => t.name).filter((n) => n.length > 0);
+  const tags = (subject.tags ?? []).flatMap((t) => (t.name.length > 0 ? [t.name] : []));
   const { titleEnglish, titleRomaji, synonyms } = extractInfoboxAliases(subject.infobox ?? null);
 
   return new UnifiedAnimeItem({

@@ -30,9 +30,7 @@ export interface HeadingReading {
  * returns `null` when neither value is usable so callers can render no
  * direction instead of a fake one.
  */
-export function resolveHeadingDegrees(
-  reading: HeadingReading | null | undefined
-): number | null {
+export function resolveHeadingDegrees(reading: HeadingReading | null | undefined): number | null {
   if (!reading) return null;
   for (const value of [reading.trueHeading, reading.magHeading]) {
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
@@ -52,7 +50,7 @@ interface ServiceOptions {
 }
 
 /** Default cached-location TTL (5 minutes). */
-export const LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Earth's radius (km) used in the haversine distance formula. */
 const EARTH_RADIUS_KM = 6371;

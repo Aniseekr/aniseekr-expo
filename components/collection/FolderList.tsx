@@ -95,7 +95,7 @@ export function FolderList({
               <View style={styles.heroContent}>
                 <Text style={styles.heroTitle}>{previews[0].title}</Text>
                 <View style={styles.heroMeta}>
-                  {previews[0].score && (
+                  {previews[0].score != null && previews[0].score > 0 && (
                     <View style={styles.scoreRow}>
                       <MaterialIcons name="star" size={16} color={Colors.warning} />
                       <Text style={styles.scoreText}>{previews[0].score.toFixed(1)}</Text>
@@ -124,7 +124,7 @@ export function FolderList({
                 <Text style={styles.animeTitle} numberOfLines={1}>
                   {anime.title}
                 </Text>
-                {anime.score && (
+                {anime.score != null && anime.score > 0 && (
                   <View style={styles.scoreRowSmall}>
                     <Text style={styles.starIcon}>⭐</Text>
                     <Text style={styles.scoreTextSmall}>{anime.score.toFixed(1)}</Text>

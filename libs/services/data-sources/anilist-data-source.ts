@@ -402,12 +402,11 @@ export class AniListDataSource implements AnimeDataSource {
     const data = await this.fetchDetailRaw(id, sourcePlatform);
     if (!data) return [];
     const links = data.externalLinks ?? [];
-    return links
-      .filter((l) => (l.type ?? '').toUpperCase() === 'STREAMING' && l.url)
-      .map((l) => ({
-        site: l.site ?? 'Unknown',
-        url: l.url ?? '',
-      }));
+    return links.flatMap((l) =>
+      (l.type ?? '').toUpperCase() === 'STREAMING' && l.url
+        ? [{ site: l.site ?? 'Unknown', url: l.url ?? '' }]
+        : []
+    );
   }
 
   async fetchAnimeThemes(_id: string): Promise<AnimeTheme | null> {
@@ -564,19 +563,24 @@ function stripHtml(value: string | null | undefined): string {
 
 function collectStudios(connection: RawAniListStudios | null | undefined): string[] {
   const nodes = connection?.nodes ?? [];
-  const animation = nodes
-    .filter((n) => n.isAnimationStudio === true)
-    .map((n) => n.name)
-    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+  const animation = nodes.flatMap((n) =>
+    n.isAnimationStudio === true && typeof n.name === 'string' && n.name.length > 0
+      ? [n.name as string]
+      : []
+  );
   if (animation.length > 0) return animation;
-  return nodes.map((n) => n.name).filter((n): n is string => typeof n === 'string' && n.length > 0);
+  return nodes.flatMap((n) =>
+    typeof n.name === 'string' && n.name.length > 0 ? [n.name as string] : []
+  );
 }
 
 function collectTags(tags: RawAniListTag[] | null | undefined): string[] {
   if (!tags || tags.length === 0) return [];
-  return tags
-    .filter((t) => t.isMediaSpoiler !== true && typeof t.name === 'string' && t.name.length > 0)
-    .map((t) => t.name as string);
+  return tags.flatMap((t) =>
+    t.isMediaSpoiler !== true && typeof t.name === 'string' && t.name.length > 0
+      ? [t.name as string]
+      : []
+  );
 }
 
 function parseFuzzyDate(date: RawAniListStartDate | null | undefined): Date | null {

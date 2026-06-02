@@ -61,23 +61,11 @@ const RESET_SPRING_CONFIG = {
 
 interface BangumiCardDeckProps {
   anime: Anime[];
-  /**
-   * Opaque key derived from season/year/filter combo. When it changes the deck
-   * restarts at the top. Notably we do NOT reset on `anime` identity alone —
-   * swiping triggers a trackedIds update which would regenerate the parent's
-   * useMemo and infinitely bounce the deck back to card 0.
-   */
-  resetKey?: string;
   onSwipeRemind: (anime: Anime) => void;
   onSwipePlan: (anime: Anime) => void;
 }
 
-export function BangumiCardDeck({
-  anime,
-  resetKey,
-  onSwipeRemind,
-  onSwipePlan,
-}: BangumiCardDeckProps) {
+export function BangumiCardDeck({ anime, onSwipeRemind, onSwipePlan }: BangumiCardDeckProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -96,13 +84,6 @@ export function BangumiCardDeck({
   indexRef.current = index;
   onSwipeRemindRef.current = onSwipeRemind;
   onSwipePlanRef.current = onSwipePlan;
-
-  useEffect(() => {
-    setIndex(0);
-    setOutgoing([]);
-    outgoingKeysRef.current.clear();
-    topTranslationX.value = 0;
-  }, [resetKey]);
 
   const current = anime[index];
   const windowEntries = useMemo(
@@ -334,10 +315,7 @@ function TopCard({ anime, slot, theme, onSwipe, onOpenDetail, activeTranslation 
               );
             }
             scheduleOnRN(onSwipe, dir);
-            scheduleOnRN(
-              hapticsBridge.impact,
-              Math.abs(velocity) > 2000 ? 'heavy' : 'medium'
-            );
+            scheduleOnRN(hapticsBridge.impact, Math.abs(velocity) > 2000 ? 'heavy' : 'medium');
           } else {
             translateX.value = withSpring(0, RESET_SPRING_CONFIG);
             translateY.value = withSpring(0, RESET_SPRING_CONFIG);
@@ -371,11 +349,7 @@ function TopCard({ anime, slot, theme, onSwipe, onOpenDetail, activeTranslation 
   return (
     <GestureDetector gesture={pan}>
       <Animated.View
-        style={[
-          styles.card,
-          slot === 'outgoing' ? styles.outgoingCard : styles.topCard,
-          cardStyle,
-        ]}
+        style={[styles.card, slot === 'outgoing' ? styles.outgoingCard : styles.topCard, cardStyle]}
         pointerEvents={isTop ? 'auto' : 'none'}>
         <Pressable onPress={isTop ? onOpenDetail : undefined} style={StyleSheet.absoluteFill}>
           <Image

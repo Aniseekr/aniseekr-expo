@@ -29,7 +29,7 @@ export interface AutoBackupPrefs {
   intervalHours: number;
 }
 
-export const DEFAULT_AUTO_BACKUP_PREFS: AutoBackupPrefs = {
+const DEFAULT_AUTO_BACKUP_PREFS: AutoBackupPrefs = {
   enabled: false,
   intervalHours: 24,
 };
@@ -69,7 +69,8 @@ export class AutoBackupScheduler {
       if (!raw) return { ...DEFAULT_AUTO_BACKUP_PREFS };
       const parsed = JSON.parse(raw) as Partial<AutoBackupPrefs>;
       return {
-        enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_AUTO_BACKUP_PREFS.enabled,
+        enabled:
+          typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_AUTO_BACKUP_PREFS.enabled,
         intervalHours:
           typeof parsed.intervalHours === 'number' && parsed.intervalHours > 0
             ? parsed.intervalHours

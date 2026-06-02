@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import type { Ref } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Anime } from '../rate/types';
@@ -13,6 +13,7 @@ export interface ShareScheduleCardProps {
   seasonLabel: string;
   groupedAnime: DailyAnime[];
   totalCount: number;
+  ref?: Ref<View>;
 }
 
 const POSTER_WIDTH = 1080;
@@ -39,74 +40,77 @@ const ORDERED_DAYS = [
   'Sundays',
 ];
 
-export const ShareScheduleCard = forwardRef<View, ShareScheduleCardProps>(
-  function ShareScheduleCardImpl({ seasonLabel, groupedAnime, totalCount }, ref) {
-    const grouped = new Map<string, Anime[]>();
-    groupedAnime.forEach((g) => grouped.set(g.day, g.anime));
+export function ShareScheduleCard({
+  seasonLabel,
+  groupedAnime,
+  totalCount,
+  ref,
+}: ShareScheduleCardProps) {
+  const grouped = new Map<string, Anime[]>();
+  groupedAnime.forEach((g) => grouped.set(g.day, g.anime));
 
-    return (
-      <View ref={ref} collapsable={false} style={styles.poster}>
-        <LinearGradient
-          colors={Colors.gradients.background as [string, string, ...string[]]}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={['rgba(255, 159, 10, 0.18)', 'rgba(191, 90, 242, 0.10)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+  return (
+    <View ref={ref} collapsable={false} style={styles.poster}>
+      <LinearGradient
+        colors={Colors.gradients.background as [string, string, ...string[]]}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['rgba(255, 159, 10, 0.18)', 'rgba(191, 90, 242, 0.10)', 'transparent']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
-        <View style={styles.header}>
-          <Text style={styles.brand}>Aniseekr</Text>
-          <Text style={styles.season}>{seasonLabel}</Text>
-          <View style={styles.countPill}>
-            <Text style={styles.countText}>{totalCount} entries this season</Text>
-          </View>
-        </View>
-
-        <View style={styles.grid}>
-          {ORDERED_DAYS.map((day) => {
-            const items = (grouped.get(day) ?? []).slice(0, 3);
-            return (
-              <View key={day} style={styles.column}>
-                <View style={styles.columnHeader}>
-                  <Text style={styles.columnDay}>{dayShort[day] ?? day}</Text>
-                </View>
-                <View style={styles.columnBody}>
-                  {items.length === 0 ? (
-                    <Text style={styles.empty}>No releases</Text>
-                  ) : (
-                    items.map((anime) => (
-                      <View key={anime.id} style={styles.entry}>
-                        {anime.image ? (
-                          <Image
-                            source={{ uri: anime.image }}
-                            style={styles.cover}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={[styles.cover, styles.coverFallback]} />
-                        )}
-                        <Text style={styles.entryTitle} numberOfLines={2}>
-                          {anime.title}
-                        </Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Generated with Aniseekr</Text>
+      <View style={styles.header}>
+        <Text style={styles.brand}>Aniseekr</Text>
+        <Text style={styles.season}>{seasonLabel}</Text>
+        <View style={styles.countPill}>
+          <Text style={styles.countText}>{totalCount} entries this season</Text>
         </View>
       </View>
-    );
-  }
-);
+
+      <View style={styles.grid}>
+        {ORDERED_DAYS.map((day) => {
+          const items = (grouped.get(day) ?? []).slice(0, 3);
+          return (
+            <View key={day} style={styles.column}>
+              <View style={styles.columnHeader}>
+                <Text style={styles.columnDay}>{dayShort[day] ?? day}</Text>
+              </View>
+              <View style={styles.columnBody}>
+                {items.length === 0 ? (
+                  <Text style={styles.empty}>No releases</Text>
+                ) : (
+                  items.map((anime) => (
+                    <View key={anime.id} style={styles.entry}>
+                      {anime.image ? (
+                        <Image
+                          source={{ uri: anime.image }}
+                          style={styles.cover}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.cover, styles.coverFallback]} />
+                      )}
+                      <Text style={styles.entryTitle} numberOfLines={2}>
+                        {anime.title}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Generated with Aniseekr</Text>
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   poster: {

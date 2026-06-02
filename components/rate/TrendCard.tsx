@@ -69,7 +69,7 @@ function TrendCardComponent({ anime, rank, onPress }: Props) {
             <View style={styles.typeBadge}>
               <Text style={styles.typeText}>{anime.type || 'TV'}</Text>
             </View>
-            {anime.score && (
+            {anime.score != null && anime.score > 0 && (
               <View style={styles.scoreContainer}>
                 <Ionicons name="star" size={10} color={Colors.primary} />
                 <Text style={styles.scoreText}>{anime.score}</Text>

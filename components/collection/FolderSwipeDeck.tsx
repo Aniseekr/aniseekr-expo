@@ -3,7 +3,7 @@
 // (toggle into favorites). Tap a card opens the existing progress editor so
 // EP / score adjustments stay one tap away.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,13 +44,6 @@ export interface FolderSwipeItem {
 
 interface FolderSwipeDeckProps {
   items: FolderSwipeItem[];
-  /**
-   * Opaque key (typically the folder id). When it changes the deck restarts
-   * at the top. We deliberately do NOT reset on `items` reference alone —
-   * an edit-and-save inside swipe mode regenerates the parent's array and
-   * would otherwise bounce the deck back to the first card.
-   */
-  resetKey?: string;
   /** Swipe-left action — explicit semantic: "haven't watched yet". */
   onHaventWatched: (item: FolderSwipeItem) => void;
   /** Swipe-right action — explicit semantic: "like / favorite". */
@@ -61,7 +54,6 @@ interface FolderSwipeDeckProps {
 
 export function FolderSwipeDeck({
   items,
-  resetKey,
   onHaventWatched,
   onLike,
   onOpenDetail,
@@ -69,10 +61,6 @@ export function FolderSwipeDeck({
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    setIndex(0);
-  }, [resetKey]);
 
   const current = items[index];
   const next = items[index + 1];

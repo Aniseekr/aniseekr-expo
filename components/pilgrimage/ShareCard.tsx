@@ -7,7 +7,7 @@
 // side-by-side) is driven by the ratio so every template stays useful in
 // every ratio.
 
-import { forwardRef } from 'react';
+import type { Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -79,6 +79,7 @@ export type ShareCardProps = {
    * undefined → no transform.
    */
   shotPerspectiveTransform?: RNPerspectiveTransform;
+  ref?: Ref<View>;
 };
 
 const RATIO_VALUES: Record<ShareRatio, number> = {
@@ -87,7 +88,7 @@ const RATIO_VALUES: Record<ShareRatio, number> = {
   '16:9': 16 / 9,
 };
 
-export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(props, ref) {
+export function ShareCard(props: ShareCardProps) {
   const {
     template,
     ratio,
@@ -104,7 +105,7 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(pro
   const canvasBg = resolveBackgroundColor(template, props.customBg, theme.background.secondary);
 
   return (
-    <View ref={ref} collapsable={false} style={{ width, height, overflow: 'hidden' }}>
+    <View ref={props.ref} collapsable={false} style={{ width, height, overflow: 'hidden' }}>
       {template === 'polaroid' ? (
         <PolaroidTemplate {...props} height={height} canvasBg={canvasBg} />
       ) : template === 'classic' ? (
@@ -128,7 +129,7 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(pro
       ) : null}
     </View>
   );
-});
+}
 
 type TemplateProps = ShareCardProps & { height: number; canvasBg: string };
 
@@ -218,7 +219,8 @@ function WatermarkOverlay({
   const ink = resolveWatermarkColor(color, canvasBg);
   // Use the contrast helper purely to pick a shadow direction that stays
   // legible regardless of which way the auto ink leans.
-  const shadow = readableTextOn(canvasBg) === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
+  const shadow =
+    readableTextOn(canvasBg) === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.5)';
   const fontStyle = getWatermarkFontStyle(fontId);
   return (
     <View pointerEvents="none" style={alignment}>
@@ -666,7 +668,9 @@ function MinimalTemplate(props: TemplateProps) {
   const isDarkBg = readableTextOn(canvasBg) === '#FFFFFF';
   const titleInk = isDarkBg ? '#fff' : '#0E0A06';
   const subInk = isDarkBg ? 'rgba(255,255,255,0.6)' : 'rgba(14,10,6,0.6)';
-  const gradientFade = isDarkBg ? ['transparent', 'rgba(0,0,0,0.85)'] : ['transparent', 'rgba(245,241,232,0.9)'];
+  const gradientFade = isDarkBg
+    ? ['transparent', 'rgba(0,0,0,0.85)']
+    : ['transparent', 'rgba(245,241,232,0.9)'];
   return (
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       <View style={{ flex: 1 }}>
@@ -940,7 +944,11 @@ function MangaTemplate(props: TemplateProps) {
   const cells = {
     anime: (
       <View key="anime" style={{ flex: 1, position: 'relative' }}>
-        <Image source={{ uri: imageUrl }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+        <Image
+          source={{ uri: imageUrl }}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+        />
         <SpeedLines side={ratio === '9:16' ? 'top' : 'left'} />
         <View
           style={{
@@ -977,11 +985,7 @@ function MangaTemplate(props: TemplateProps) {
             />
           </View>
         ) : (
-          <FilteredImage
-            uri={shotUri}
-            matrix={props.shotFilterMatrix ?? null}
-            contentFit="cover"
-          />
+          <FilteredImage uri={shotUri} matrix={props.shotFilterMatrix ?? null} contentFit="cover" />
         )}
         <SpeedLines side={ratio === '9:16' ? 'bottom' : 'right'} />
         <View
@@ -1147,12 +1151,13 @@ function ScreenToneBackground() {
   );
 }
 
+const SPEED_LINE_POSITIONS = [0.15, 0.32, 0.52, 0.7, 0.88];
+
 function SpeedLines({ side }: { side: 'left' | 'right' | 'top' | 'bottom' }) {
   const isVertical = side === 'left' || side === 'right';
-  const positions = [0.15, 0.32, 0.52, 0.7, 0.88];
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      {positions.map((p) => {
+      {SPEED_LINE_POSITIONS.map((p) => {
         const style = isVertical
           ? {
               position: 'absolute' as const,

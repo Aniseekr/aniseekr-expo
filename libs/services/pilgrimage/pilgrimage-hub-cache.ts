@@ -2,7 +2,7 @@ import type { LatLng } from './location-service';
 import type { AnitabiBangumi } from './types';
 import type { VisitedMap } from './visited-prefs';
 
-export const PILGRIMAGE_HUB_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
+const PILGRIMAGE_HUB_SNAPSHOT_TTL_MS = 5 * 60 * 1000;
 
 export interface PilgrimageHubSnapshot {
   collectionAnimes?: AnitabiBangumi[];

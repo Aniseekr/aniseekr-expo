@@ -1,11 +1,11 @@
 import {
-  forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
+  type Ref,
 } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
@@ -29,6 +29,7 @@ export interface SwipeDeckRef {
 }
 
 interface Props {
+  ref?: Ref<SwipeDeckRef>;
   items: DeckItem[];
   /** Initial top index. Subsequent changes are ignored — re-mount with a new key to reset. */
   startIndex?: number;
@@ -52,37 +53,35 @@ interface Props {
 
 const DEFAULT_THRESHOLD = 5;
 
-export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
-  (
-    {
-      items,
-      startIndex = 0,
-      cardContainerStyle,
-      loadMoreThreshold = DEFAULT_THRESHOLD,
-      onCommit,
-      onTopChange,
-      onNeedMore,
-      onPressTop,
-      rightIndicator,
-      leftIndicator,
-    },
-    ref
-  ) => {
-    const [topIndex, setTopIndex] = useState(startIndex);
-    const [outgoing, setOutgoing] = useState<OutgoingCard[]>([]);
-    const topTranslationX = useSharedValue(0);
-    const topCardRef = useRef<SwipeDeckCardRef>(null);
-    const outgoingKeysRef = useRef<Set<string>>(new Set());
+export function SwipeDeck({
+  items,
+  startIndex = 0,
+  cardContainerStyle,
+  loadMoreThreshold = DEFAULT_THRESHOLD,
+  onCommit,
+  onTopChange,
+  onNeedMore,
+  onPressTop,
+  rightIndicator,
+  leftIndicator,
+  ref,
+}: Props) {
+  const [topIndex, setTopIndex] = useState(startIndex);
+  const [outgoing, setOutgoing] = useState<OutgoingCard[]>([]);
+  const topTranslationX = useSharedValue(0);
+  const topCardRef = useRef<SwipeDeckCardRef>(null);
+  const outgoingKeysRef = useRef<Set<string>>(new Set());
 
-    const itemsRef = useRef(items);
-    itemsRef.current = items;
-    const topIndexRef = useRef(topIndex);
-    topIndexRef.current = topIndex;
-    const onCommitRef = useRef(onCommit);
-    onCommitRef.current = onCommit;
-    const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const topIndexRef = useRef(topIndex);
+  topIndexRef.current = topIndex;
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const expiryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleSwipe = useCallback((direction: 'left' | 'right') => {
+  const handleSwipe = useCallback(
+    (direction: 'left' | 'right') => {
       const snapshot = itemsRef.current;
       const idx = topIndexRef.current;
       const committed = snapshot[idx];
@@ -121,78 +120,82 @@ export const SwipeDeck = forwardRef<SwipeDeckRef, Props>(
           return next;
         });
       }, OUTGOING_CARD_LIFETIME_MS);
-    }, [topTranslationX]);
+    },
+    [topTranslationX]
+  );
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        swipe: (direction) => {
-          topCardRef.current?.swipe(direction);
-        },
-        getTopIndex: () => topIndexRef.current,
-      }),
-      []
-    );
+  useImperativeHandle(
+    ref,
+    () => ({
+      swipe: (direction) => {
+        topCardRef.current?.swipe(direction);
+      },
+      getTopIndex: () => topIndexRef.current,
+    }),
+    []
+  );
 
-    useEffect(() => {
-      return () => {
-        if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
-        outgoingKeysRef.current.clear();
-      };
-    }, []);
+  useEffect(() => {
+    return () => {
+      if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+      outgoingKeysRef.current.clear();
+    };
+  }, []);
 
-    // Surface the new top to the parent once per topIndex / items change.
-    const lastTopKeyRef = useRef<string | null>(null);
-    useEffect(() => {
-      const item = items[topIndex] ?? null;
-      const key = item ? `${topIndex}:${item.kind === 'photo' ? item.photo.id : item.id}` : `${topIndex}:null`;
-      if (lastTopKeyRef.current === key) return;
-      lastTopKeyRef.current = key;
-      onTopChange?.(item, topIndex);
-    }, [items, topIndex, onTopChange]);
+  // Surface the new top to the parent once per topIndex / items change.
+  const lastTopKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const item = items[topIndex] ?? null;
+    const key = item
+      ? `${topIndex}:${item.kind === 'photo' ? item.photo.id : item.id}`
+      : `${topIndex}:null`;
+    if (lastTopKeyRef.current === key) return;
+    lastTopKeyRef.current = key;
+    onTopChange?.(item, topIndex);
+  }, [items, topIndex, onTopChange]);
 
-    useEffect(() => {
-      if (!onNeedMore) return;
-      if (shouldLoadMore({ topIndex, itemsLength: items.length, threshold: loadMoreThreshold })) {
-        onNeedMore();
-      }
-    }, [items.length, topIndex, loadMoreThreshold, onNeedMore]);
+  useEffect(() => {
+    if (!onNeedMore) return;
+    if (shouldLoadMore({ topIndex, itemsLength: items.length, threshold: loadMoreThreshold })) {
+      onNeedMore();
+    }
+  }, [items.length, topIndex, loadMoreThreshold, onNeedMore]);
 
-    const windowEntries = useMemo(
-      () => computeDeckWindow({ items, topIndex, outgoing }),
-      [items, topIndex, outgoing]
-    );
+  const windowEntries = useMemo(
+    () => computeDeckWindow({ items, topIndex, outgoing }),
+    [items, topIndex, outgoing]
+  );
 
-    return (
-      <View style={styles.stack} pointerEvents="box-none">
-        {windowEntries.map((entry) => {
-          const isTop = entry.slot === 'top';
-          // Locate the entry's index in items[] so PhotoCard can pass it on.
-          // For outgoing entries the data has already advanced past them; we
-          // just hand 0 which is only used for diagnostics.
-          const idx = entry.slot === 'outgoing' ? -1 : topIndex + (entry.slot === 'top' ? 0 : entry.slot === 'next' ? 1 : 2);
-          return (
-            <SwipeDeckCard
-              key={entry.key}
-              ref={isTop ? topCardRef : null}
-              item={entry.item}
-              slot={entry.slot}
-              topTranslationX={topTranslationX}
-              index={idx}
-              containerStyle={cardContainerStyle}
-              onSwipe={handleSwipe}
-              onPress={isTop && onPressTop ? () => onPressTop(entry.item) : undefined}
-              rightIndicator={rightIndicator}
-              leftIndicator={leftIndicator}
-            />
-          );
-        })}
-      </View>
-    );
-  }
-);
-
-SwipeDeck.displayName = 'SwipeDeck';
+  return (
+    <View style={styles.stack} pointerEvents="box-none">
+      {windowEntries.map((entry) => {
+        const isTop = entry.slot === 'top';
+        // Locate the entry's index in items[] so PhotoCard can pass it on.
+        // For outgoing entries the data has already advanced past them; we
+        // just hand 0 which is only used for diagnostics.
+        const idx =
+          entry.slot === 'outgoing'
+            ? -1
+            : topIndex + (entry.slot === 'top' ? 0 : entry.slot === 'next' ? 1 : 2);
+        return (
+          <SwipeDeckCard
+            key={entry.key}
+            ref={isTop ? topCardRef : null}
+            item={entry.item}
+            slot={entry.slot}
+            topTranslationX={topTranslationX}
+            index={idx}
+            containerStyle={cardContainerStyle}
+            onSwipe={handleSwipe}
+            onPress={isTop && onPressTop ? () => onPressTop(entry.item) : undefined}
+            rightIndicator={rightIndicator}
+            leftIndicator={leftIndicator}
+          />
+        );
+      })}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   stack: {

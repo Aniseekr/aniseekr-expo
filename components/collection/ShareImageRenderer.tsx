@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from 'react';
+import { useMemo, type Ref } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,7 @@ const POSTER_HEIGHT = 1920;
 
 interface ShareImageRendererProps {
   build: ShareTemplateBuild;
+  ref?: Ref<View>;
 }
 
 function PosterFooter() {
@@ -194,41 +195,37 @@ function MasterpieceBody({ entries, username }: { entries: ShareEntry[]; usernam
   );
 }
 
-export const ShareImageRenderer = forwardRef<View, ShareImageRendererProps>(
-  function ShareImageRenderer({ build }, ref) {
-    const { template, entries, meta } = build;
-    const useAurora = template.id === 'masterpiece' || template.id === 'yearly_best';
+export function ShareImageRenderer({ build, ref }: ShareImageRendererProps) {
+  const { template, entries, meta } = build;
+  const useAurora = template.id === 'masterpiece' || template.id === 'yearly_best';
 
-    return (
-      <View ref={ref} collapsable={false} style={styles.poster}>
-        <LinearGradient
-          colors={
-            useAurora
-              ? (Colors.gradients.aurora as [string, string, ...string[]])
-              : (Colors.gradients.background as [string, string, ...string[]])
-          }
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.glow} pointerEvents="none" />
-        <View style={styles.posterContent}>
-          {template.id === 'top10' ? (
-            <Top10Body entries={entries} username={meta?.username} />
-          ) : null}
-          {template.id === 'yearly_best' ? (
-            <YearlyBestBody entries={entries} username={meta?.username} year={meta?.year} />
-          ) : null}
-          {template.id === 'starter_pack' ? (
-            <StarterPackBody entries={entries} username={meta?.username} />
-          ) : null}
-          {template.id === 'masterpiece' ? (
-            <MasterpieceBody entries={entries} username={meta?.username} />
-          ) : null}
-        </View>
-        <PosterFooter />
+  return (
+    <View ref={ref} collapsable={false} style={styles.poster}>
+      <LinearGradient
+        colors={
+          useAurora
+            ? (Colors.gradients.aurora as [string, string, ...string[]])
+            : (Colors.gradients.background as [string, string, ...string[]])
+        }
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.glow} pointerEvents="none" />
+      <View style={styles.posterContent}>
+        {template.id === 'top10' ? <Top10Body entries={entries} username={meta?.username} /> : null}
+        {template.id === 'yearly_best' ? (
+          <YearlyBestBody entries={entries} username={meta?.username} year={meta?.year} />
+        ) : null}
+        {template.id === 'starter_pack' ? (
+          <StarterPackBody entries={entries} username={meta?.username} />
+        ) : null}
+        {template.id === 'masterpiece' ? (
+          <MasterpieceBody entries={entries} username={meta?.username} />
+        ) : null}
       </View>
-    );
-  }
-);
+      <PosterFooter />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   poster: {

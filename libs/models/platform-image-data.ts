@@ -10,11 +10,3 @@ export interface PlatformImageData {
   extraLarge?: string;
   banner?: string;
 }
-
-export function createPlatformImageData(init: Partial<PlatformImageData> = {}): PlatformImageData {
-  return {
-    large: init.large,
-    extraLarge: init.extraLarge,
-    banner: init.banner,
-  };
-}

@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 
-const CLARITY_PROJECT_ID =
-  process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID?.trim() || 'u8mefiww5z';
+const CLARITY_PROJECT_ID = process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID?.trim() || 'u8mefiww5z';
 
 let initialized = false;
 
@@ -19,27 +18,5 @@ export function initClarity(): void {
     initialized = true;
   } catch (error) {
     console.warn('[clarity] init failed', error);
-  }
-}
-
-export async function pauseClarity(): Promise<void> {
-  if (Platform.OS === 'web' || !initialized) return;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Clarity = require('react-native-clarity') as typeof import('react-native-clarity');
-    await Clarity.pause();
-  } catch {
-    // best-effort
-  }
-}
-
-export async function resumeClarity(): Promise<void> {
-  if (Platform.OS === 'web' || !initialized) return;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Clarity = require('react-native-clarity') as typeof import('react-native-clarity');
-    await Clarity.resume();
-  } catch {
-    // best-effort
   }
 }

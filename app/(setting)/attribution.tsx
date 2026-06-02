@@ -85,19 +85,21 @@ const LIBRARIES = [
   'react-native-safe-area-context',
 ];
 
+const open = (url: string) => {
+  hapticsBridge.tap();
+  Linking.openURL(url).catch(() => {
+    hapticsBridge.error();
+  });
+};
+
 export default function AttributionScreen() {
   const { theme } = useTheme();
   const t = useT();
 
-  const open = (url: string) => {
-    hapticsBridge.tap();
-    Linking.openURL(url).catch(() => {
-      hapticsBridge.error();
-    });
-  };
-
   return (
-    <SettingsScreenLayout title={t('settings.attribution')} subtitle={t('settings.attributionScreen.subtitle')}>
+    <SettingsScreenLayout
+      title={t('settings.attribution')}
+      subtitle={t('settings.attributionScreen.subtitle')}>
       <Text style={[styles.intro, { color: theme.text.secondary }]}>
         {t('settings.attributionScreen.intro')}
       </Text>

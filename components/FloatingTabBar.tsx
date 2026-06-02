@@ -38,6 +38,19 @@ const PRESS_OUT_SPRING = { damping: 12, stiffness: 280 } as const;
 // Slide far enough that the elevation shadow on Android also clears the screen.
 const HIDE_TRANSLATE_Y = 120;
 
+// Permanently hidden — these routes never appear in the bar at all (e.g.
+// `href: null`, `tabBarButton: null` registrations). They should be excluded
+// from the visible pill list.
+const isPermanentlyHidden = (options: any) =>
+  options?.href === null || options?.tabBarButton === null;
+
+// Transiently hidden — the focused screen wants the bar hidden right now
+// (e.g. bangumi cards mode, a nested sub-screen). The route itself is still
+// a navigable tab, so it stays in `visibleRoutes` so other tabs can show its
+// pill. The whole bar animates out instead.
+const isTransientlyHidden = (options: any) =>
+  (options?.tabBarStyle as any)?.display === 'none' || options?.tabBarVisible === false;
+
 export default function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { theme, effectiveMode } = useTheme();
@@ -54,19 +67,6 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
     ios: bottomPad(insets),
     android: bottomPad(insets),
   });
-
-  // Permanently hidden — these routes never appear in the bar at all (e.g.
-  // `href: null`, `tabBarButton: null` registrations). They should be excluded
-  // from the visible pill list.
-  const isPermanentlyHidden = (options: any) =>
-    options?.href === null || options?.tabBarButton === null;
-
-  // Transiently hidden — the focused screen wants the bar hidden right now
-  // (e.g. bangumi cards mode, a nested sub-screen). The route itself is still
-  // a navigable tab, so it stays in `visibleRoutes` so other tabs can show its
-  // pill. The whole bar animates out instead.
-  const isTransientlyHidden = (options: any) =>
-    (options?.tabBarStyle as any)?.display === 'none' || options?.tabBarVisible === false;
 
   const visibleRoutes = state.routes.filter((route) => {
     const { options } = descriptors[route.key];
@@ -105,9 +105,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const hideProgress = useSharedValue(shouldHide ? 1 : 0);
   useEffect(() => {
     hideProgress.value = withTiming(shouldHide ? 1 : 0, {
-      duration: shouldHide
-        ? FLOATING_TAB_BAR_HIDE_DURATION_MS
-        : FLOATING_TAB_BAR_SHOW_DURATION_MS,
+      duration: shouldHide ? FLOATING_TAB_BAR_HIDE_DURATION_MS : FLOATING_TAB_BAR_SHOW_DURATION_MS,
       easing: Easing.out(Easing.cubic),
     });
   }, [shouldHide, hideProgress]);
@@ -206,11 +204,7 @@ function TabItem({ isFocused, label, onPress, onLongPress, renderIcon }: TabItem
   const pillStyle = useAnimatedStyle(() => ({
     width: COLLAPSED_WIDTH + focusProgress.value * (expandedWidth - COLLAPSED_WIDTH),
     backgroundColor: interpolateColor(focusProgress.value, [0, 1], ['rgba(0,0,0,0)', activeBg]),
-    borderColor: interpolateColor(
-      focusProgress.value,
-      [0, 1],
-      ['rgba(0,0,0,0)', activeBorder]
-    ),
+    borderColor: interpolateColor(focusProgress.value, [0, 1], ['rgba(0,0,0,0)', activeBorder]),
     transform: [{ scale: pressScale.value }],
   }));
 

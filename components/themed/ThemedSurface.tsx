@@ -1,4 +1,4 @@
-import { forwardRef, ReactNode } from 'react';
+import { ReactNode, type Ref } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Radius, Spacing } from '../../constants/DesignSystem';
 import { useTheme } from '../../context/ThemeContext';
@@ -11,12 +11,17 @@ export interface ThemedSurfaceProps {
   padded?: boolean | number;
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
+  ref?: Ref<View>;
 }
 
-export const ThemedSurface = forwardRef<View, ThemedSurfaceProps>(function ThemedSurface(
-  { variant = 'card', radius = Radius.card, padded, style, children },
-  ref
-) {
+export function ThemedSurface({
+  variant = 'card',
+  radius = Radius.card,
+  padded,
+  style,
+  children,
+  ref,
+}: ThemedSurfaceProps) {
   const { theme } = useTheme();
 
   let backgroundColor = theme.background.secondary;
@@ -32,8 +37,7 @@ export const ThemedSurface = forwardRef<View, ThemedSurfaceProps>(function Theme
     backgroundColor = theme.background.primary;
   }
 
-  const padding =
-    padded === true ? Spacing.md : typeof padded === 'number' ? padded : 0;
+  const padding = padded === true ? Spacing.md : typeof padded === 'number' ? padded : 0;
 
   return (
     <View
@@ -52,7 +56,7 @@ export const ThemedSurface = forwardRef<View, ThemedSurfaceProps>(function Theme
       {children}
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   base: {

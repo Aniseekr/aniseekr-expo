@@ -214,9 +214,9 @@ export function CollectionSearchModal({ visible, onClose, folders }: CollectionS
   const folderHits = useMemo<FolderHit[]>(() => {
     if (!debouncedQuery) return [];
     const q = debouncedQuery.toLowerCase();
-    return folders
-      .filter((f) => f.name.toLowerCase().includes(q))
-      .map((folder) => ({ type: 'folder' as const, folder }));
+    return folders.flatMap((f) =>
+      f.name.toLowerCase().includes(q) ? [{ type: 'folder' as const, folder: f }] : []
+    );
   }, [debouncedQuery, folders]);
 
   const animeHits = useMemo<AnimeHit[]>(() => {

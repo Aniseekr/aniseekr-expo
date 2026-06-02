@@ -4,7 +4,7 @@
 // by the engine behind MapSurface; this surface just normalizes the spots and
 // forwards the imperative recenter/heading driven by the locate-FAB hook.
 
-import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { memo, useEffect, useImperativeHandle, useMemo, useRef, type Ref } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme, type ThemePalette } from '../../../context/ThemeContext';
 import { useMapThemePref } from '../../../hooks/useMapThemePref';
@@ -57,28 +57,27 @@ export interface SpotMapViewProps {
   onUserPan?: () => void;
   theme: ThemePalette;
   style?: StyleProp<ViewStyle>;
+  ref?: Ref<SpotMapViewHandle>;
 }
 
-const SpotMapViewImpl = forwardRef<SpotMapViewHandle, SpotMapViewProps>(function SpotMapViewImpl(
-  {
-    spots,
-    visited,
-    ringColor,
-    userLocation,
-    centerGeo,
-    centerZoom,
-    markerMode,
-    offlineOnly,
-    focusSpotId,
-    controlsBottomOffset = 16,
-    onSpotPress,
-    onClusterPick,
-    onUserPan,
-    theme,
-    style,
-  }: SpotMapViewProps,
-  ref
-) {
+function SpotMapViewImpl({
+  spots,
+  visited,
+  ringColor,
+  userLocation,
+  centerGeo,
+  centerZoom,
+  markerMode,
+  offlineOnly,
+  focusSpotId,
+  controlsBottomOffset = 16,
+  onSpotPress,
+  onClusterPick,
+  onUserPan,
+  theme,
+  style,
+  ref,
+}: SpotMapViewProps) {
   const { effectiveMode } = useTheme();
   const { pref: mapThemePref } = useMapThemePref();
   const mapMode = resolveMapMode(mapThemePref, effectiveMode);
@@ -165,7 +164,7 @@ const SpotMapViewImpl = forwardRef<SpotMapViewHandle, SpotMapViewProps>(function
       />
     </View>
   );
-});
+}
 
 function areEqual(prev: SpotMapViewProps, next: SpotMapViewProps): boolean {
   return (

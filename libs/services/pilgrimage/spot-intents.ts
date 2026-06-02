@@ -8,8 +8,6 @@ import { kvGet, kvSet } from '../storage/app-storage';
 import { SPOT_INTENTS_STORAGE_KEY } from '../storage/keys';
 import { Logger } from '../../utils/logger';
 
-export { SPOT_INTENTS_STORAGE_KEY };
-
 export type SpotIntentKind = 'saved' | 'planned';
 
 export interface SpotIntent {

@@ -17,7 +17,6 @@ export {
 
 export {
   BackupService,
-  BACKUP_PREFS_KEYS,
   createDefaultBackupService,
   type BackupAsyncStorage,
   type BackupServiceDeps,
@@ -68,11 +67,7 @@ export {
   isEncryptedPayload,
 } from './encryption';
 
-export {
-  AutoBackupScheduler,
-  DEFAULT_AUTO_BACKUP_PREFS,
-  type AutoBackupPrefs,
-} from './auto-backup';
+export { AutoBackupScheduler, type AutoBackupPrefs } from './auto-backup';
 
 export {
   CLOUDKIT_RECORD_TYPES,

@@ -6,9 +6,7 @@
 
 import { Platform } from 'react-native';
 import type { PlatformType } from '../../../libs/services/auth/types';
-import type {
-  AnitabiPoint,
-} from '../../../libs/services/pilgrimage/types';
+import type { AnitabiPoint } from '../../../libs/services/pilgrimage/types';
 import type { PilgrimageSeriesPoint } from '../../../libs/services/pilgrimage/pilgrimage-series';
 
 // Use the `www.` subdomain for all anitabi.cn links. The apex domain issues a
@@ -54,12 +52,6 @@ export function formatDistanceKm(km: number): string {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 10) return `${km.toFixed(1)} km`;
   return `${Math.round(km)} km`;
-}
-
-export function chunkPairs<T>(items: readonly T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += 2) out.push(items.slice(i, i + 2));
-  return out;
 }
 
 export function buildBrowseUrl(platform: PlatformType, bangumiId: number): string | null {

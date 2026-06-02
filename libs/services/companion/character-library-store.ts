@@ -91,10 +91,3 @@ export function subscribeCharacters(listener: Listener): () => void {
     listeners.delete(listener);
   };
 }
-
-/** Test-only hook so the bun test suite can isolate cases. */
-export function __resetCharacterStore(): void {
-  cache = [];
-  kvSet(STORAGE_KEY, '[]');
-  emit();
-}

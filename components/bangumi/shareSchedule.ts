@@ -31,9 +31,7 @@ export interface ShareScheduleOptions {
  * Useful when you've mounted an off-screen poster component and want to
  * snapshot it before passing the URI to the share sheet.
  */
-export async function captureScheduleImage(
-  viewRef: RefObject<View | null>
-): Promise<string | null> {
+async function captureScheduleImage(viewRef: RefObject<View | null>): Promise<string | null> {
   if (!viewRef.current) return null;
   try {
     const uri = await captureRef(viewRef, {

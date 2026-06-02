@@ -30,5 +30,3 @@ export function AniseekrEye({ size = 120, color = '#FFFFFF', strokeWidth = 4 }: 
     </Svg>
   );
 }
-
-export default AniseekrEye;

@@ -52,7 +52,9 @@ function SimpleAnimeCardComponent({
           <Text style={styles.title} numberOfLines={2}>
             {anime.title}
           </Text>
-          {anime.score && <Text style={styles.score}>★ {anime.score}</Text>}
+          {anime.score != null && anime.score > 0 && (
+            <Text style={styles.score}>★ {anime.score}</Text>
+          )}
         </View>
       </View>
     </Pressable>

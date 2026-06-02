@@ -30,7 +30,6 @@ export type ResolutionTier = '4k' | '2k';
 
 export const CAPTURE_MODES: readonly CaptureMode[] = ['single', 'burst', 'auto'] as const;
 export const COUNTDOWN_SECONDS: readonly CountdownSeconds[] = [0, 3, 5, 10] as const;
-export const PICTURE_QUALITIES: readonly PictureQuality[] = ['standard', 'high', 'max'] as const;
 export const RESOLUTION_TIERS: readonly ResolutionTier[] = ['4k', '2k'] as const;
 
 export const SILENT_SHUTTER_HELP_TEXT =

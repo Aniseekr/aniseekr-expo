@@ -17,8 +17,6 @@ export { SeriesDropdownPill } from './SeriesDropdownPill';
 export type { SeriesDropdownPillProps } from './SeriesDropdownPill';
 export { StatCell } from './StatCell';
 export type { StatCellProps } from './StatCell';
-export { DetailViewPresetButton } from './DetailViewPresetButton';
-export type { DetailViewPresetButtonProps } from './DetailViewPresetButton';
 export { LayoutModeButton } from './LayoutModeButton';
 export type { LayoutModeButtonProps } from './LayoutModeButton';
 export { RoundHeaderButton } from './RoundHeaderButton';
@@ -29,15 +27,11 @@ export { SpotMapView } from './SpotMapView';
 export type { SpotMapViewHandle, SpotMapViewProps } from './SpotMapView';
 export { SpotSheet } from './SpotSheet';
 export type { SpotSheetProps } from './SpotSheet';
-export { PilgrimageList } from './PilgrimageList';
-export type { PilgrimageListProps } from './PilgrimageList';
 export { PilgrimageDetailSheet } from './PilgrimageDetailSheet';
 export type { PilgrimageDetailSheetProps } from './PilgrimageDetailSheet';
 export { PilgrimageDetailLoadingShell } from './PilgrimageDetailLoadingShell';
 export type { PilgrimageDetailLoadingShellProps } from './PilgrimageDetailLoadingShell';
 export {
-  HEADER_HEIGHT,
-  HERO_HEIGHT,
   VIEW_MODE_TOGGLE_HEIGHT,
   makePilgrimageDetailStyles,
   type PilgrimageDetailStyles,

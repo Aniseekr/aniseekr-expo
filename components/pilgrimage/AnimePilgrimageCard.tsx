@@ -39,6 +39,11 @@ function getStyles(theme: ThemePalette): ReturnType<typeof makeStyles> {
   return styles;
 }
 
+const formatDistance = (km: number): string => {
+  if (km < 1) return `${Math.round(km * 1000)}m`;
+  return `${km.toFixed(1)}km`;
+};
+
 export function AnimePilgrimageCard({
   anime,
   distance,
@@ -52,11 +57,6 @@ export function AnimePilgrimageCard({
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.(anime);
-  };
-
-  const formatDistance = (km: number): string => {
-    if (km < 1) return `${Math.round(km * 1000)}m`;
-    return `${km.toFixed(1)}km`;
   };
 
   // The per-anime brand colour drives the region/distance accents; fall back to
